@@ -60,7 +60,17 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Run backend tests (unit + integration)
-        run: npm run test --workspace @meal-rescue/backend
+        # Jest output is mirrored into the job summary so failures are
+        # readable directly on the run page (job logs need admin access).
+        run: |
+          npm run test --workspace @meal-rescue/backend > test-output.txt 2>&1; code=$?
+          {
+            echo "### Backend test output (tail)"
+            echo '```'
+            tail -n 150 test-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
 
   build-backend:
     runs-on: ubuntu-latest
