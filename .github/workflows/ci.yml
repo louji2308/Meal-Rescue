@@ -69,6 +69,8 @@ jobs:
         run: |
           code=0
           npm run test --workspace @meal-rescue/backend > test-output.txt 2>&1 || code=$?
+          echo '===== TEST OUTPUT TAIL (also mirrored to run summary) ====='
+          tail -n 150 test-output.txt
           {
             echo "### Backend test output (tail)"
             echo '```'
