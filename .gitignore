@@ -1,5 +1,7 @@
-# Root README excluded from repo
-/README.md
+# Hide all project folders from GitHub (kept locally)
+.recon/
+meal-rescue-docs/
+meal-rescue-project/
 
 # Windows reserved device name artifact
 NUL
