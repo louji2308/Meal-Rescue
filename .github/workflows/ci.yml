@@ -64,8 +64,11 @@ jobs:
       - name: Run backend tests (unit + integration)
         # Jest output is mirrored into the job summary so failures are
         # readable directly on the run page (job logs need admin access).
+        # NOTE: the default shell is `bash -e`; `|| code=$?` keeps the
+        # summary-writing lines reachable when the test command fails.
         run: |
-          npm run test --workspace @meal-rescue/backend > test-output.txt 2>&1; code=$?
+          code=0
+          npm run test --workspace @meal-rescue/backend > test-output.txt 2>&1 || code=$?
           {
             echo "### Backend test output (tail)"
             echo '```'
