@@ -40,9 +40,17 @@ const envSchema = z.object({
   FIREBASE_PRIVATE_KEY: z.string().optional(),
 
   // AI services (Phase 2)
+  // Without OPENAI_API_KEY the pipeline runs on the deterministic heuristic
+  // client - same contracts, no network calls. Production should always
+  // set a key; dev/test/CI intentionally work without one.
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   LLM_MODEL_VERSION: z.string().optional(),
+  OPENAI_VISION_MODEL: z.string().default('gpt-4o-mini'),
+  OPENAI_TEXT_MODEL: z.string().default('gpt-4o-mini'),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+  // One retry on malformed LLM JSON per the system-prompts doc
+  AI_MAX_RETRIES: z.coerce.number().int().min(0).max(3).default(1),
 
   // Storage (Phase 2+)
   GCS_BUCKET_NAME: z.string().optional(),

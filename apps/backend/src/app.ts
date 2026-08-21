@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
@@ -43,6 +44,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Redis first so downstream plugins (rate-limit) can use it.
   await app.register(redisPlugin);
+
+  // Meal photo uploads (Phase 2). Size enforced per-file in the route;
+  // attachFieldsToBody stays off so JSON routes are unaffected.
+  await app.register(multipart, {
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  });
 
   await app.register(jwt, {
     secret: env.JWT_SECRET,

@@ -37,7 +37,7 @@ describe('error contract', () => {
     await app.close();
   });
 
-  it('phase stubs return structured NOT_IMPLEMENTED responses', async () => {
+  it('implemented endpoints validate input through the structured error contract', async () => {
     const app = await buildApp();
     const res = await app.inject({
       method: 'POST',
@@ -45,11 +45,28 @@ describe('error contract', () => {
       headers: { authorization: `Bearer ${validToken()}` },
     });
 
+    // Phase 2 shipped the real analyzer: an empty request is now a
+    // structured 400, not a 501 stub.
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_ANALYSIS_INPUT');
+    await app.close();
+  });
+
+  it('phase stubs return structured NOT_IMPLEMENTED responses', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/rescue/00000000-0000-0000-0000-000000000000/feedback',
+      headers: { authorization: `Bearer ${validToken()}` },
+    });
+
     expect(res.statusCode).toBe(501);
     const body = JSON.parse(res.body);
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(body.error.message).toContain('Phase 2');
+    expect(body.error.message).toContain('Phase 4');
     await app.close();
   });
 });
