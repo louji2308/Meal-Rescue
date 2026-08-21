@@ -2,22 +2,32 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PrimaryButton } from '../components/PrimaryButton';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, spacing, typography } from '../theme';
 
 /**
- * Profile: auth state, subscription tier, preferences.
- * Phase 3 adds sign-in UI; Phase 4 adds preference management.
+ * Identity + sign out. Preference learning and subscription management
+ * arrive in later phases - nothing else belongs here yet.
  */
 export function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
+  const clearSession = useAuthStore((state) => state.clearSession);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={[typography.heading, styles.title]}>Profile</Text>
-        <Text style={typography.body}>{user ? `Signed in as ${user.email}` : 'Not signed in'}</Text>
-        <Text style={typography.caption}>Sign-in flow and preferences arrive in Phases 3-4.</Text>
+        <Text style={[typography.heading, styles.email]}>{user?.email}</Text>
+        <Text style={[typography.caption, styles.tier]}>
+          {user?.subscriptionTier === 'pro' ? 'Pro plan' : 'Free plan · 3 rescues/day'}
+        </Text>
+
+        <PrimaryButton
+          label="Sign out"
+          variant="ghost"
+          onPress={clearSession}
+          style={styles.signOut}
+        />
       </View>
     </SafeAreaView>
   );
@@ -34,7 +44,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
-  title: {
-    marginBottom: spacing.sm,
+  email: {
+    marginBottom: spacing.xs,
+  },
+  tier: {
+    marginBottom: spacing.xl,
+  },
+  signOut: {
+    alignSelf: 'stretch',
   },
 });

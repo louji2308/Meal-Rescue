@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { useAuthStore } from './src/stores/auth.store';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,6 +16,12 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
+  const hydrate = useAuthStore((state) => state.hydrate);
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
