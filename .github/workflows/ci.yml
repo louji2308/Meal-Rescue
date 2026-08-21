@@ -61,6 +61,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      # Build workspace deps first: shared-types resolves through dist/,
+      # and calling the backend test script directly bypasses turbo's
+      # dependsOn: ["^build"] pipeline.
+      - run: npm run build --workspace @meal-rescue/shared-types
       - name: Run backend tests (unit + integration)
         # Jest output is mirrored into the job summary so failures are
         # readable directly on the run page (job logs need admin access).
