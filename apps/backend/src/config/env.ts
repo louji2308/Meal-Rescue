@@ -18,6 +18,8 @@ const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .default('postgresql://meal_rescue:local_password@localhost:5432/meal_rescue_dev'),
+  // Test-only override consumed by src/database/index.ts when NODE_ENV=test
+  TEST_DATABASE_URL: z.string().optional(),
   DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   DB_POOL_MIN: z.coerce.number().int().nonnegative().default(2),
 

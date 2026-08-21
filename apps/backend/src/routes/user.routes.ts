@@ -28,7 +28,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (!request.user) {
         throw AppError.unauthorized();
       }
-      const user = await authService.getById(request.user.id);
+      const user = await authService.getById(request.user.sub);
       void reply.send({
         id: user.id,
         email: user.email,

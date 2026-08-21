@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
 import { buildApp } from '../../src/app';
-import { closeDatabase, initializeDatabase } from '../../src/database';
+import { closeDatabase, initializeDatabase, sequelize } from '../../src/database';
 
 /**
  * Auth flow integration test - requires PostgreSQL.
  * Skipped automatically unless TEST_DATABASE_URL is provided:
  *   TEST_DATABASE_URL=postgresql://... npm test
+ *
+ * Schema note: initializeDatabase() deliberately does NOT sync in test env
+ * (that is dev-only behavior), so this suite creates its own schema.
+ * force:true keeps CI deterministic - every run starts from a clean database.
  */
 const hasDb = Boolean(process.env.TEST_DATABASE_URL);
 const maybeDescribe = hasDb ? describe : describe.skip;
@@ -18,6 +22,7 @@ maybeDescribe('auth flow (integration)', () => {
 
   beforeAll(async () => {
     await initializeDatabase();
+    await sequelize.sync({ force: true });
     app = await buildApp();
   });
 

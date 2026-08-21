@@ -7,12 +7,20 @@ import { AppError } from '../lib/errors';
 
 /**
  * JWT payload/user typing via @fastify/jwt's official augmentation point.
- * After request.jwtVerify(), `request.user` is a fully-typed AuthUser.
+ * After request.jwtVerify(), `request.user` is the decoded payload.
+ * NOTE: kept identical to what lib/jwt.ts actually signs - do not widen
+ * this type beyond the real payload or TS will hide contract bugs.
  */
+export interface JwtVerifiedUser {
+  sub: string;
+  email: string;
+  subscriptionTier: AuthUser['subscriptionTier'];
+}
+
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; email: string; subscriptionTier: AuthUser['subscriptionTier'] };
-    user: AuthUser;
+    payload: JwtVerifiedUser;
+    user: JwtVerifiedUser;
   }
 }
 

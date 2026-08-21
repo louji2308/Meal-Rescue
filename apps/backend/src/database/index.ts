@@ -6,8 +6,16 @@ import { Db, initializeModels } from './models';
 /**
  * Singleton Sequelize instance for the API process.
  * `initializeDatabase()` must be awaited before serving traffic.
+ *
+ * In test env, TEST_DATABASE_URL takes precedence so integration suites
+ * can point at an isolated database (CI service container / embedded PG).
  */
-export const sequelize = new Sequelize(env.DATABASE_URL, {
+const connectionString =
+  env.NODE_ENV === 'test' && process.env.TEST_DATABASE_URL
+    ? process.env.TEST_DATABASE_URL
+    : env.DATABASE_URL;
+
+export const sequelize = new Sequelize(connectionString, {
   dialect: 'postgres',
   // Dev-only SQL tracing; structured request logs come from Fastify/pino.
   logging:

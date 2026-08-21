@@ -1,81 +1,61 @@
-# Hide all project folders from GitHub (kept locally)
+# ---------------------------------------------------------------------------
+# Local-only project folders & files (intentionally not published)
+# ---------------------------------------------------------------------------
 .recon/
 meal-rescue-docs/
 meal-rescue-project/
+PROGRESS.md
 
 # Windows reserved device name artifact
 NUL
 
-# Documentation and temporary files
-*.tmp
-*.log
-logs/
-
-# Environment files - never commit real secrets
+# ---------------------------------------------------------------------------
+# Secrets & credentials - never commit
+# ---------------------------------------------------------------------------
 .env
 .env.local
 .env.*.local
+*.pem
+service-account.json
 
-# Editor/IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Build artifacts
+# ---------------------------------------------------------------------------
+# Node / monorepo
+# ---------------------------------------------------------------------------
+node_modules/
 dist/
 build/
-target/
-web-build/
 *.tsbuildinfo
-
-# Dependencies
-node_modules/
-.venv/
-venv/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-.gradle/
-
-# Monorepo tooling
 .turbo/
+coverage/
+logs/
+*.log
+npm-debug.log*
 
+# ---------------------------------------------------------------------------
 # Expo / React Native
+# ---------------------------------------------------------------------------
 .expo/
 expo-env.d.ts
 apps/mobile/ios/
 apps/mobile/android/
+*.apk
+*.aab
+*.ipa
 
-# System files
+# ---------------------------------------------------------------------------
+# Editor / IDE / agent tooling
+#-----------
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# ---------------------------------------------------------------------------
+# OS files
+#-----------
 .DS_Store
 Thumbs.db
 
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# Secrets & credentials (never commit)
-*.pem
-service-account.json
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-
-# Agent tooling configs
-.claude/
+# Temporary files
+*.tmp

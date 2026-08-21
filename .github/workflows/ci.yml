@@ -50,6 +50,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
+      NODE_ENV: test
       TEST_DATABASE_URL: postgresql://meal_rescue:local_password@localhost:5432/meal_rescue_test
     steps:
       - uses: actions/checkout@v4
