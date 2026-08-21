@@ -1,4 +1,9 @@
-```
+# Root README excluded from repo
+/README.md
+
+# Windows reserved device name artifact
+NUL
+
 # Documentation and temporary files
 *.tmp
 *.log
@@ -60,4 +65,3 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```
