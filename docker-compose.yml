@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: meal-rescue-postgres
+    environment:
+      POSTGRES_USER: meal_rescue
+      POSTGRES_PASSWORD: local_password
+      POSTGRES_DB: meal_rescue_dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U meal_rescue -d meal_rescue_dev']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: meal-rescue-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: meal-rescue-backend
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://meal_rescue:local_password@postgres:5432/meal_rescue_dev
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+      JWT_SECRET: local-dev-secret-not-for-production!
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

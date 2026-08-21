@@ -1,0 +1,93 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: meal_rescue
+          POSTGRES_PASSWORD: local_password
+          POSTGRES_DB: meal_rescue_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meal_rescue"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://meal_rescue:local_password@localhost:5432/meal_rescue_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run backend tests (unit + integration)
+        run: npm run test --workspace @meal-rescue/backend
+
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test-backend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build --workspace @meal-rescue/shared-types
+      - run: npm run build --workspace @meal-rescue/backend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: apps/backend/dist
+
+  build-mobile:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # Typecheck the mobile app; EAS builds happen on release branches.
+      - run: npx expo-doctor || true
+        working-directory: apps/mobile

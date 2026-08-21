@@ -1,0 +1,2 @@
+# Meal Rescue pre-commit hook: lint + format staged files
+npx lint-staged

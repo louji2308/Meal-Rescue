@@ -9,11 +9,12 @@ NUL
 # Documentation and temporary files
 *.tmp
 *.log
+logs/
 
-# Environment files
+# Environment files - never commit real secrets
 .env
 .env.local
-*.env.*
+.env.*.local
 
 # Editor/IDE files
 .vscode/
@@ -25,6 +26,8 @@ NUL
 dist/
 build/
 target/
+web-build/
+*.tsbuildinfo
 
 # Dependencies
 node_modules/
@@ -35,6 +38,15 @@ __pycache__/
 .pytest_cache/
 .gradle/
 
+# Monorepo tooling
+.turbo/
+
+# Expo / React Native
+.expo/
+expo-env.d.ts
+apps/mobile/ios/
+apps/mobile/android/
+
 # System files
 .DS_Store
 Thumbs.db
@@ -43,6 +55,10 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
+
+# Secrets & credentials (never commit)
+*.pem
+service-account.json
 
 # Compressed files
 *.zip
@@ -60,10 +76,6 @@ htmlcov/
 *.arj
 *.rpm
 *.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+
+# Agent tooling configs
+.claude/

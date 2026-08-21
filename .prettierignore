@@ -1,0 +1,8 @@
+dist
+coverage
+node_modules
+.expo
+package-lock.json
+turbo
+.husky/_
+*.md
