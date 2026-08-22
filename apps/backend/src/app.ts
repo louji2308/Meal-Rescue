@@ -13,6 +13,8 @@ import { registerErrorHandler } from './middleware/error-handler';
 import { authRoutes } from './modules/auth/auth.routes';
 import redisPlugin from './plugins/redis';
 import { feedbackRoutes } from './routes/feedback.routes';
+import { fridgeRoutes } from './routes/fridge.routes';
+import { leftoverRoutes } from './routes/leftover.routes';
 import { mealRoutes } from './routes/meal.routes';
 import { pantryRoutes } from './routes/pantry.routes';
 import { rescueRoutes } from './routes/rescue.routes';
@@ -120,9 +122,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(mealRoutes, { prefix: '/api/v1/meal' });
   await app.register(rescueRoutes, { prefix: '/api/v1/rescue' });
-  await app.register(feedbackRoutes, { prefix: '/api/v1/feedback' });
+  await app.register(feedbackRoutes, { prefix: '/api/v1/rescue' });
   await app.register(pantryRoutes, { prefix: '/api/v1/pantry' });
   await app.register(userRoutes, { prefix: '/api/v1/user' });
+  await app.register(fridgeRoutes, { prefix: '/api/v1/fridge' });
+  await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
 
   return app;
 }

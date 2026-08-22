@@ -37,6 +37,8 @@ const MAX_ALTERNATIVES = 2; // 1 recommendation + 2 alternatives = 3 choices
 export interface PantryProvider {
   /** User's pantry item names; empty when pantry tracking is unused. */
   getPantryItemNames(userId: string): Promise<string[]>;
+  /** Full pantry rows for advanced features (expiry, quantity, priority). */
+  getFullPantry(userId: string): Promise<Array<Record<string, unknown>>>;
 }
 
 export class RescuePipelineService {

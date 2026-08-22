@@ -55,16 +55,4 @@ export async function rescueRoutes(app: FastifyInstance): Promise<void> {
     );
     return reply.status(201).send(response);
   });
-
-  // Feedback stays a Phase 4 stub - preference learning is out of scope here.
-  app.post('/:id/feedback', async () => {
-    throw new AppError({
-      category: ErrorCategory.INTERNAL,
-      code: 'NOT_IMPLEMENTED',
-      message: 'Rescue feedback ships in Phase 4',
-      statusCode: 501,
-      recoverable: true,
-      suggestedAction: 'Track progress in the Phase 4 milestone',
-    });
-  });
 }

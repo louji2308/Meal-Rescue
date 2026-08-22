@@ -71,3 +71,7 @@ export const rankingResultSchema = z.object({
 export type VisionResult = z.infer<typeof visionResultSchema>;
 export type TextExtractionResult = z.infer<typeof textExtractionSchema>;
 export type RankingResult = z.infer<typeof rankingResultSchema>;
+
+export const reasoningSchema = z.object({
+  reasoning: z.string().min(1).max(2000),
+});

@@ -6,6 +6,7 @@ import { ErrorCategory } from '@meal-rescue/shared-types';
  *
  * Services throw AppError; the global error handler serializes it.
  */
+export { ErrorCategory };
 export class AppError extends Error {
   public readonly category: ErrorCategory;
   public readonly code: string;

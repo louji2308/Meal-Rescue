@@ -166,6 +166,141 @@ export interface FeedbackRequest {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4: Personalization & Pantry
+// ---------------------------------------------------------------------------
+
+export interface PantryItem {
+  id: UUID;
+  ingredientName: string;
+  quantity: number | null;
+  unit: string | null;
+  addedAt: ISO8601;
+  expiresAt: ISO8601 | null;
+  lastUsedAt: ISO8601 | null;
+  usePriority: number;
+  daysUntilExpiry: number | null;
+  isExpiringSoon: boolean;
+  isLowStock: boolean;
+}
+
+export interface SuggestedUse {
+  ingredientName: string;
+  reason: string;
+  rescueId?: UUID;
+  rescuePreview?: string;
+}
+
+export interface PersonalizationInsight {
+  type:
+    | 'favorite_ingredient'
+    | 'avoided_ingredient'
+    | 'prep_tolerance'
+    | 'time_pattern'
+    | 'rescue_pattern';
+  description: string;
+  confidence: Confidence;
+}
+
+export interface FeedbackResponse {
+  success: true;
+  personalizationUpdated: boolean;
+  insights: PersonalizationInsight[];
+}
+
+export interface PreferenceLearned {
+  preferenceType: string;
+  preferenceKey: string;
+  preferenceValue: object;
+  confidenceScore: Confidence;
+  observationCount: number;
+  lastUpdated: ISO8601;
+}
+
+export interface PantryGetResponse {
+  ingredients: PantryItem[];
+  expiringSoon: PantryItem[];
+  lowStock: PantryItem[];
+  suggestedUses: SuggestedUse[];
+}
+
+export interface PantryUpsertRequest {
+  ingredientName: string;
+  quantity?: number | null;
+  unit?: string | null;
+  expiresAt?: ISO8601 | null;
+  usePriority?: number;
+}
+
+export interface PantryDeleteResponse {
+  success: true;
+  deletedId: UUID;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Advanced Features (Fridge Negotiator, Leftover Alchemist)
+// ---------------------------------------------------------------------------
+
+export type HungerLevel = 'snack' | 'meal';
+
+export interface FoodComponent {
+  name: string;
+  quantity?: string;
+  state?: 'raw' | 'cooked' | 'prepped';
+}
+
+export interface MealRecommendation {
+  name: string;
+  ingredients: string[];
+  instructions: string[];
+  estimatedTimeMinutes: number;
+  effort: EffortLevel;
+  missingIngredients: string[];
+  usesPantryItems: string[];
+  nutritionNote?: string;
+}
+
+export interface Transformation {
+  name: string;
+  format: 'bowl' | 'wrap' | 'skillet' | 'salad' | 'soup' | 'bake';
+  ingredients: string[];
+  instructions: string[];
+  estimatedTimeMinutes: number;
+  effort: EffortLevel;
+  description: string;
+}
+
+export interface FridgeNegotiateRequest {
+  availableIngredients: string[];
+  timeMinutes: number;
+  hungerLevel?: HungerLevel;
+  userId: UUID;
+}
+
+export interface FridgeNegotiateResponse {
+  recommendations: MealRecommendation[];
+  reasoning: string;
+  missingIngredients: string[];
+}
+
+export interface LeftoverAlchemistRequest {
+  image?: PickedImage; // multipart image
+  description?: string;
+  userId: UUID;
+}
+
+export interface PickedImage {
+  uri: string;
+  name: string;
+  mimeType: string;
+}
+
+export interface LeftoverAlchemistResponse {
+  identifiedComponents: FoodComponent[];
+  transformations: Transformation[];
+  effortRanking: EffortLevel[];
+}
+
+// ---------------------------------------------------------------------------
 // Errors - structured error contract from the architecture doc
 // ---------------------------------------------------------------------------
 

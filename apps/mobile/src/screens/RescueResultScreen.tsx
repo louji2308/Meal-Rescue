@@ -33,7 +33,6 @@ export function RescueResultScreen({
 
   const [current, setCurrent] = useState(initial);
   const [chosen, setChosen] = useState<RankedRecommendation>(initial.recommendation);
-  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
 
@@ -51,30 +50,11 @@ export function RescueResultScreen({
       });
       setCurrent(next);
       setChosen(next.recommendation);
-      setSaved(false);
     } catch (err) {
       setError(toApiError(err));
     } finally {
       setBusy(false);
     }
-  }
-
-  if (saved) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <Text style={[typography.title, styles.savedTitle]}>Enjoy your meal!</Text>
-          <Text style={[typography.body, styles.savedText]}>
-            Small change, better meal. Feedback and learning arrive in Phase 4.
-          </Text>
-          <PrimaryButton
-            label="Back to home"
-            onPress={() => navigation.popToTop()}
-            style={styles.actionButton}
-          />
-        </View>
-      </SafeAreaView>
-    );
   }
 
   return (
@@ -97,7 +77,12 @@ export function RescueResultScreen({
         <View style={styles.actions}>
           <PrimaryButton
             label="Rescue my meal"
-            onPress={() => setSaved(true)}
+            onPress={() =>
+              navigation.navigate('Feedback', {
+                rescueId: current.rescueId,
+                recommendation: describeCandidate(chosen.candidate),
+              })
+            }
             disabled={busy}
             style={styles.actionButton}
           />
