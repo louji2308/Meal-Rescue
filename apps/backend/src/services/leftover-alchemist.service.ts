@@ -7,7 +7,7 @@ import type {
   Transformation,
 } from '@meal-rescue/shared-types';
 
-import { findIngredient } from './ai/ingredient-db';
+import { findBestMatch } from './ai/ingredient-db';
 import { createLlmClient } from './ai/llm-factory';
 
 /**
@@ -74,7 +74,6 @@ export class LeftoverAlchemistService {
       'cheese',
       'beans',
       'lentils',
-      'rice',
       'quinoa',
       'salmon',
       'tuna',
@@ -83,7 +82,7 @@ export class LeftoverAlchemistService {
 
     for (const ingredient of knownIngredients) {
       if (text.toLowerCase().includes(ingredient)) {
-        const record = findIngredient(ingredient);
+        const record = findBestMatch(ingredient);
         components.push({
           name: ingredient,
           quantity: 'some',
@@ -92,11 +91,19 @@ export class LeftoverAlchemistService {
       }
     }
 
+    // Same leftover listed twice in prose should not appear twice.
+    const seen = new Set<string>();
+    const deduped = components.filter((c) => {
+      if (seen.has(c.name)) return false;
+      seen.add(c.name);
+      return true;
+    });
+
     // Also try to extract from image metadata if available
     // (In production, this would call the vision service)
 
-    return components.length > 0
-      ? components
+    return deduped.length > 0
+      ? deduped
       : [{ name: 'mixed leftovers', quantity: 'some', state: 'cooked' }];
   }
 
