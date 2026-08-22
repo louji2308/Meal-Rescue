@@ -8,7 +8,9 @@ import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/
 
 import { CaptureScreen } from '../screens/CaptureScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
+import { FridgeNegotiatorScreen } from '../screens/FridgeNegotiatorScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { LeftoverAlchemistScreen } from '../screens/LeftoverAlchemistScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { PantryScreen } from '../screens/PantryScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -27,6 +29,8 @@ export type HomeStackParamList = {
 
 export type RootTabParamList = {
   Home: undefined;
+  FridgeNegotiator: undefined;
+  LeftoverAlchemist: undefined;
   Pantry: undefined;
   Profile: undefined;
 };
@@ -48,13 +52,14 @@ function HomeStack() {
 
 const TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
   Home: 'restaurant',
+  FridgeNegotiator: 'snow',
+  LeftoverAlchemist: 'flask',
   Pantry: 'file-tray-full',
   Profile: 'person',
 };
 
 /**
- * The core loop only. Fridge Negotiator / Leftover Alchemist (Phase 5) stay
- * unregistered until their backends exist - dead tabs are UX noise.
+ * 5 tabs for Phase 5: Rescue (core loop), Fridge Negotiator, Leftover Alchemist, Pantry, Profile
  */
 function AuthenticatedTabs() {
   return (
@@ -73,6 +78,16 @@ function AuthenticatedTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeStack} options={{ title: 'Rescue' }} />
+      <Tab.Screen
+        name="FridgeNegotiator"
+        component={FridgeNegotiatorScreen}
+        options={{ title: 'Fridge' }}
+      />
+      <Tab.Screen
+        name="LeftoverAlchemist"
+        component={LeftoverAlchemistScreen}
+        options={{ title: 'Leftovers' }}
+      />
       <Tab.Screen name="Pantry" component={PantryScreen} options={{ title: 'Pantry' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>

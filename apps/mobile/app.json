@@ -28,6 +28,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-camera", "expo-image-picker"]
+    "plugins": ["expo-camera", "expo-image-picker", "expo-speech-recognition"]
   }
 }

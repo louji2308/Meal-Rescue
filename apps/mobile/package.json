@@ -25,6 +25,7 @@
     "expo": "~57.0.15",
     "expo-camera": "~57.0.4",
     "expo-image-picker": "~57.0.12",
+    "expo-speech-recognition": "^56.0.1",
     "expo-status-bar": "~57.0.1",
     "firebase": "^11.7.0",
     "react": "19.2.3",

@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
+import { Share } from 'react-native';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,6 +23,7 @@ import { colors, spacing, typography } from '../theme';
  *   Your meal / Rescue / Why / Time · Effort
  * ONE recommendation plus at most TWO alternatives.
  * Exactly four actions: rescue, swap, dont_have, keep_as_is.
+ * Plus share button for the growth loop.
  */
 export function RescueResultScreen({
   route,
@@ -40,7 +42,6 @@ export function RescueResultScreen({
     setError(null);
     setBusy(true);
     try {
-      // Re-run the funnel excluding everything this suggestion needs.
       const avoid = [
         ...chosen.candidate.additions.map((addition) => addition.name),
         ...chosen.candidate.substitutions.map((substitution) => substitution.replacement.name),
@@ -54,6 +55,17 @@ export function RescueResultScreen({
       setError(toApiError(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleShare() {
+    try {
+      await Share.share({
+        title: 'My Meal Rescue',
+        message: `🍽️ My meal: ${current.originalMeal.foods.join(', ')}\n🛟 Rescue: ${describeCandidate(chosen.candidate)}\n💡 Why: ${chosen.naturalLanguageExplanation}\n⏱ ${chosen.candidate.estimatedTime} min · Extra effort: ${describeMeta(chosen.candidate).split('·')[1]?.trim() || ''}\n\nMade with Meal Rescue`,
+      });
+    } catch {
+      // Share cancelled or failed - silently ignore
     }
   }
 
@@ -107,6 +119,12 @@ export function RescueResultScreen({
             variant="ghost"
             onPress={() => navigation.popToTop()}
             disabled={busy}
+            style={styles.actionButton}
+          />
+          <PrimaryButton
+            label="Share rescue"
+            variant="secondary"
+            onPress={handleShare}
             style={styles.actionButton}
           />
         </View>
@@ -217,14 +235,5 @@ const styles = StyleSheet.create({
   alternativeMeta: {
     fontSize: 13,
     color: colors.textSecondary,
-  },
-  savedTitle: {
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  savedText: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
   },
 });
