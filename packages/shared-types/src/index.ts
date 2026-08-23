@@ -351,3 +351,29 @@ export interface AuthTokens {
   expiresIn: string;
   user: AuthUser;
 }
+
+// ---------------------------------------------------------------------------
+// Ads & monetization
+// ---------------------------------------------------------------------------
+
+/** GET /api/v1/ads/eligibility - ad surfaces are never offered to Pro users. */
+export interface AdEligibilityResponse {
+  tier: SubscriptionTier;
+  rescuesToday: number | null;
+  dailyLimit: number | null;
+  rescueCredits: number;
+  canWatchRescueFuel: boolean;
+  canWatchProPass: boolean;
+}
+
+/** POST /api/v1/ads/rewards/rescue-fuel */
+export interface RescueFuelClaimResponse {
+  granted: boolean;
+  rescueCredits: number;
+}
+
+/** POST /api/v1/ads/rewards/pro-pass */
+export interface ProPassClaimResponse {
+  granted: boolean;
+  proPassUntil: ISO8601 | null;
+}
