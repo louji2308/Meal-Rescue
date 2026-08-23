@@ -13,6 +13,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { LeftoverAlchemistScreen } from '../screens/LeftoverAlchemistScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { PantryScreen } from '../screens/PantryScreen';
+import { PaywallScreen } from '../screens/PaywallScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
@@ -37,6 +38,12 @@ export type RootTabParamList = {
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator<HomeStackParamList>();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+
+export type RootStackParamList = {
+  Tabs: undefined;
+  Paywall: undefined;
+};
 
 function HomeStack() {
   return (
@@ -103,6 +110,19 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>{token ? <AuthenticatedTabs /> : <LoginScreen />}</NavigationContainer>
+    <NavigationContainer>
+      {token ? (
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="Tabs" component={AuthenticatedTabs} />
+          <RootStack.Screen
+            name="Paywall"
+            component={PaywallScreen}
+            options={{ presentation: 'modal' }}
+          />
+        </RootStack.Navigator>
+      ) : (
+        <LoginScreen />
+      )}
+    </NavigationContainer>
   );
 }
