@@ -13,8 +13,10 @@ import type {
 import { Chip } from '../components/Chip';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import type { HomeStackParamList } from '../navigation/AppNavigator';
-import { toApiError } from '../services/api';
+import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
+import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
+import { ApiError, toApiError } from '../services/api';
+import { requestNotificationPermissionOnce } from '../services/onesignal.service';
 import { generateRescue } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
 
@@ -26,6 +28,7 @@ import { colors, spacing, typography } from '../theme';
  */
 export function ReviewScreen({ route }: { route: { params: { analysis: MealAnalysisResponse } } }) {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { analysis } = route.params;
 
   const [quick, setQuick] = useState(false);
@@ -33,6 +36,7 @@ export function ReviewScreen({ route }: { route: { params: { analysis: MealAnaly
   const [cheap, setCheap] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [fuelSheetVisible, setFuelSheetVisible] = useState(false);
 
   const foodNames = analysis.detectedFoods.map((food) => food.name);
   const needsConfirm = analysis.requiresConfirmation;
@@ -52,17 +56,27 @@ export function ReviewScreen({ route }: { route: { params: { analysis: MealAnaly
     return constraints;
   }
 
+  async function runGenerate(): Promise<RescueGenerateResponse> {
+    const result: RescueGenerateResponse = await generateRescue(
+      analysis.mealId,
+      buildConstraints(),
+    );
+    navigation.navigate('RescueResult', { result });
+    void requestNotificationPermissionOnce();
+    return result;
+  }
+
   async function handleRescue() {
     setError(null);
     setBusy(true);
     try {
-      const result: RescueGenerateResponse = await generateRescue(
-        analysis.mealId,
-        buildConstraints(),
-      );
-      navigation.navigate('RescueResult', { result });
+      await runGenerate();
     } catch (err) {
-      setError(toApiError(err));
+      if (err instanceof ApiError && err.code === 'DAILY_RESCUE_LIMIT') {
+        setFuelSheetVisible(true);
+      } else {
+        setError(toApiError(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -123,6 +137,14 @@ export function ReviewScreen({ route }: { route: { params: { analysis: MealAnaly
           style={styles.rescueButton}
         />
       </ScrollView>
+
+      <RescueFuelSheet
+        visible={fuelSheetVisible}
+        onClose={() => setFuelSheetVisible(false)}
+        retryGenerate={() => runGenerate()}
+        onRecovered={(result) => navigation.navigate('RescueResult', { result })}
+        onGoPro={() => rootNavigation.navigate('Paywall')}
+      />
     </SafeAreaView>
   );
 }
