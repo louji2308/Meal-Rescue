@@ -19,11 +19,13 @@ export class OpenAiLlmClient implements LlmClient {
 
   private readonly client: OpenAI;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, baseUrl?: string) {
     this.client = new OpenAI({
       apiKey,
+      baseURL: baseUrl,
       timeout: env.AI_REQUEST_TIMEOUT_MS,
       maxRetries: 1, // transport-level retry; schema retry handled below
+      defaultHeaders: { 'X-Title': 'Meal Rescue' },
     });
     this.versionLabel = `openai:${env.LLM_MODEL_VERSION ?? 'default'}`;
   }
@@ -44,17 +46,28 @@ export class OpenAiLlmClient implements LlmClient {
       });
     }
 
+    // GLM-family models on OpenRouter are reasoning models: without this
+    // flag they spend the output budget on hidden chain-of-thought before
+    // emitting JSON. OpenRouter-specific field, hence the record cast.
+    const requestBody: Record<string, unknown> = {
+      model: options.modelName,
+      messages: [
+        { role: 'system', content: options.systemPrompt },
+        { role: 'user', content },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      max_tokens: env.LLM_MAX_TOKENS,
+    };
+    if (options.modelName.startsWith('z-ai/')) {
+      requestBody.reasoning = { enabled: false };
+    }
+
     let lastError: unknown = null;
     for (let attempt = 0; attempt <= env.AI_MAX_RETRIES; attempt++) {
-      const response = await this.client.chat.completions.create({
-        model: options.modelName,
-        messages: [
-          { role: 'system', content: options.systemPrompt },
-          { role: 'user', content },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-      });
+      const response = await this.client.chat.completions.create(
+        requestBody as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+      );
 
       const raw = response.choices[0]?.message?.content;
       const usage: TokenUsage | null = response.usage
