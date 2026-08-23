@@ -3,6 +3,14 @@ import 'dotenv/config';
 import { buildApp } from './app';
 import { env } from './config/env';
 import { closeDatabase, initializeDatabase } from './database';
+import {
+  startRescueWindowScheduler,
+  stopRescueWindowScheduler,
+} from './services/notifications/rescue-window.scheduler';
+import {
+  startSpoilerAlertScheduler,
+  stopSpoilerAlertScheduler,
+} from './services/notifications/spoiler-alert.service';
 
 /**
  * Process entrypoint: database first, then HTTP, then signals.
@@ -20,9 +28,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Engagement engine only when OneSignal is actually configured - tests
+  // and dry-run dev boots never get a cron timer.
+  if (env.ONESIGNAL_APP_ID && env.NODE_ENV !== 'test') {
+    startRescueWindowScheduler();
+    startSpoilerAlertScheduler();
+    app.log.info('Notification schedulers started');
+  }
+
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'Shutting down gracefully');
     try {
+      await stopRescueWindowScheduler();
+      await stopSpoilerAlertScheduler();
       await app.close();
       await closeDatabase();
       process.exit(0);
