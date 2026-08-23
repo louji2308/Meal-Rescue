@@ -9,6 +9,7 @@ import type { Redis } from 'ioredis';
 
 import { Feedback } from '../database/models/feedback.model';
 import { Meal } from '../database/models/meal.model';
+import { NotificationLog } from '../database/models/notification-log.model';
 import { Pantry } from '../database/models/pantry.model';
 import { Preference } from '../database/models/preference.model';
 import { RescueCreditGrant } from '../database/models/rescue-credit-grant.model';
@@ -48,6 +49,7 @@ const models = {
   Meal,
   User,
   RescueCreditGrant,
+  NotificationLog,
 };
 
 export function buildServices(redis: Redis | null): {
