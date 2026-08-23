@@ -11,6 +11,7 @@ import { Feedback } from '../database/models/feedback.model';
 import { Meal } from '../database/models/meal.model';
 import { Pantry } from '../database/models/pantry.model';
 import { Preference } from '../database/models/preference.model';
+import { RescueCreditGrant } from '../database/models/rescue-credit-grant.model';
 import { Rescue } from '../database/models/rescue.model';
 import { User } from '../database/models/user.model';
 import { createLlmClient } from './ai/llm-factory';
@@ -46,6 +47,7 @@ const models = {
   Rescue,
   Meal,
   User,
+  RescueCreditGrant,
 };
 
 export function buildServices(redis: Redis | null): {

@@ -4,6 +4,7 @@ import { Feedback, defineFeedbackModel } from './feedback.model';
 import { Meal, defineMealModel } from './meal.model';
 import { Pantry, definePantryModel } from './pantry.model';
 import { Preference, definePreferenceModel } from './preference.model';
+import { RescueCreditGrant, defineRescueCreditGrantModel } from './rescue-credit-grant.model';
 import { Rescue, defineRescueModel } from './rescue.model';
 import { User, defineUserModel } from './user.model';
 
@@ -14,6 +15,7 @@ export interface DbModels {
   Feedback: typeof Feedback;
   Preference: typeof Preference;
   Pantry: typeof Pantry;
+  RescueCreditGrant: typeof RescueCreditGrant;
 }
 
 export interface Db {
@@ -33,6 +35,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     Feedback: defineFeedbackModel(sequelize),
     Preference: definePreferenceModel(sequelize),
     Pantry: definePantryModel(sequelize),
+    RescueCreditGrant: defineRescueCreditGrantModel(sequelize),
   };
 
   // --- Associations (implementation plan Step 1.2) ---
@@ -70,4 +73,4 @@ export function initializeModels(sequelize: Sequelize): DbModels {
   return models;
 }
 
-export const dbModels = { User, Meal, Rescue, Feedback, Preference, Pantry };
+export const dbModels = { User, Meal, Rescue, Feedback, Preference, Pantry, RescueCreditGrant };

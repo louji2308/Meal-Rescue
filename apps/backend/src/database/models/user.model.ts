@@ -27,6 +27,15 @@ export class User extends Model<
   declare subscriptionExpiresAt: Date | null;
   declare timezone: string | null;
   declare locale: string;
+  /** Ad-earned extra rescues for today (Rescue Fuel). */
+  declare rescueCredits: CreationOptional<number>;
+  /** Temporary Pro window granted by a verified rewarded ad (Pro Pass). */
+  declare proPassUntil: Date | null;
+  /** Push quiet hours in LOCAL hours (0-23); null = defaults (22-8). */
+  declare quietStartHour: number | null;
+  declare quietEndHour: number | null;
+  /** Client-reported UTC offset in minutes; anchors "local day" math. */
+  declare tzOffsetMinutes: CreationOptional<number>;
   declare readonly createdAt: CreationOptional<Date>;
 }
 
@@ -66,6 +75,32 @@ export function defineUserModel(sequelize: Sequelize): typeof User {
         type: DataTypes.STRING(10),
         allowNull: false,
         defaultValue: 'en-US',
+      },
+      rescueCredits: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        validate: { min: 0 },
+      },
+      proPassUntil: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      quietStartHour: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 0, max: 23 },
+      },
+      quietEndHour: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: { min: 0, max: 23 },
+      },
+      tzOffsetMinutes: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        validate: { min: -840, max: 840 },
       },
     },
     {

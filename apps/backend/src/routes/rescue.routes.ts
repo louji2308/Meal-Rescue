@@ -3,8 +3,10 @@ import { z } from 'zod';
 
 import { ErrorCategory, type RescueGenerateResponse } from '@meal-rescue/shared-types';
 
+import { User } from '../database/models/user.model';
 import { AppError } from '../lib/errors';
 import { buildServices } from '../services/composition';
+import { consumeRescueAllowance } from '../services/rescue-allowance.service';
 
 const constraintsSchema = z
   .object({
@@ -45,6 +47,21 @@ export async function rescueRoutes(app: FastifyInstance): Promise<void> {
         code: 'INVALID_GENERATE_INPUT',
         message: 'Body must be {"mealId": uuid, "constraints"?: {...}}',
         statusCode: 400,
+      });
+    }
+
+    const user = await User.findByPk(request.user.sub);
+    if (!user) throw AppError.notFound('User');
+
+    const allowance = await consumeRescueAllowance(user);
+    if (!allowance.allowed) {
+      throw new AppError({
+        category: ErrorCategory.RATE_LIMIT_EXCEEDED,
+        code: 'DAILY_RESCUE_LIMIT',
+        message: 'Daily free rescue limit reached',
+        statusCode: 429,
+        recoverable: true,
+        suggestedAction: 'Watch an ad for extra rescues or upgrade to Pro',
       });
     }
 
