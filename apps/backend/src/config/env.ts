@@ -39,15 +39,24 @@ const envSchema = z.object({
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
 
+  // RevenueCat server-to-server webhook shared secret. Optional so dev/test
+  // boot without it; the webhook route rejects requests when unset.
+  REVENUECAT_WEBHOOK_SECRET: z.string().optional(),
+
   // AI services (Phase 2)
   // Without OPENAI_API_KEY the pipeline runs on the deterministic heuristic
   // client - same contracts, no network calls. Production should always
   // set a key; dev/test/CI intentionally work without one.
   OPENAI_API_KEY: z.string().optional(),
+  // OpenAI-compatible endpoint override (e.g. OpenRouter, Z.AI direct).
+  OPENAI_BASE_URL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   LLM_MODEL_VERSION: z.string().optional(),
   OPENAI_VISION_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_TEXT_MODEL: z.string().default('gpt-4o-mini'),
+  // Explicit output cap: keeps cost predictable and satisfies providers that
+  // reserve the full max_tokens against account credit at request time.
+  LLM_MAX_TOKENS: z.coerce.number().int().positive().default(1500),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
   // One retry on malformed LLM JSON per the system-prompts doc
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(3).default(1),

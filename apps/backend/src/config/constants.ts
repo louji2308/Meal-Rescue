@@ -10,6 +10,8 @@ export const PUBLIC_ROUTES = [
   '/docs/',
   '/api/v1/auth/register',
   '/api/v1/auth/login',
+  // Server-to-server: authenticates via shared bearer secret, not JWT.
+  '/api/v1/webhooks/revenuecat',
 ] as const;
 
 /** Per-tier rate limits from the architecture doc (security section). */

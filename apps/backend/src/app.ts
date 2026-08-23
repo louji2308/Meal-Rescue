@@ -19,6 +19,7 @@ import { mealRoutes } from './routes/meal.routes';
 import { pantryRoutes } from './routes/pantry.routes';
 import { rescueRoutes } from './routes/rescue.routes';
 import { userRoutes } from './routes/user.routes';
+import { webhookRoutes } from './routes/webhook.routes';
 
 /**
  * Builds the Fastify application. Deliberately free of side effects:
@@ -127,6 +128,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(userRoutes, { prefix: '/api/v1/user' });
   await app.register(fridgeRoutes, { prefix: '/api/v1/fridge' });
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
+  await app.register(webhookRoutes, { prefix: '/api/v1' });
 
   return app;
 }
