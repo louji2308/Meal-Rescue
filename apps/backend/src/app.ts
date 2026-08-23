@@ -12,6 +12,7 @@ import { authHook } from './middleware/auth';
 import { registerErrorHandler } from './middleware/error-handler';
 import { authRoutes } from './modules/auth/auth.routes';
 import redisPlugin from './plugins/redis';
+import { adsRoutes } from './routes/ads.routes';
 import { feedbackRoutes } from './routes/feedback.routes';
 import { fridgeRoutes } from './routes/fridge.routes';
 import { leftoverRoutes } from './routes/leftover.routes';
@@ -128,6 +129,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(userRoutes, { prefix: '/api/v1/user' });
   await app.register(fridgeRoutes, { prefix: '/api/v1/fridge' });
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
+  await app.register(adsRoutes, { prefix: '/api/v1/ads' });
   await app.register(webhookRoutes, { prefix: '/api/v1' });
 
   return app;
