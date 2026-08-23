@@ -76,6 +76,28 @@ async function claimOnce(userId: string, namespacedTxId: string): Promise<boolea
   }
 }
 
+/**
+ * Governance cap: at most TWO rewarded ads per local day, regardless of
+ * surface. Replay of an existing transaction does not consume the cap.
+ */
+export const MAX_REWARDED_ADS_PER_DAY = 2;
+
+export async function countRewardedAdsToday(
+  userId: string,
+  tzOffsetMinutes: number,
+): Promise<number> {
+  const where = {
+    userId,
+    createdAt: { [Op.gte]: startOfLocalDay(tzOffsetMinutes) },
+  } as unknown as WhereOptions<InferAttributes<RescueCreditGrant>>;
+  return RescueCreditGrant.count({ where });
+}
+
+export async function hasAdCapLeft(user: User): Promise<boolean> {
+  const used = await countRewardedAdsToday(user.id, user.tzOffsetMinutes ?? 0);
+  return used < MAX_REWARDED_ADS_PER_DAY;
+}
+
 export async function grantCredits(userId: string, txId: string, amount: number): Promise<boolean> {
   if (!(await claimOnce(userId, `credits:${txId}`))) return false;
   await User.increment({ rescueCredits: amount }, { where: { id: userId } });

@@ -9,6 +9,7 @@ import {
   effectiveTier,
   grantCredits,
   grantProPass,
+  hasAdCapLeft,
   startOfLocalDay,
 } from '../services/rescue-allowance.service';
 
@@ -81,6 +82,16 @@ export async function adsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     const user = await requireFreeUser(request.user.sub);
+    if (!(await hasAdCapLeft(user))) {
+      throw new AppError({
+        category: ErrorCategory.RATE_LIMIT_EXCEEDED,
+        code: 'DAILY_AD_LIMIT',
+        message: 'Rewarded ad limit reached for today',
+        statusCode: 429,
+        recoverable: true,
+        suggestedAction: 'Upgrade to Pro for unlimited rescues',
+      });
+    }
     const granted = await grantCredits(user.id, parsed.data.adTransactionId, FUEL_CREDITS);
     const fresh = await User.findByPk(user.id);
     return reply.status(granted ? 201 : 200).send({
@@ -100,6 +111,16 @@ export async function adsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     const user = await requireFreeUser(request.user.sub);
+    if (!(await hasAdCapLeft(user))) {
+      throw new AppError({
+        category: ErrorCategory.RATE_LIMIT_EXCEEDED,
+        code: 'DAILY_AD_LIMIT',
+        message: 'Rewarded ad limit reached for today',
+        statusCode: 429,
+        recoverable: true,
+        suggestedAction: 'Upgrade to Pro for unlimited rescues',
+      });
+    }
     const granted = await grantProPass(user.id, parsed.data.adTransactionId, PRO_PASS_MINUTES);
     const fresh = await User.findByPk(user.id);
     return reply.status(granted ? 201 : 200).send({

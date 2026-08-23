@@ -94,6 +94,36 @@ maybeDescribe('ads reward routes (integration)', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('caps rewarded ads at two distinct transactions per day per user (governance)', async () => {
+    const fresh = await registerTestUser(app);
+    const headers = { authorization: `Bearer ${fresh.token}` };
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/rescue-fuel',
+      headers,
+      payload: { adTransactionId: `cap-a-${randomUUID()}` },
+    });
+    expect(first.statusCode).toBe(201);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/rescue-fuel',
+      headers,
+      payload: { adTransactionId: `cap-b-${randomUUID()}` },
+    });
+    expect(second.statusCode).toBe(201);
+
+    const third = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/pro-pass',
+      headers,
+      payload: { adTransactionId: `cap-c-${randomUUID()}` },
+    });
+    expect(third.statusCode).toBe(429);
+    expect(third.json().error.code).toBe('DAILY_AD_LIMIT');
+  });
+
   it('grants and expires Pro Pass windows', async () => {
     const txId = `admobsim-${randomUUID()}`;
     const res = await app.inject({
