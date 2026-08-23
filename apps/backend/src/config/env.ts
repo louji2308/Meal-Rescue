@@ -43,6 +43,12 @@ const envSchema = z.object({
   // boot without it; the webhook route rejects requests when unset.
   REVENUECAT_WEBHOOK_SECRET: z.string().optional(),
 
+  // OneSignal push engagement engine. Optional - when either value is
+  // empty/unset the engine stays in dry-run mode: scheduling, quiet hours
+  // and the dedupe ledger still run, but nothing leaves the server.
+  ONESIGNAL_REST_KEY: z.string().optional(),
+  ONESIGNAL_APP_ID: z.string().optional(),
+
   // AI services (Phase 2)
   // Without OPENAI_API_KEY the pipeline runs on the deterministic heuristic
   // client - same contracts, no network calls. Production should always

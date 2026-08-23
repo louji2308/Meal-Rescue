@@ -2,6 +2,7 @@ import { Sequelize } from 'sequelize';
 
 import { Feedback, defineFeedbackModel } from './feedback.model';
 import { Meal, defineMealModel } from './meal.model';
+import { NotificationLog, defineNotificationLogModel } from './notification-log.model';
 import { Pantry, definePantryModel } from './pantry.model';
 import { Preference, definePreferenceModel } from './preference.model';
 import { RescueCreditGrant, defineRescueCreditGrantModel } from './rescue-credit-grant.model';
@@ -16,6 +17,7 @@ export interface DbModels {
   Preference: typeof Preference;
   Pantry: typeof Pantry;
   RescueCreditGrant: typeof RescueCreditGrant;
+  NotificationLog: typeof NotificationLog;
 }
 
 export interface Db {
@@ -36,6 +38,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     Preference: definePreferenceModel(sequelize),
     Pantry: definePantryModel(sequelize),
     RescueCreditGrant: defineRescueCreditGrantModel(sequelize),
+    NotificationLog: defineNotificationLogModel(sequelize),
   };
 
   // --- Associations (implementation plan Step 1.2) ---
@@ -70,7 +73,23 @@ export function initializeModels(sequelize: Sequelize): DbModels {
   models.User.hasMany(models.Pantry, { foreignKey: { name: 'userId', allowNull: false } });
   models.Pantry.belongsTo(models.User, { foreignKey: { name: 'userId', allowNull: false } });
 
+  models.User.hasMany(models.NotificationLog, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.NotificationLog.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
   return models;
 }
 
-export const dbModels = { User, Meal, Rescue, Feedback, Preference, Pantry, RescueCreditGrant };
+export const dbModels = {
+  User,
+  Meal,
+  Rescue,
+  Feedback,
+  Preference,
+  Pantry,
+  RescueCreditGrant,
+  NotificationLog,
+};
