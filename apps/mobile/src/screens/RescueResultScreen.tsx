@@ -13,6 +13,7 @@ import type {
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { StaplesShelf } from '../components/ads/StaplesShelf';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { generateRescue } from '../services/rescue.api';
@@ -83,6 +84,8 @@ export function RescueResultScreen({
           <Text style={[typography.body, styles.why]}>{chosen.naturalLanguageExplanation}</Text>
           <Text style={[typography.caption, styles.meta]}>{describeMeta(chosen.candidate)}</Text>
         </View>
+
+        <StaplesShelf staples={chosen.candidate.additions.map((addition) => addition.name)} />
 
         <ErrorBanner error={error} />
 

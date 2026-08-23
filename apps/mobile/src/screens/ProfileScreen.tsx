@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -6,6 +8,9 @@ import type { PersonalizationInsight, PreferenceLearned } from '@meal-rescue/sha
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import type { RootStackParamList } from '../navigation/AppNavigator';
+import { claimProPass, getAdEligibility } from '../services/ads.api';
+import { showRewardedAd } from '../services/ads.service';
 import { toApiError } from '../services/api';
 import { getLearnedPreferences, getPersonalizationInsights } from '../services/preference.api';
 import { useAuthStore } from '../stores/auth.store';
@@ -18,14 +23,48 @@ import { colors, spacing, typography } from '../theme';
 export function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [preferences, setPreferences] = useState<PreferenceLearned[]>([]);
   const [insights, setInsights] = useState<PersonalizationInsight[]>([]);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [tier, setTier] = useState<'free' | 'pro' | null>(null);
+  const [rescueCredits, setRescueCredits] = useState(0);
+  const [proPassUntil, setProPassUntil] = useState<string | null>(null);
+  const [monetBusy, setMonetBusy] = useState(false);
 
   useEffect(() => {
     loadProfile();
   }, []);
+
+  const refreshMonetization = useCallback(() => {
+    getAdEligibility()
+      .then((eligibility) => {
+        setTier(eligibility.tier);
+        setRescueCredits(eligibility.rescueCredits);
+      })
+      .catch(() => setTier(null));
+  }, []);
+
+  useEffect(() => {
+    refreshMonetization();
+  }, [refreshMonetization]);
+
+  async function handleFreeProHour() {
+    setMonetBusy(true);
+    try {
+      const txId = await showRewardedAd('pro-pass');
+      const claim = await claimProPass(txId);
+      if (claim.granted && claim.proPassUntil) {
+        setProPassUntil(claim.proPassUntil);
+        setTier('pro');
+      }
+    } catch {
+      // Ad dismissed or claim failed - stay on free tier silently.
+    } finally {
+      setMonetBusy(false);
+    }
+  }
 
   async function loadProfile() {
     try {
@@ -69,9 +108,32 @@ export function ProfileScreen() {
         <View style={styles.identity}>
           <Text style={[typography.heading, styles.email]}>{user?.email}</Text>
           <Text style={[typography.caption, styles.tier]}>
-            {user?.subscriptionTier === 'pro' ? 'Pro plan' : 'Free plan · 3 rescues/day'}
+            {tier === 'pro' || user?.subscriptionTier === 'pro'
+              ? proPassUntil
+                ? `Pro (temporary) until ${new Date(proPassUntil).toLocaleTimeString()}`
+                : 'Pro plan'
+              : `Free plan · 3 rescues/day${rescueCredits > 0 ? ` · +${rescueCredits} bonus` : ''}`}
           </Text>
         </View>
+
+        {tier === 'free' && (
+          <View style={styles.monetCard}>
+            <Text style={styles.monetTitle}>Meal Rescue Pro</Text>
+            <Text style={styles.monetBody}>Unlimited rescues, priority ranking, zero ads.</Text>
+            <PrimaryButton
+              label="Upgrade to Pro"
+              onPress={() => navigation.navigate('Paywall')}
+              style={styles.monetButton}
+            />
+            <PrimaryButton
+              label="Try Pro free for 1 hour"
+              variant="secondary"
+              onPress={() => void handleFreeProHour()}
+              busy={monetBusy}
+              style={styles.monetButton}
+            />
+          </View>
+        )}
 
         <ErrorBanner error={error} />
 
@@ -156,6 +218,26 @@ const styles = StyleSheet.create({
   identity: {
     alignItems: 'center',
     marginBottom: spacing.xl,
+  },
+  monetCard: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  monetTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  monetBody: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  monetButton: {
+    marginTop: spacing.sm,
   },
   email: {
     marginBottom: spacing.xs,
