@@ -57,7 +57,7 @@ export class OpenAiLlmClient implements LlmClient {
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3,
-      max_tokens: env.LLM_MAX_TOKENS,
+      max_tokens: options.maxTokens ?? env.LLM_MAX_TOKENS,
     };
     if (options.modelName.startsWith('z-ai/')) {
       requestBody.reasoning = { enabled: false };

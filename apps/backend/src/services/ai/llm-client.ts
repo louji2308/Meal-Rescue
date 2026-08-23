@@ -30,6 +30,8 @@ export interface CompleteJsonOptions<T> {
    * Data URI or base64 JPEG payload for vision requests.
    */
   imageBase64?: string;
+  /** Per-request output cap; defaults to env.LLM_MAX_TOKENS when unset. */
+  maxTokens?: number;
   // Input side is `unknown` so schemas using .catch()/.default() (whose
   // input type differs from output) still satisfy the contract.
   schema: ZodType<T, ZodTypeDef, unknown>;
