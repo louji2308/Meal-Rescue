@@ -15,7 +15,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
 import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
-import { ApiError, toApiError } from '../services/api';
+import { toApiError } from '../services/api';
 import { requestNotificationPermissionOnce } from '../services/onesignal.service';
 import { generateRescue } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
@@ -72,10 +72,11 @@ export function ReviewScreen({ route }: { route: { params: { analysis: MealAnaly
     try {
       await runGenerate();
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'DAILY_RESCUE_LIMIT') {
+      const apiErr = toApiError(err);
+      if (apiErr.code === 'DAILY_RESCUE_LIMIT') {
         setFuelSheetVisible(true);
       } else {
-        setError(toApiError(err));
+        setError(apiErr);
       }
     } finally {
       setBusy(false);
