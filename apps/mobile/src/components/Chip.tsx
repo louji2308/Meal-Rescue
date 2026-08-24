@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
+import { haptics } from '../services/haptics';
 import { colors, spacing } from '../theme';
+import { spring } from '../theme/motion';
 
 interface ChipProps {
   label: string;
@@ -11,10 +14,22 @@ interface ChipProps {
 }
 
 /**
- * Tappable constraint shortcut - the product spec explicitly forbids
- * constraint forms. Chips are skippable; the system infers the rest.
+ * Tappable constraint shortcut - skippable by design; the system infers
+ * the rest. Selection pops with a spring and a light tap.
  */
 export function Chip({ label, selected, onToggle, style }: ChipProps) {
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (selected) {
+      scale.value = 0.92;
+      scale.value = withSpring(1, spring.snappy);
+      haptics.light();
+    }
+  }, [selected, scale]);
+
+  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
     <TouchableOpacity
       accessibilityRole="button"
@@ -24,7 +39,9 @@ export function Chip({ label, selected, onToggle, style }: ChipProps) {
       activeOpacity={0.7}
       onPress={onToggle}
     >
-      <Text style={[styles.label, selected ? styles.labelSelected : null]}>{label}</Text>
+      <Animated.View style={[styles.inner, animated]}>
+        <Text style={[styles.label, selected ? styles.labelSelected : null]}>{label}</Text>
+      </Animated.View>
     </TouchableOpacity>
   );
 }
@@ -42,6 +59,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
   },
+  inner: {},
   label: {
     fontSize: 14,
     color: colors.text,
