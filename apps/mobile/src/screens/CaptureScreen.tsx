@@ -5,7 +5,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +21,7 @@ import type { MealAnalysisResponse } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { ScanningLoader } from '../components/loading/ScanningLoader';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
@@ -200,12 +200,7 @@ export function CaptureScreen() {
           {(text.trim() || image) && !busy && (
             <PrimaryButton label="Understand my meal" onPress={() => void handleAnalyze()} />
           )}
-          {busy && (
-            <View style={styles.analyzing}>
-              <ActivityIndicator color={colors.primary} />
-              <Text style={styles.analyzingText}>Reading your meal…</Text>
-            </View>
-          )}
+          {busy && <ScanningLoader mealText={image ? null : text} />}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -294,16 +289,5 @@ const styles = StyleSheet.create({
   },
   voiceButtonTextRecording: {
     color: colors.error,
-  },
-  analyzing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  analyzingText: {
-    color: colors.textSecondary,
-    fontSize: 14,
   },
 });
