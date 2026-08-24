@@ -22,6 +22,7 @@ import type { MealAnalysisResponse } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { PickedImage, analyzeMeal } from '../services/rescue.api';
@@ -33,6 +34,8 @@ import { colors, spacing, typography } from '../theme';
  */
 export function CaptureScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const { phase, tint } = useDayPhase();
+  const background = phase === 'night' ? colors.background : tint;
   const [text, setText] = useState('');
   const [image, setImage] = useState<PickedImage | null>(null);
   const [busy, setBusy] = useState(false);
@@ -126,7 +129,7 @@ export function CaptureScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

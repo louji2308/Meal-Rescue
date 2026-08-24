@@ -14,6 +14,7 @@ import type {
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { StaplesShelf } from '../components/ads/StaplesShelf';
+import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { generateRescue } from '../services/rescue.api';
@@ -32,6 +33,8 @@ export function RescueResultScreen({
   route: { params: { result: RescueGenerateResponse } };
 }) {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const { phase, tint } = useDayPhase();
+  const background = phase === 'night' ? colors.background : tint;
   const initial: RescueGenerateResponse = route.params.result;
 
   const [current, setCurrent] = useState(initial);
@@ -71,7 +74,7 @@ export function RescueResultScreen({
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[typography.caption, styles.mealLabel]}>
           Your meal: {current.originalMeal.foods.join(', ')}

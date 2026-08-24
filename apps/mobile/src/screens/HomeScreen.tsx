@@ -5,6 +5,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, spacing, typography } from '../theme';
@@ -16,9 +17,11 @@ import { colors, spacing, typography } from '../theme';
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const user = useAuthStore((state) => state.user);
+  const { phase, tint } = useDayPhase();
+  const background = phase === 'night' ? colors.background : tint;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <View style={styles.content}>
         <Text style={[typography.caption, styles.greeting]}>
           {user ? `Hi ${user.email.split('@')[0]}` : ' '}
