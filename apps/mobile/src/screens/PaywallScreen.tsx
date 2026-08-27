@@ -1,11 +1,14 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useEntitlement } from '../hooks/useEntitlement';
+import { usePaywallNudge } from '../hooks/usePaywallNudge';
+import { claimProPass } from '../services/ads.api';
+import { showRewardedAd } from '../services/ads.service';
 import { toApiError } from '../services/api';
 import {
   fetchCurrentPackages,
@@ -35,10 +38,13 @@ const STATIC_PRICING = [
 export function PaywallScreen() {
   const navigation = useNavigation();
   const { isPro, refresh } = useEntitlement();
+  const nudge = usePaywallNudge();
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [restoredNote, setRestoredNote] = useState<string | null>(null);
+  const [passBusy, setPassBusy] = useState(false);
+  const [passNote, setPassNote] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCurrentPackages()
@@ -85,6 +91,28 @@ export function PaywallScreen() {
     }
   }
 
+  async function handleFreeProHour() {
+    setError(null);
+    setPassNote(null);
+    setPassBusy(true);
+    try {
+      const txId = await showRewardedAd('pro-pass');
+      const claim = await claimProPass(txId);
+      if (claim.granted && claim.proPassUntil) {
+        await refresh();
+        setPassNote(
+          `You've got Pro free until ${new Date(claim.proPassUntil).toLocaleTimeString()}.`,
+        );
+      } else {
+        setPassNote('Ad not counted this time - try again?');
+      }
+    } catch {
+      setPassNote('Ad dismissed. No charge, of course.');
+    } finally {
+      setPassBusy(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -99,6 +127,14 @@ export function PaywallScreen() {
 
         <Text style={[typography.title, styles.headline]}>Meal Rescue Pro</Text>
         <Text style={[typography.body, styles.tagline]}>Rescue every meal, skip every ad.</Text>
+        <Image
+          source={require('../../assets/pro-cat.png')}
+          style={styles.cat}
+          resizeMode="contain"
+          accessible
+          accessibilityLabel="Scraps the pro rescue cat"
+        />
+        {nudge ? <Text style={styles.nudge}>{nudge}</Text> : null}
 
         <View style={styles.propsCard}>
           {VALUE_PROPS.map((prop) => (
@@ -129,6 +165,25 @@ export function PaywallScreen() {
             </TouchableOpacity>
           );
         })}
+
+        {passNote ? <Text style={styles.passNote}>{passNote}</Text> : null}
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Try Pro free for 1 hour"
+          onPress={() => void handleFreeProHour()}
+          disabled={passBusy || isPro}
+          style={styles.passButton}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.passText}>
+            {isPro
+              ? 'You have Pro right now'
+              : passBusy
+                ? 'Loading…'
+                : 'Not sure yet? Taste it free for 1 hour'}
+          </Text>
+        </TouchableOpacity>
 
         {!hasRevenueCatKeys() && (
           <Text style={styles.devNote}>Configure RevenueCat keys to enable purchases.</Text>
@@ -177,7 +232,20 @@ const styles = StyleSheet.create({
   tagline: {
     textAlign: 'center',
     color: colors.textSecondary,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  cat: {
+    width: 180,
+    height: 180,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  nudge: {
+    textAlign: 'center',
+    color: colors.primary,
+    fontWeight: '600',
+    marginBottom: spacing.md,
+    marginTop: -spacing.sm,
   },
   propsCard: {
     backgroundColor: colors.primaryLight,
@@ -229,6 +297,24 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: spacing.sm,
     fontSize: 14,
+  },
+  passNote: {
+    textAlign: 'center',
+    color: colors.primary,
+    marginTop: spacing.sm,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  passButton: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  passText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   restoreButton: {
     marginTop: spacing.md,

@@ -75,6 +75,11 @@ function AuthenticatedTabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+        },
         tabBarIcon: ({ focused, color, size }) => {
           const iconName = TAB_ICONS[route.name as keyof RootTabParamList];
           if (!iconName) {

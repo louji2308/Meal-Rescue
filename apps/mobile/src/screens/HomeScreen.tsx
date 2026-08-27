@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useDayPhase } from '../hooks/useDayPhase';
@@ -23,10 +23,18 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <View style={styles.content}>
+        <Image
+          source={require('../../assets/home-cat.png')}
+          style={styles.cat}
+          resizeMode="contain"
+          accessible
+          accessibilityLabel="Scraps the rescue cat"
+        />
         <Text style={[typography.caption, styles.greeting]}>
           {user ? `Hi ${user.email.split('@')[0]}` : ' '}
         </Text>
         <Text style={[typography.title, styles.question]}>What are you eating?</Text>
+
         <Text style={[typography.body, styles.subtitle]}>
           Snap your meal and get the smallest change that makes it better.
         </Text>
@@ -57,11 +65,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
-  greeting: {
+  cat: {
+    width: 220,
+    height: 195,
     marginBottom: spacing.sm,
   },
+  greeting: {
+    marginBottom: spacing.xs,
+  },
   question: {
-    textAlign: 'center',
     marginBottom: spacing.sm,
   },
   subtitle: {

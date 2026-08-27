@@ -162,7 +162,7 @@ export function FridgeNegotiatorScreen() {
                 keyboardType="numeric"
               />
             </View>
-            <View style={styles.field}>
+            <View style={[styles.field, styles.hungerField]}>
               <Text style={styles.fieldLabel}>Hunger</Text>
               <TouchableOpacity
                 style={[styles.segment, hungerLevel === 'snack' && styles.segmentActive]}
@@ -244,6 +244,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
+  hungerField: {
+    gap: spacing.sm,
+  },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -282,14 +285,14 @@ const styles = StyleSheet.create({
   missing: {
     marginBottom: spacing.md,
     padding: spacing.md,
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.primaryLight,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#FFE082',
+    borderColor: colors.border,
   },
   missingLabel: {
     fontSize: 13,
-    color: '#F57F17',
+    color: colors.textSecondary,
   },
   results: {
     gap: spacing.md,
@@ -319,7 +322,7 @@ const styles = StyleSheet.create({
   },
   missingInline: {
     fontSize: 12,
-    color: '#F57F17',
+    color: colors.secondary,
   },
   detail: {
     marginTop: spacing.md,

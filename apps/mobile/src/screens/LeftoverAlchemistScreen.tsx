@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { launchImageLibraryAsync, requestMediaLibraryPermissionsAsync } from 'expo-image-picker';
 import React, { useState } from 'react';
 import {
@@ -81,7 +82,7 @@ export function LeftoverAlchemistScreen() {
       case 'low':
         return colors.primary;
       case 'medium':
-        return '#F57F00';
+        return colors.secondary;
       case 'high':
         return colors.error;
       default:
@@ -186,7 +187,7 @@ export function LeftoverAlchemistScreen() {
               <Image source={{ uri: image.uri }} style={styles.preview} />
             ) : (
               <View style={styles.photoPlaceholder}>
-                <Text style={styles.photoIcon}>📷</Text>
+                <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />
                 <Text style={styles.photoHint}>Choose a photo</Text>
               </View>
             )}
@@ -252,9 +253,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-  },
-  photoIcon: {
-    fontSize: 32,
   },
   photoHint: {
     color: colors.textSecondary,

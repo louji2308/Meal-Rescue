@@ -11,10 +11,10 @@ export function resolveDayPhase(hour: number): DayPhase {
 }
 
 export const PHASE_TINTS: Record<DayPhase, string> = {
-  morning: '#FDF8F2',
+  morning: '#FFFFFF',
   afternoon: '#FAFAFA',
-  evening: '#F7F5FA',
-  night: '#141A14',
+  evening: '#F4F4F4',
+  night: '#141414',
 };
 
 export function useDayPhase(): { phase: DayPhase; tint: string } {

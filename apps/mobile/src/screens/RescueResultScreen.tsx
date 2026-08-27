@@ -3,6 +3,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { Share } from 'react-native';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -14,6 +15,7 @@ import type {
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { StaplesShelf } from '../components/ads/StaplesShelf';
+import { PLATE_DIFF_LAND_MS, PlateDiffReveal } from '../components/plate/PlateDiffReveal';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
@@ -66,7 +68,7 @@ export function RescueResultScreen({
     try {
       await Share.share({
         title: 'My Meal Rescue',
-        message: `🍽️ My meal: ${current.originalMeal.foods.join(', ')}\n🛟 Rescue: ${describeCandidate(chosen.candidate)}\n💡 Why: ${chosen.naturalLanguageExplanation}\n⏱ ${chosen.candidate.estimatedTime} min · Extra effort: ${describeMeta(chosen.candidate).split('·')[1]?.trim() || ''}\n\nMade with Meal Rescue`,
+        message: `My meal: ${current.originalMeal.foods.join(', ')}\nRescue: ${describeCandidate(chosen.candidate)}\nWhy: ${chosen.naturalLanguageExplanation}\n${chosen.candidate.estimatedTime} min · Extra effort: ${describeMeta(chosen.candidate).split('·')[1]?.trim() || ''}\n\nMade with Meal Rescue`,
       });
     } catch {
       // Share cancelled or failed - silently ignore
@@ -76,17 +78,20 @@ export function RescueResultScreen({
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[typography.caption, styles.mealLabel]}>
-          Your meal: {current.originalMeal.foods.join(', ')}
-        </Text>
-
-        <View style={styles.card}>
+        <PlateDiffReveal
+          foods={current.originalMeal.foods}
+          additionLabel={`＋ ${describeAddition(chosen.candidate)}`}
+        />
+        <Animated.View
+          entering={FadeInDown.delay(PLATE_DIFF_LAND_MS).duration(320)}
+          style={styles.card}
+        >
           <Text style={[typography.heading, styles.rescueLine]}>
             {describeCandidate(chosen.candidate)}
           </Text>
           <Text style={[typography.body, styles.why]}>{chosen.naturalLanguageExplanation}</Text>
           <Text style={[typography.caption, styles.meta]}>{describeMeta(chosen.candidate)}</Text>
-        </View>
+        </Animated.View>
 
         <StaplesShelf staples={chosen.candidate.additions.map((addition) => addition.name)} />
 
@@ -165,6 +170,14 @@ export function RescueResultScreen({
   );
 }
 
+function describeAddition(candidate: RescueCandidate): string {
+  if (candidate.additions.length > 0) {
+    return candidate.additions.map((a) => a.name).join(' + ');
+  }
+  const sub = candidate.substitutions[0];
+  return sub ? `${sub.original.name} → ${sub.replacement.name}` : 'Prep tweak';
+}
+
 function describeCandidate(candidate: RescueCandidate): string {
   const parts: string[] = [];
   if (candidate.additions.length > 0) {
@@ -191,9 +204,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.lg,
   },
-  mealLabel: {
-    marginBottom: spacing.sm,
-  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -212,6 +222,7 @@ const styles = StyleSheet.create({
   meta: {},
   actions: {
     gap: spacing.sm,
+    marginTop: spacing.lg,
   },
   actionButton: {},
   alternatives: {

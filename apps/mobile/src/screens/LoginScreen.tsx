@@ -79,6 +79,11 @@ export function LoginScreen() {
           value={password}
           onChangeText={setPassword}
         />
+        {isRegister && (
+          <Text style={styles.passwordHint}>
+            Password must be at least 8 characters, with a letter and a number.
+          </Text>
+        )}
 
         <PrimaryButton
           label={isRegister ? 'Create account' : 'Sign in'}
@@ -132,6 +137,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: 16,
+    marginBottom: spacing.md,
+  },
+  passwordHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: -spacing.sm,
     marginBottom: spacing.md,
   },
   submit: {

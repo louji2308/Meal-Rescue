@@ -1,5 +1,6 @@
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PantryItem, PantryUpsertRequest } from '@meal-rescue/shared-types';
@@ -13,6 +14,7 @@ import {
   markPantryItemUsed,
   upsertPantryItem,
 } from '../services/pantry.api';
+import { PickedImage, analyzeMeal } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
 
 /**
@@ -29,6 +31,7 @@ export function PantryScreen() {
   >([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [snapBusy, setSnapBusy] = useState(false);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
@@ -101,6 +104,67 @@ export function PantryScreen() {
       setError(toApiError(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  const STARTER_STAPLES = ['eggs', 'rice', 'olive oil', 'salt', 'butter', 'bread'];
+
+  async function handleAddStaples() {
+    setError(null);
+    setBusy(true);
+    try {
+      for (const staple of STARTER_STAPLES) {
+        await upsertPantryItem({ ingredientName: staple, usePriority: 0 });
+      }
+      loadPantry();
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSnapGroceries() {
+    setError(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError(toApiError(new Error('Photo library access is needed to scan your groceries.')));
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsMultipleSelection: false,
+    });
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+    const asset = result.assets[0]!;
+    const image: PickedImage = {
+      uri: asset.uri,
+      name: asset.fileName ?? 'pantry.jpg',
+      mimeType: asset.mimeType ?? 'image/jpeg',
+    };
+
+    setSnapBusy(true);
+    try {
+      const analysis = await analyzeMeal({ image });
+      const names = analysis.detectedFoods.map((food) => food.name).filter(Boolean);
+      if (names.length === 0) {
+        setError(
+          toApiError(new Error("I couldn't spot anything in that photo. Try a clearer shot.")),
+        );
+        return;
+      }
+      for (const name of names) {
+        await upsertPantryItem({ ingredientName: name, usePriority: 0 });
+      }
+      loadPantry();
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setSnapBusy(false);
     }
   }
 
@@ -212,7 +276,34 @@ export function PantryScreen() {
         <Text style={styles.sectionTitle}>Your Items</Text>
         {items.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>Pantry is empty. Tap + Add Item to start.</Text>
+            <Image
+              source={require('../../assets/pantry-cat.png')}
+              style={styles.pantryCat}
+              resizeMode="contain"
+              accessible
+              accessibilityLabel="Scraps the rescue cat with an empty plate"
+            />
+            <Text style={styles.emptyTitle}>Your pantry is a blank plate.</Text>
+            <Text style={styles.emptyText}>
+              {snapBusy
+                ? 'Scraps is scanning your shelf…'
+                : 'Snap what you have on hand and I will stock it for you. Or tap a few staples to get going.'}
+            </Text>
+            <View style={styles.emptyActions}>
+              <PrimaryButton
+                label="Snap your groceries"
+                onPress={() => void handleSnapGroceries()}
+                busy={snapBusy}
+                style={styles.emptyAction}
+              />
+              <PrimaryButton
+                label="Add my staples"
+                variant="secondary"
+                onPress={() => void handleAddStaples()}
+                busy={busy}
+                style={styles.emptyAction}
+              />
+            </View>
           </View>
         ) : (
           <View style={styles.list}>
@@ -320,10 +411,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   section: {
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.primaryLight,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FFE082',
+    borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
@@ -342,12 +433,31 @@ const styles = StyleSheet.create({
   },
   empty: {
     alignItems: 'center',
-    padding: spacing.xl,
+    paddingTop: spacing.xl,
+  },
+  pantryCat: {
+    width: 200,
+    height: 160,
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   emptyText: {
     color: colors.textSecondary,
     textAlign: 'center',
+    maxWidth: 280,
+    marginBottom: spacing.lg,
   },
+  emptyActions: {
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+  },
+  emptyAction: {},
   list: {
     gap: spacing.sm,
   },
@@ -369,20 +479,20 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   expiryBadgeExpiring: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: colors.primaryLight,
     borderRadius: 8,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontSize: 12,
-    color: '#E65100',
+    color: colors.primary,
   },
   expiryBadgeLow: {
-    backgroundColor: '#FFF8E1',
+    backgroundColor: colors.primaryLight,
     borderRadius: 8,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontSize: 12,
-    color: '#F57F17',
+    color: colors.secondary,
   },
   itemDetails: {
     flexDirection: 'row',

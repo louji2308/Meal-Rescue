@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,9 +34,12 @@ export function RescueCard({
     <SafeAreaView style={styles.container}>
       <View style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.badge}>🛟 Meal Rescue</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeText}>✕</Text>
+          <View style={styles.badge}>
+            <Ionicons name="help-buoy" size={20} color={colors.primary} />
+            <Text style={styles.badgeText}>Meal Rescue</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel="Close">
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -53,14 +57,14 @@ export function RescueCard({
         <Text style={styles.whyText}>{why}</Text>
 
         <View style={styles.meta}>
-          <Text style={styles.metaItem}>
-            <Text style={styles.metaIcon}>⏱</Text>
+          <View style={styles.metaItem}>
+            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
             <Text>{timeMinutes} min</Text>
-          </Text>
-          <Text style={styles.metaItem}>
-            <Text style={styles.metaIcon}>⚡</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Ionicons name="flash-outline" size={16} color={colors.textSecondary} />
             <Text>Extra effort: {effort}</Text>
-          </Text>
+          </View>
         </View>
 
         <PrimaryButton label="Share this rescue" variant="secondary" onPress={onShare} />
@@ -90,14 +94,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  badgeText: {
     fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
   },
   closeBtn: {
     padding: spacing.xs,
-  },
-  closeText: {
-    fontSize: 24,
-    color: colors.textSecondary,
   },
   mealLabel: {
     fontSize: 12,
@@ -151,8 +158,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-  },
-  metaIcon: {
-    marginRight: spacing.xs,
   },
 });

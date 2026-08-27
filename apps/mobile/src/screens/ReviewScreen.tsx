@@ -120,13 +120,9 @@ export function ReviewScreen({ route }: { route: { params: { analysis: MealAnaly
         <Text style={[typography.heading, styles.constraintsTitle]}>Anything to keep in mind?</Text>
         <Text style={[typography.caption, styles.constraintsHint]}>Optional - skip any.</Text>
         <View style={styles.chips}>
-          <Chip label="⏱ 5 minutes" selected={quick} onToggle={() => setQuick(!quick)} />
-          <Chip
-            label="🍳 No cooking"
-            selected={noCooking}
-            onToggle={() => setNoCooking(!noCooking)}
-          />
-          <Chip label="💰 Keep it cheap" selected={cheap} onToggle={() => setCheap(!cheap)} />
+          <Chip label="5 minutes" selected={quick} onToggle={() => setQuick(!quick)} />
+          <Chip label="No cooking" selected={noCooking} onToggle={() => setNoCooking(!noCooking)} />
+          <Chip label="Keep it cheap" selected={cheap} onToggle={() => setCheap(!cheap)} />
         </View>
 
         <ErrorBanner error={error} />

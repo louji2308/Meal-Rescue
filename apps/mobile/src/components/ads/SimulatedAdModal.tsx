@@ -1,14 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { useAdStore } from '../../services/ads.service';
+import { haptics } from '../../services/haptics';
 import { colors, spacing, typography } from '../../theme';
+import { spring } from '../../theme/motion';
+import { ConfettiBurst } from '../effects/ConfettiBurst';
 
 const AD_DURATION_SECONDS = 3;
 
 /**
  * Simulated rewarded ad. Mounted once at the app root; the ads gateway
- * controls visibility. Shows a branded countdown, then unlocks the reward.
+ * controls visibility. Shows a branded countdown with animated progress,
+ * then unlocks the reward with confetti and haptic feedback.
  * Clearly labeled as sponsored - never disguised as app content.
  */
 export function SimulatedAdModal() {
@@ -18,6 +28,7 @@ export function SimulatedAdModal() {
   const dismiss = useAdStore((state) => state.dismiss);
 
   const [secondsLeft, setSecondsLeft] = useState(AD_DURATION_SECONDS);
+  const [burstKey, setBurstKey] = useState(0);
 
   useEffect(() => {
     if (!visible) return;
@@ -29,6 +40,31 @@ export function SimulatedAdModal() {
   }, [visible]);
 
   const earned = secondsLeft === 0;
+
+  const burstTrigger = useSharedValue(0);
+  useEffect(() => {
+    if (earned) {
+      haptics.success();
+      burstTrigger.value = withTiming(1, { duration: 1 });
+      setBurstKey((k) => k + 1);
+    }
+  }, [earned, burstTrigger]);
+
+  const claimScale = useSharedValue(0);
+  useEffect(() => {
+    claimScale.value = earned ? withSpring(1, spring.bouncy) : withTiming(0, { duration: 120 });
+  }, [earned, claimScale]);
+  const claimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: claimScale.value }],
+  }));
+
+  const fill = useSharedValue(0);
+  useEffect(() => {
+    fill.value = withTiming(((AD_DURATION_SECONDS - secondsLeft) / AD_DURATION_SECONDS) * 100, {
+      duration: 950,
+    });
+  }, [secondsLeft, fill]);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value}%` as unknown as number }));
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
@@ -43,24 +79,21 @@ export function SimulatedAdModal() {
           </Text>
 
           <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${((AD_DURATION_SECONDS - secondsLeft) / AD_DURATION_SECONDS) * 100}%` },
-              ]}
-            />
+            <Animated.View style={[styles.progressFill, fillStyle]} />
           </View>
 
           {earned ? (
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Claim reward"
-              style={styles.claimButton}
-              activeOpacity={0.85}
-              onPress={complete}
-            >
-              <Text style={styles.claimText}>Claim reward</Text>
-            </TouchableOpacity>
+            <Animated.View style={claimStyle}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Claim reward"
+                style={styles.claimButton}
+                activeOpacity={0.85}
+                onPress={complete}
+              >
+                <Text style={styles.claimText}>Claim reward</Text>
+              </TouchableOpacity>
+            </Animated.View>
           ) : (
             <View style={styles.waitingRow}>
               <ActivityIndicator color={colors.primary} />
@@ -77,6 +110,7 @@ export function SimulatedAdModal() {
             <Text style={styles.cancelText}>No thanks</Text>
           </TouchableOpacity>
         </View>
+        <ConfettiBurst trigger={burstKey} />
       </View>
     </Modal>
   );
