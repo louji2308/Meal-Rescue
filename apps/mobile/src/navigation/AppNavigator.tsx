@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
 
+import { PawStamp } from '../components/mascot/PawStamp';
 import { CaptureScreen } from '../screens/CaptureScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
 import { FridgeNegotiatorScreen } from '../screens/FridgeNegotiatorScreen';
@@ -18,6 +19,7 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
 import { useAuthStore } from '../stores/auth.store';
+import { useMonetization } from '../stores/monetization.store';
 import { colors } from '../theme';
 
 export type HomeStackParamList = {
@@ -69,6 +71,13 @@ const TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> 
  * 5 tabs for Phase 5: Rescue (core loop), Fridge Negotiator, Leftover Alchemist, Pantry, Profile
  */
 function AuthenticatedTabs() {
+  const isPro = useMonetization((state) => state.isPro);
+  const refreshTier = useMonetization((state) => state.refresh);
+
+  useEffect(() => {
+    void refreshTier();
+  }, [refreshTier]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -81,7 +90,10 @@ function AuthenticatedTabs() {
           borderTopWidth: 1,
         },
         tabBarIcon: ({ focused, color, size }) => {
-          const iconName = TAB_ICONS[route.name as keyof RootTabParamList];
+          if (route.name === 'Profile' && isPro) {
+            return <PawStamp size={size} opacity={focused ? 1 : 0.45} />;
+          }
+          const iconName = TAB_ICONS[route.name as keyof RootTabParamList] ?? null;
           if (!iconName) {
             return null;
           }

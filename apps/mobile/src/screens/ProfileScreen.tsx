@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Linking,
   ScrollView,
@@ -18,11 +18,12 @@ import type { PersonalizationInsight, PreferenceLearned } from '@meal-rescue/sha
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { PawStamp } from '../components/mascot/PawStamp';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { getAdEligibility } from '../services/ads.api';
 import { toApiError } from '../services/api';
 import { getLearnedPreferences, getPersonalizationInsights } from '../services/preference.api';
 import { useAuthStore } from '../stores/auth.store';
+import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
 
 const APK_VERSION = '0.1.0';
@@ -41,29 +42,19 @@ export function ProfileScreen() {
   const [preferences, setPreferences] = useState<PreferenceLearned[]>([]);
   const [insights, setInsights] = useState<PersonalizationInsight[]>([]);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
-  const [tier, setTier] = useState<'free' | 'pro' | null>(null);
-  const [rescueCredits, setRescueCredits] = useState(0);
   const [notificationsOn, setNotificationsOn] = useState(true);
+  const tier = useMonetization((state) => state.tier);
+  const rescueCredits = useMonetization((state) => state.rescueCredits);
+  const refresh = useMonetization((state) => state.refresh);
+  const isEffectivePro = tier === 'pro' || user?.subscriptionTier === 'pro';
 
   useEffect(() => {
     loadProfile();
+    void refresh();
     AsyncStorage.getItem(NOTIFICATIONS_KEY).then((val) => {
       if (val !== null) setNotificationsOn(val === 'true');
     });
-  }, []);
-
-  const refreshMonetization = useCallback(() => {
-    getAdEligibility()
-      .then((eligibility) => {
-        setTier(eligibility.tier);
-        setRescueCredits(eligibility.rescueCredits);
-      })
-      .catch(() => setTier(null));
-  }, []);
-
-  useEffect(() => {
-    refreshMonetization();
-  }, [refreshMonetization]);
+  }, [refresh]);
 
   async function handleToggleNotifications(next: boolean) {
     setNotificationsOn(next);
@@ -111,11 +102,14 @@ export function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.identity}>
           <Text style={[typography.heading, styles.email]}>{user?.email}</Text>
-          <Text style={[typography.caption, styles.tier]}>
-            {tier === 'pro' || user?.subscriptionTier === 'pro'
-              ? 'Pro plan'
-              : `Free plan · 3 rescues/day${rescueCredits > 0 ? ` · +${rescueCredits} bonus` : ''}`}
-          </Text>
+          <View style={[styles.tierRow, styles.tier]}>
+            {isEffectivePro && <PawStamp size={16} rotation={0} />}
+            <Text style={typography.caption}>
+              {isEffectivePro
+                ? 'Pro plan'
+                : `Free plan · 3 rescues/day${rescueCredits > 0 ? ` · +${rescueCredits} bonus` : ''}`}
+            </Text>
+          </View>
         </View>
 
         {tier === 'free' && (
@@ -127,7 +121,7 @@ export function ProfileScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.proLeft}>
-              <Ionicons name="sparkles-outline" size={22} color={colors.primary} />
+              <PawStamp size={24} rotation={0} />
               <View>
                 <Text style={styles.proTitle}>Meal Rescue Pro</Text>
                 <Text style={styles.proSub}>
@@ -310,6 +304,11 @@ const styles = StyleSheet.create({
   },
   tier: {
     marginBottom: spacing.xl,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   settingRow: {
     flexDirection: 'row',

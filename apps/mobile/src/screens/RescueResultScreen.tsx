@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Share } from 'react-native';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -15,9 +15,11 @@ import type {
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { StaplesShelf } from '../components/ads/StaplesShelf';
+import { PawStamp } from '../components/mascot/PawStamp';
 import { PLATE_DIFF_LAND_MS, PlateDiffReveal } from '../components/plate/PlateDiffReveal';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
+import { getAdEligibility } from '../services/ads.api';
 import { toApiError } from '../services/api';
 import { generateRescue } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
@@ -43,6 +45,13 @@ export function RescueResultScreen({
   const [chosen, setChosen] = useState<RankedRecommendation>(initial.recommendation);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [isPro, setIsPro] = useState(false);
+
+  useEffect(() => {
+    getAdEligibility()
+      .then((eligibility) => setIsPro(eligibility.tier === 'pro'))
+      .catch(() => setIsPro(false));
+  }, []);
 
   async function handleDontHave() {
     setError(null);
@@ -84,8 +93,9 @@ export function RescueResultScreen({
         />
         <Animated.View
           entering={FadeInDown.delay(PLATE_DIFF_LAND_MS).duration(320)}
-          style={styles.card}
+          style={[styles.card, isPro && styles.pawCard]}
         >
+          {isPro && <PawStamp size={28} rotation={-12} opacity={0.85} style={styles.cardStamp} />}
           <Text style={[typography.heading, styles.rescueLine]}>
             {describeCandidate(chosen.candidate)}
           </Text>
@@ -211,6 +221,14 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     padding: spacing.md,
     marginBottom: spacing.lg,
+  },
+  pawCard: {
+    paddingBottom: spacing.xl,
+  },
+  cardStamp: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
   },
   rescueLine: {
     color: colors.primary,

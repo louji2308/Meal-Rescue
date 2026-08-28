@@ -5,6 +5,7 @@ import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
+import { PawStamp } from '../components/mascot/PawStamp';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywallNudge } from '../hooks/usePaywallNudge';
 import { claimProPass } from '../services/ads.api';
@@ -16,6 +17,7 @@ import {
   purchasePackage,
   restorePurchases,
 } from '../services/revenuecat.service';
+import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
 
 const VALUE_PROPS = [
@@ -100,6 +102,7 @@ export function PaywallScreen() {
       const claim = await claimProPass(txId);
       if (claim.granted && claim.proPassUntil) {
         await refresh();
+        void useMonetization.getState().refresh();
         setPassNote(
           `You've got Pro free until ${new Date(claim.proPassUntil).toLocaleTimeString()}.`,
         );
@@ -127,13 +130,16 @@ export function PaywallScreen() {
 
         <Text style={[typography.title, styles.headline]}>Meal Rescue Pro</Text>
         <Text style={[typography.body, styles.tagline]}>Rescue every meal, skip every ad.</Text>
-        <Image
-          source={require('../../assets/pro-cat.png')}
-          style={styles.cat}
-          resizeMode="contain"
-          accessible
-          accessibilityLabel="Scraps the pro rescue cat"
-        />
+        <View style={styles.catFrame}>
+          <Image
+            source={require('../../assets/pro-cat.png')}
+            style={styles.cat}
+            resizeMode="contain"
+            accessible
+            accessibilityLabel="Scraps the pro rescue cat"
+          />
+          <PawStamp size={48} rotation={-18} style={styles.pawSeal} />
+        </View>
         {nudge ? <Text style={styles.nudge}>{nudge}</Text> : null}
 
         <View style={styles.propsCard}>
@@ -144,6 +150,8 @@ export function PaywallScreen() {
             </View>
           ))}
         </View>
+
+        <Text style={styles.feedTheCat}>Feed the cat — pick a plan below</Text>
 
         {(packages.length > 0 ? packages : STATIC_PRICING).map((item) => {
           const pkg = item as PurchasesPackage;
@@ -234,11 +242,20 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },
-  cat: {
+  catFrame: {
     width: 180,
     height: 180,
     alignSelf: 'center',
     marginBottom: spacing.md,
+  },
+  cat: {
+    width: 180,
+    height: 180,
+  },
+  pawSeal: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
   },
   nudge: {
     textAlign: 'center',
@@ -266,6 +283,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: colors.text,
+  },
+  feedTheCat: {
+    textAlign: 'center',
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginBottom: spacing.md,
   },
   planCard: {
     borderWidth: 1,
