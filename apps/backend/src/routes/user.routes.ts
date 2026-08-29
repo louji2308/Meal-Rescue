@@ -85,4 +85,30 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
     return reply.send({ id: user.id, email: user.email, subscriptionTier: user.subscriptionTier });
   });
+
+  app.get('/taste/profile', async (request, reply) => {
+    const { tasteMemory } = buildServices(app.redis);
+    return reply.send(await tasteMemory.getTasteProfile(request.user.sub));
+  });
+
+  app.get('/taste/personality', async (request, reply) => {
+    const { tasteMemory } = buildServices(app.redis);
+    return reply.send(await tasteMemory.buildPersonality(request.user.sub));
+  });
+
+  app.get('/taste/journal', async (request, reply) => {
+    const { tasteMemory } = buildServices(app.redis);
+    return reply.send(await tasteMemory.getJournal(request.user.sub));
+  });
+
+  app.get('/taste', async (request, reply) => {
+    const { tasteMemory } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const [memories, personality, journal] = await Promise.all([
+      tasteMemory.getTasteProfile(userId),
+      tasteMemory.buildPersonality(userId),
+      tasteMemory.getJournal(userId),
+    ]);
+    return reply.send({ memories, personality, journal });
+  });
 }
