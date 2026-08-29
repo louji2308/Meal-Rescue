@@ -2,11 +2,12 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import { Share } from 'react-native';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
+  MemoryReason,
   RankedRecommendation,
   RescueCandidate,
   RescueGenerateResponse,
@@ -46,6 +47,7 @@ export function RescueResultScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [isPro, setIsPro] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
 
   useEffect(() => {
     getAdEligibility()
@@ -101,6 +103,26 @@ export function RescueResultScreen({
           </Text>
           <Text style={[typography.body, styles.why]}>{chosen.naturalLanguageExplanation}</Text>
           <Text style={[typography.caption, styles.meta]}>{describeMeta(chosen.candidate)}</Text>
+          {chosen.resonanceMemory && (
+            <View style={styles.memoryBox}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Why this suggestion"
+                accessibilityState={{ expanded: showWhy }}
+                onPress={() => setShowWhy((v) => !v)}
+                style={styles.memoryToggle}
+              >
+                <Text style={styles.memoryToggleText}>
+                  {showWhy ? 'Why this? -' : 'Why this? +'}
+                </Text>
+              </Pressable>
+              {showWhy && (
+                <Text style={styles.memoryDetail}>
+                  {renderMemoryReason(chosen.resonanceMemory)}
+                </Text>
+              )}
+            </View>
+          )}
         </Animated.View>
 
         <StaplesShelf staples={chosen.candidate.additions.map((addition) => addition.name)} />
@@ -205,6 +227,20 @@ function describeMeta(candidate: RescueCandidate): string {
   return `${candidate.estimatedTime} min · Extra effort: ${effort}`;
 }
 
+function renderMemoryReason(memory: MemoryReason): string {
+  if (memory.kind === 'cuisine_family') {
+    return `This fits the ${memory.contextValue} cooking style you've warmed up to — tell us if you want a change.`;
+  }
+  if (memory.kind === 'tradition') {
+    return `You've leaned ${
+      memory.affinity >= 0 ? 'into modern twists' : 'toward pure, traditional plates'
+    } lately, so we're matching that.`;
+  }
+  return `We remember you ${
+    memory.affinity >= 0 ? `liked ${memory.ingredient}` : `steer clear of ${memory.ingredient}`
+  } in ${memory.contextValue} dishes, so we factored that in.`;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -238,6 +274,24 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   meta: {},
+  memoryBox: {
+    marginTop: spacing.sm,
+  },
+  memoryToggle: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+  },
+  memoryToggleText: {
+    color: colors.primary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  memoryDetail: {
+    marginTop: spacing.xs,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
   actions: {
     gap: spacing.sm,
     marginTop: spacing.lg,
