@@ -10,6 +10,7 @@ import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/
 
 import { PawStamp } from '../components/mascot/PawStamp';
 import { CaptureScreen } from '../screens/CaptureScreen';
+import { CulinaryCompassScreen } from '../screens/CulinaryCompassScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
 import { FridgeNegotiatorScreen } from '../screens/FridgeNegotiatorScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -53,6 +54,7 @@ export type RootStackParamList = {
 };
 
 const SCRAPS_INTRO_KEY = 'meal-rescue/scraps-intro-seen';
+const COMPASS_KEY = 'meal-rescue/compass-seen';
 
 function HomeStack({
   initialRouteName = 'HomeMain',
@@ -140,6 +142,10 @@ export function AppNavigator() {
   const hydrated = useAuthStore((state) => state.hydrated);
   const [introSeen, setIntroSeen] = useState<boolean | null>(null);
   const [initialHome, setInitialHome] = useState<'HomeMain' | 'Capture'>('HomeMain');
+  // Brand-new users are walked through the Culinary Compass right after the
+  // Scraps intro; returning users who already passed onboarding never get it.
+  const [justOnboarded, setJustOnboarded] = useState(false);
+  const [compassDone, setCompassDone] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -155,6 +161,16 @@ export function AppNavigator() {
     AsyncStorage.setItem(SCRAPS_INTRO_KEY, 'true');
     setInitialHome(destination === 'capture' ? 'Capture' : 'HomeMain');
     setIntroSeen(true);
+    setJustOnboarded(true);
+  }
+
+  function finishCompass(skipped: boolean) {
+    AsyncStorage.setItem(COMPASS_KEY, 'true');
+    setCompassDone(true);
+    if (skipped) {
+      setInitialHome('HomeMain');
+      setIntroSeen(true);
+    }
   }
 
   if (!hydrated || (token && introSeen === null)) {
@@ -164,7 +180,11 @@ export function AppNavigator() {
   return (
     <NavigationContainer>
       {token ? (
-        introSeen ? (
+        !introSeen ? (
+          <ScrapsIntroScreen onFinish={finishIntro} />
+        ) : justOnboarded && !compassDone ? (
+          <CulinaryCompassScreen onComplete={finishCompass} />
+        ) : (
           <RootStack.Navigator screenOptions={{ headerShown: false }}>
             <RootStack.Screen name="Tabs">
               {() => <AuthenticatedTabs initialHome={initialHome} />}
@@ -176,8 +196,6 @@ export function AppNavigator() {
             />
             <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
           </RootStack.Navigator>
-        ) : (
-          <ScrapsIntroScreen onFinish={finishIntro} />
         )
       ) : (
         <LoginScreen />

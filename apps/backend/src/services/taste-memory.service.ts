@@ -212,23 +212,44 @@ export class TasteMemoryService {
   }
 
   async getJournal(userId: string): Promise<TasteJournalEntry[]> {
-    const memory = await this.getTasteProfile(userId);
-    if (memory.length === 0) return [];
-    return memory.slice(0, 20).map((m) => ({
-      id: randomUUID(),
-      createdAt: m.lastUpdated,
-      text:
-        m.affinity >= 0.2
-          ? `You lean toward ${m.ingredient}${
-              m.contextType === 'cuisine' ? ` in ${m.contextValue} dishes` : ''
-            }.`
-          : m.affinity <= -0.2
-            ? `You steer clear of ${m.ingredient}${
+    const profile = await this.getTasteProfile(userId);
+    const entries: TasteJournalEntry[] = [];
+    const tradition = await this.getTraditionVsModern(userId);
+    if (tradition !== 0) {
+      entries.push({
+        id: randomUUID(),
+        createdAt: new Date().toISOString(),
+        text:
+          tradition >= 0
+            ? `You've been enjoying modern twists lately.`
+            : `You tend to reach for pure, traditional plates.`,
+        kind: 'culture',
+      });
+    }
+    const ingredients = profile.filter(
+      (m) =>
+        m.contextType === 'cuisine' ||
+        m.contextType === 'meal_time' ||
+        m.contextType === 'meal_pattern',
+    );
+    for (const m of ingredients.slice(0, 20)) {
+      entries.push({
+        id: randomUUID(),
+        createdAt: m.lastUpdated,
+        text:
+          m.affinity >= 0.2
+            ? `You lean toward ${m.ingredient}${
                 m.contextType === 'cuisine' ? ` in ${m.contextValue} dishes` : ''
               }.`
-            : `Still deciding on ${m.ingredient}.`,
-      kind: 'learned',
-    }));
+            : m.affinity <= -0.2
+              ? `You steer clear of ${m.ingredient}${
+                  m.contextType === 'cuisine' ? ` in ${m.contextValue} dishes` : ''
+                }.`
+              : `Still deciding on ${m.ingredient}.`,
+        kind: 'learned',
+      });
+    }
+    return entries;
   }
 
   async buildPersonality(userId: string): Promise<FoodPersonality | null> {
