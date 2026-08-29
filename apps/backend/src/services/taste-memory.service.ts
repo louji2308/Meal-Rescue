@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  CulinaryCompassSeed,
+  CulinaryFamily,
   DetectedFood,
   FoodPersonality,
   FoodPersonalityTrait,
@@ -10,6 +12,11 @@ import type {
 } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
+import {
+  CULINARY_FAMILIES,
+  detectCuisineIntent,
+  matchAmbiguousFamily,
+} from './ai/culinary-families';
 
 /**
  * TasteMemoryService - per-context taste learning.
@@ -291,16 +298,106 @@ export class TasteMemoryService {
   ): Promise<{ favoriteFoods?: string[]; avoidedFoods?: string[] }> {
     const profile = await this.getTasteProfile(userId);
     if (profile.length === 0) return {};
-    const favorites = profile
+    // Culture dimensions are not individual ingredients - they steer candidate
+    // generation separately, so exclude them from the ingredient snapshot.
+    const ingredients = profile.filter(
+      (m) => m.contextType !== 'cuisine_family' && m.contextType !== 'tradition_vs_modern',
+    );
+    const favorites = ingredients
       .filter((m) => m.affinity >= 0.5 && m.confidence >= 0.5)
       .map((m) => m.ingredient);
-    const avoided = profile
+    const avoided = ingredients
       .filter((m) => m.affinity <= -0.5 && m.confidence >= 0.5)
       .map((m) => m.ingredient);
     return {
       favoriteFoods: favorites.length ? [...new Set(favorites)] : undefined,
       avoidedFoods: avoided.length ? [...new Set(avoided)] : undefined,
     };
+  }
+
+  async seedCompass(userId: string, seed: CulinaryCompassSeed): Promise<void> {
+    if (seed.family !== 'none') {
+      await this.applySignal({
+        userId,
+        ingredient: seed.family,
+        contextType: 'cuisine_family',
+        contextValue: seed.family,
+        affinityDelta: 0.8,
+        confidenceDelta: 0.5,
+        source: 'profile',
+      });
+    }
+    await this.applySignal({
+      userId,
+      ingredient: 'tradition',
+      contextType: 'tradition_vs_modern',
+      contextValue: 'overall',
+      affinityDelta: seed.traditionVsModern,
+      confidenceDelta: 0.5,
+      source: 'profile',
+    });
+  }
+
+  async getCuisineAffinities(userId: string): Promise<Map<CulinaryFamily, number>> {
+    const profile = await this.getTasteProfile(userId);
+    const cuisines = profile.filter((m) => m.contextType === 'cuisine_family');
+    const map = new Map<CulinaryFamily, number>();
+    for (const c of cuisines) {
+      if (isCulinaryFamily(c.contextValue)) {
+        // Blend affinity with confidence: low-confidence priors count less.
+        map.set(c.contextValue, c.affinity * Math.min(1, c.confidence));
+      }
+    }
+    return map;
+  }
+
+  async getTraditionVsModern(userId: string): Promise<number> {
+    const profile = await this.getTasteProfile(userId);
+    const row = profile.find((m) => m.contextType === 'tradition_vs_modern');
+    return row ? row.affinity : 0;
+  }
+
+  async recordCultureContext(
+    userId: string,
+    rescue: { selectedRecommendation: Record<string, unknown> },
+    decision: string,
+  ): Promise<void> {
+    const candidate = (rescue.selectedRecommendation.candidate as
+      | {
+          additions?: Array<{ name: string }>;
+          substitutions?: Array<{ replacement: { name: string } }>;
+        }
+      | undefined) ?? { additions: [], substitutions: [] };
+    const foodNames = [
+      ...(candidate.additions ?? []).map((a) => a.name),
+      ...(candidate.substitutions ?? []).map((s) => s.replacement.name),
+    ];
+    const intent = detectCuisineIntent(foodNames);
+    if (intent !== 'none') {
+      await this.applySignal({
+        userId,
+        ingredient: intent,
+        contextType: 'cuisine_family',
+        contextValue: intent,
+        affinityDelta: decision === 'accepted' || decision === 'swapped' ? 0.3 : -0.25,
+        confidenceDelta: 0.12,
+        source: decision === 'swapped' ? 'swap' : decision === 'accepted' ? 'accept' : 'reject',
+      });
+      return;
+    }
+    const affinities = await this.getCuisineAffinities(userId);
+    const family = matchAmbiguousFamily(foodNames, affinities);
+    if (family !== 'none') {
+      await this.applySignal({
+        userId,
+        ingredient: family,
+        contextType: 'cuisine_family',
+        contextValue: family,
+        affinityDelta: decision === 'accepted' || decision === 'swapped' ? 0.2 : -0.15,
+        confidenceDelta: 0.08,
+        source: decision === 'swapped' ? 'swap' : decision === 'accepted' ? 'accept' : 'reject',
+      });
+    }
   }
 
   async findResonanceMemory(
@@ -333,6 +430,12 @@ export class TasteMemoryService {
 
 function clamp01(n: number): number {
   return Math.max(-1, Math.min(1, n));
+}
+
+const CULINARY_FAMILY_SET = new Set<string>(CULINARY_FAMILIES.map((f) => f.family));
+
+function isCulinaryFamily(value: string): value is CulinaryFamily {
+  return CULINARY_FAMILY_SET.has(value);
 }
 
 function avgAffinity(rows: TasteMemoryEntry[]): number {
