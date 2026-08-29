@@ -1,0 +1,340 @@
+import { randomUUID } from 'node:crypto';
+
+import type {
+  DetectedFood,
+  FoodPersonality,
+  FoodPersonalityTrait,
+  MemoryReason,
+  TasteJournalEntry,
+  TasteMemoryEntry,
+} from '@meal-rescue/shared-types';
+
+import type { Db } from '../database/models';
+
+/**
+ * TasteMemoryService - per-context taste learning.
+ *
+ * "I don't like spice" does NOT mean "I reject all spice." Every signal is
+ * recorded against the context that produced it (cuisine, meal time, or
+ * intervention pattern). A user can love spice in tacos and avoid it in
+ * curries simultaneously - two rows, no contradiction.
+ *
+ * Also derives the Food Personality and writes Taste Journal entries.
+ */
+export class TasteMemoryService {
+  private readonly models: Db['models'];
+
+  constructor(models: Db['models']) {
+    this.models = models;
+  }
+
+  private fundingCuisine(detectedFoods: DetectedFood[] | undefined): string | null {
+    if (!detectedFoods || detectedFoods.length === 0) return null;
+    const names = detectedFoods.map((f) => f.name.toLowerCase()).join(' ');
+    if (/noodle|ramen|rice|stir-fry|curry|soy/.test(names)) return 'asian';
+    if (/taco|burrito|quesadilla|salsa|tortilla/.test(names)) return 'mexican';
+    if (/burger|sandwich|toast|fries|cheese/.test(names)) return 'american';
+    if (/falafel|hummus|pita|kebab|olive/.test(names)) return 'mediterranean';
+    if (/dal|roti|paratha|khichdi|poha/.test(names)) return 'indian';
+    return null;
+  }
+
+  private mealtimeContext(hour = new Date().getHours()): {
+    contextType: string;
+    contextValue: string;
+  } {
+    if (hour >= 5 && hour < 11) return { contextType: 'meal_time', contextValue: 'morning' };
+    if (hour >= 11 && hour < 15) return { contextType: 'meal_time', contextValue: 'lunch' };
+    if (hour >= 15 && hour < 21) return { contextType: 'meal_time', contextValue: 'dinner' };
+    return { contextType: 'meal_time', contextValue: 'late_night' };
+  }
+
+  async recordFeedback(
+    userId: string,
+    rescue: {
+      selectedRecommendation: Record<string, unknown>;
+      userDecision: string;
+      constraints?: Record<string, unknown>;
+      detectedFoods?: DetectedFood[];
+    },
+    satisfaction: string,
+  ): Promise<TasteJournalEntry[]> {
+    const entries: TasteJournalEntry[] = [];
+    const candidate = (rescue.selectedRecommendation.candidate as
+      | {
+          additions?: Array<{ name: string }>;
+          substitutions?: Array<{ replacement: { name: string } }>;
+        }
+      | undefined) ?? { additions: [], substitutions: [] };
+
+    const ingredients = [
+      ...(candidate.additions ?? []).map((a) => a.name.toLowerCase()),
+      ...(candidate.substitutions ?? []).map((s) => s.replacement.name.toLowerCase()),
+    ];
+
+    const cuisine = this.fundingCuisine(rescue.detectedFoods);
+    const mealTime = this.mealtimeContext();
+    const context = cuisine
+      ? { contextType: 'cuisine', contextValue: cuisine }
+      : { contextType: mealTime.contextType, contextValue: mealTime.contextValue };
+
+    const delta = satisfaction === 'better' ? 0.35 : satisfaction === 'not_for_me' ? -0.4 : 0;
+
+    for (const ingredient of ingredients) {
+      const entry = await this.applySignal({
+        userId,
+        ingredient,
+        contextType: context.contextType,
+        contextValue: context.contextValue,
+        affinityDelta: delta,
+        confidenceDelta: 0.2,
+        source: 'feedback',
+      });
+      if (entry) entries.push(this.describeLearn(userId, ingredient, entry, satisfaction));
+    }
+    return entries;
+  }
+
+  async recordDecision(
+    userId: string,
+    decision: string,
+    rescue: {
+      selectedRecommendation: Record<string, unknown>;
+      detectedFoods?: DetectedFood[];
+    },
+  ): Promise<void> {
+    const candidate = (rescue.selectedRecommendation.candidate as
+      | {
+          additions?: Array<{ name: string }>;
+          substitutions?: Array<{ replacement: { name: string } }>;
+        }
+      | undefined) ?? { additions: [], substitutions: [] };
+    const ingredients = [
+      ...(candidate.additions ?? []).map((a) => a.name.toLowerCase()),
+      ...(candidate.substitutions ?? []).map((s) => s.replacement.name.toLowerCase()),
+    ];
+    const cuisine = this.fundingCuisine(rescue.detectedFoods);
+    const mealTime = this.mealtimeContext();
+    const context = cuisine
+      ? { contextType: 'cuisine', contextValue: cuisine }
+      : { contextType: mealTime.contextType, contextValue: mealTime.contextValue };
+
+    const delta =
+      decision === 'accepted' || decision === 'swapped' ? 0.3 : decision === 'rejected' ? -0.35 : 0;
+    const source = decision === 'swapped' ? 'swap' : decision === 'accepted' ? 'accept' : 'reject';
+
+    for (const ingredient of ingredients) {
+      await this.applySignal({
+        userId,
+        ingredient,
+        contextType: context.contextType,
+        contextValue: context.contextValue,
+        affinityDelta: delta,
+        confidenceDelta: 0.12,
+        source,
+      });
+    }
+  }
+
+  private async applySignal(args: {
+    userId: string;
+    ingredient: string;
+    contextType: string;
+    contextValue: string;
+    affinityDelta: number;
+    confidenceDelta: number;
+    source: string;
+  }): Promise<TasteMemoryEntry | null> {
+    const where = {
+      userId: args.userId,
+      ingredient: args.ingredient,
+      contextType: args.contextType,
+      contextValue: args.contextValue,
+    };
+    const existing = await this.models.TasteMemory.findOne({ where });
+
+    if (existing) {
+      const affinity = clamp01(Number(existing.get().affinity) + args.affinityDelta);
+      const confidence = Math.min(1, Number(existing.get().confidence) + args.confidenceDelta);
+      existing.get().affinity = affinity;
+      existing.get().confidence = confidence;
+      existing.get().observationCount += 1;
+      existing.get().source = args.source;
+      existing.get().lastUpdated = new Date();
+      await existing.save();
+      return existing.get() as unknown as TasteMemoryEntry;
+    }
+
+    const created = await this.models.TasteMemory.create({
+      id: randomUUID(),
+      userId: args.userId,
+      ingredient: args.ingredient,
+      contextType: args.contextType,
+      contextValue: args.contextValue,
+      affinity: Math.max(-0.5, Math.min(0.5, args.affinityDelta)),
+      confidence: Math.min(0.5 + args.confidenceDelta, 1),
+      observationCount: 1,
+      source: args.source,
+      lastUpdated: new Date(),
+    });
+    return created as unknown as TasteMemoryEntry;
+  }
+
+  private describeLearn(
+    userId: string,
+    ingredient: string,
+    entry: TasteMemoryEntry,
+    satisfaction: string,
+  ): TasteJournalEntry {
+    const context = entry.contextType === 'cuisine' ? ` in ${entry.contextValue} dishes` : '';
+    const tone =
+      satisfaction === 'better'
+        ? `Noted: you enjoyed ${ingredient}${context}.`
+        : satisfaction === 'not_for_me'
+          ? `Noted: you steered away from ${ingredient}${context}.`
+          : `Noted: you were neutral on ${ingredient}${context}.`;
+    return { id: randomUUID(), createdAt: new Date().toISOString(), text: tone, kind: 'learned' };
+  }
+
+  async getTasteProfile(userId: string): Promise<TasteMemoryEntry[]> {
+    const rows = await this.models.TasteMemory.findAll({
+      where: { userId },
+      order: [['confidence', 'DESC']],
+    });
+    return rows.map((row) => row.get() as unknown as TasteMemoryEntry);
+  }
+
+  async getJournal(userId: string): Promise<TasteJournalEntry[]> {
+    const memory = await this.getTasteProfile(userId);
+    if (memory.length === 0) return [];
+    return memory.slice(0, 20).map((m) => ({
+      id: randomUUID(),
+      createdAt: m.lastUpdated,
+      text:
+        m.affinity >= 0.2
+          ? `You lean toward ${m.ingredient}${
+              m.contextType === 'cuisine' ? ` in ${m.contextValue} dishes` : ''
+            }.`
+          : m.affinity <= -0.2
+            ? `You steer clear of ${m.ingredient}${
+                m.contextType === 'cuisine' ? ` in ${m.contextValue} dishes` : ''
+              }.`
+            : `Still deciding on ${m.ingredient}.`,
+      kind: 'learned',
+    }));
+  }
+
+  async buildPersonality(userId: string): Promise<FoodPersonality | null> {
+    const profile = await this.getTasteProfile(userId);
+    if (profile.length === 0) return null;
+
+    const traits: FoodPersonalityTrait[] = [];
+    const spiceRange = profile.filter((m) => /spice|chili|hot|pepper/i.test(m.ingredient));
+    const creamRange = profile.filter((m) =>
+      /cream|yogurt|cheese|butter|avocado/i.test(m.ingredient),
+    );
+    const freshRange = profile.filter((m) =>
+      /herb|cilantro|spinach|tomato|cucumber|salad/i.test(m.ingredient),
+    );
+    const variety = new Set(profile.map((m) => m.ingredient)).size;
+
+    if (spiceRange.length >= 2 && avgAffinity(spiceRange) >= 0.4) {
+      traits.push({
+        id: 'spice',
+        label: 'Spice Adventurer',
+        description: 'You love heat when it fits the meal.',
+        strength: avgAffinity(spiceRange),
+      });
+    } else if (spiceRange.length >= 1 && avgAffinity(spiceRange) <= -0.4) {
+      traits.push({
+        id: 'mild',
+        label: 'Mild & Steady',
+        description: 'You prefer gentler flavor, in the right context.',
+        strength: Math.abs(avgAffinity(spiceRange)),
+      });
+    }
+    if (creamRange.length >= 2 && avgAffinity(creamRange) >= 0.4) {
+      traits.push({
+        id: 'cream',
+        label: 'Comfort Seeker',
+        description: 'Rich, creamy textures land well for you.',
+        strength: avgAffinity(creamRange),
+      });
+    }
+    if (freshRange.length >= 2) {
+      traits.push({
+        id: 'fresh',
+        label: 'Fresh Palate',
+        description: 'Bright, fresh produce tends to win you over.',
+        strength: Math.min(1, 0.4 + 0.1 * freshRange.length),
+      });
+    }
+    if (variety >= 8) {
+      traits.push({
+        id: 'curious',
+        label: 'Curious Taster',
+        description: 'You keep trying new things - we love that.',
+        strength: Math.min(1, 0.3 + 0.05 * variety),
+      });
+    }
+
+    if (traits.length === 0) return null;
+    const top = traits[0]!.label;
+    return {
+      traits,
+      bio: `You lean ${top} — and we remember the details.`,
+    } satisfies FoodPersonality;
+  }
+
+  async buildPreferenceSnapshot(
+    userId: string,
+  ): Promise<{ favoriteFoods?: string[]; avoidedFoods?: string[] }> {
+    const profile = await this.getTasteProfile(userId);
+    if (profile.length === 0) return {};
+    const favorites = profile
+      .filter((m) => m.affinity >= 0.5 && m.confidence >= 0.5)
+      .map((m) => m.ingredient);
+    const avoided = profile
+      .filter((m) => m.affinity <= -0.5 && m.confidence >= 0.5)
+      .map((m) => m.ingredient);
+    return {
+      favoriteFoods: favorites.length ? [...new Set(favorites)] : undefined,
+      avoidedFoods: avoided.length ? [...new Set(avoided)] : undefined,
+    };
+  }
+
+  async findResonanceMemory(
+    userId: string,
+    candidates: Array<{
+      additions: Array<{ name: string }>;
+      substitutions: Array<{ replacement: { name: string } }>;
+    }>,
+  ): Promise<MemoryReason | undefined> {
+    const profile = await this.getTasteProfile(userId);
+    if (profile.length === 0) return undefined;
+    const names = new Set(
+      candidates.flatMap((c) => [
+        ...c.additions.map((a) => a.name.toLowerCase()),
+        ...c.substitutions.map((s) => s.replacement.name.toLowerCase()),
+      ]),
+    );
+    const resonance = profile.find(
+      (m) => names.has(m.ingredient) && m.confidence >= 0.6 && Math.abs(m.affinity) >= 0.3,
+    );
+    if (!resonance) return undefined;
+    return {
+      ingredient: resonance.ingredient,
+      contextValue: resonance.contextValue,
+      affinity: resonance.affinity,
+      confidence: resonance.confidence,
+    };
+  }
+}
+
+function clamp01(n: number): number {
+  return Math.max(-1, Math.min(1, n));
+}
+
+function avgAffinity(rows: TasteMemoryEntry[]): number {
+  return rows.reduce((sum, r) => sum + r.affinity, 0) / rows.length;
+}

@@ -30,6 +30,7 @@ import type { LlmClient } from './ai/llm-client';
 import { CandidateGeneratorService } from './candidate-generator.service';
 import { ConstraintEngineService } from './constraint-engine.service';
 import { RankingEngineService } from './ranking-engine.service';
+import { TasteMemoryService } from './taste-memory.service';
 import { ValidationService } from './validation.service';
 
 const MAX_ALTERNATIVES = 2; // 1 recommendation + 2 alternatives = 3 choices
@@ -46,15 +47,18 @@ export class RescuePipelineService {
   private readonly constraintEngine: ConstraintEngineService;
   private readonly rankingEngine: RankingEngineService;
   private readonly validation: ValidationService;
+  private readonly tasteMemory: TasteMemoryService | null;
 
   constructor(
     llm: LlmClient,
     private readonly pantryProvider: PantryProvider | null,
+    tasteMemory?: TasteMemoryService,
   ) {
     this.generator = new CandidateGeneratorService();
     this.constraintEngine = new ConstraintEngineService();
     this.rankingEngine = new RankingEngineService(llm);
     this.validation = new ValidationService();
+    this.tasteMemory = tasteMemory ?? null;
   }
 
   async generateRescue(
@@ -108,11 +112,16 @@ export class RescuePipelineService {
     }
 
     // 3. Ranking + explanations (LLM, deterministic fallback inside)
+    const resonanceMemory = this.tasteMemory
+      ? await this.tasteMemory.findResonanceMemory(userId, feasible)
+      : undefined;
+
     const ranked = await this.rankingEngine.rankAndExplain(
       feasible,
       { detectedFoods, detectedComponents },
       constraints,
       preferences,
+      resonanceMemory,
     );
 
     // 4. Safety validation - drop anything invalid, keep going
@@ -172,11 +181,10 @@ export class RescuePipelineService {
   }
 
   private async loadPreferences(
-    _userId: string,
+    userId: string,
   ): Promise<{ favoriteFoods?: string[]; avoidedFoods?: string[] }> {
-    // Preference model lands with feedback learning (Phase 4). Empty
-    // snapshot keeps the pipeline honest without inventing behavior.
-    return {};
+    if (!this.tasteMemory) return {};
+    return this.tasteMemory.buildPreferenceSnapshot(userId);
   }
 }
 

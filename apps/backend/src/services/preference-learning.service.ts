@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { PersonalizationInsight, PreferenceLearned, UUID } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
+import { TasteMemoryService } from './taste-memory.service';
 
 /**
  * PreferenceLearningService - updates user preferences from feedback.
@@ -24,7 +25,10 @@ export class PreferenceLearningService {
 
   constructor(models: Db['models']) {
     this.models = models;
+    this.tasteMemory = new TasteMemoryService(models);
   }
+
+  private readonly tasteMemory: TasteMemoryService;
 
   async processFeedback(
     userId: UUID,
@@ -37,6 +41,8 @@ export class PreferenceLearningService {
     _feedbackText?: string | null,
   ): Promise<PersonalizationInsight[]> {
     const insights: PersonalizationInsight[] = [];
+
+    await this.tasteMemory.recordFeedback(userId, rescue, satisfaction);
 
     const recommendation = rescue.selectedRecommendation as Record<string, unknown>;
     const candidate = recommendation.candidate as Record<string, unknown> | undefined;

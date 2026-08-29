@@ -7,7 +7,12 @@
  * scores, and provider failure falls back to the deterministic client -
  * so the endpoint degrades, never breaks.
  */
-import type { Constraints, RankedRecommendation, RescueCandidate } from '@meal-rescue/shared-types';
+import type {
+  Constraints,
+  MemoryReason,
+  RankedRecommendation,
+  RescueCandidate,
+} from '@meal-rescue/shared-types';
 
 import { env } from '../config/env';
 import { HeuristicLlmClient } from './ai/heuristic-llm-client';
@@ -31,6 +36,7 @@ export class RankingEngineService {
     meal: RankingMealContext,
     constraints: Constraints,
     preferences: UserPreferenceSnapshot,
+    resonanceMemory?: MemoryReason,
   ): Promise<RankedRecommendation[]> {
     if (candidates.length === 0) return [];
 
@@ -79,7 +85,17 @@ export class RankingEngineService {
       result = fallback.data;
     }
 
-    return this.join(candidates, result);
+    const joined = this.join(candidates, result);
+
+    if (resonanceMemory && joined.length > 0) {
+      joined[0] = { ...joined[0]!, resonanceMemory };
+      joined[0].candidate.preferenceAlignment = Math.max(
+        joined[0].candidate.preferenceAlignment,
+        resonanceMemory.confidence * 0.6,
+      );
+    }
+
+    return joined;
   }
 
   /**

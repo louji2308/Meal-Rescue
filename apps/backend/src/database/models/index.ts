@@ -7,6 +7,7 @@ import { Pantry, definePantryModel } from './pantry.model';
 import { Preference, definePreferenceModel } from './preference.model';
 import { RescueCreditGrant, defineRescueCreditGrantModel } from './rescue-credit-grant.model';
 import { Rescue, defineRescueModel } from './rescue.model';
+import { TasteMemory, defineTasteMemoryModel } from './taste-memory.model';
 import { User, defineUserModel } from './user.model';
 
 export interface DbModels {
@@ -18,6 +19,7 @@ export interface DbModels {
   Pantry: typeof Pantry;
   RescueCreditGrant: typeof RescueCreditGrant;
   NotificationLog: typeof NotificationLog;
+  TasteMemory: typeof TasteMemory;
 }
 
 export interface Db {
@@ -39,6 +41,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     Pantry: definePantryModel(sequelize),
     RescueCreditGrant: defineRescueCreditGrantModel(sequelize),
     NotificationLog: defineNotificationLogModel(sequelize),
+    TasteMemory: defineTasteMemoryModel(sequelize),
   };
 
   // --- Associations (implementation plan Step 1.2) ---
@@ -80,6 +83,13 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
+  models.User.hasMany(models.TasteMemory, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.TasteMemory.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
   return models;
 }
 
@@ -92,4 +102,5 @@ export const dbModels = {
   Pantry,
   RescueCreditGrant,
   NotificationLog,
+  TasteMemory,
 };

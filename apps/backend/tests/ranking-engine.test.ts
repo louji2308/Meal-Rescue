@@ -154,4 +154,35 @@ describe('ranking engine', () => {
         .overallScore,
     ).toBe(0.5);
   });
+
+  it('stamps the supplied resonance memory onto the top recommendation', async () => {
+    const llm = stubClient(() => ({
+      rankedCandidates: [
+        {
+          candidateId: egg.id,
+          overallScore: 0.9,
+          reasoning: 'covers gaps',
+          explanation: 'Add an egg.',
+        },
+        { candidateId: spinach.id, overallScore: 0.7, reasoning: '', explanation: 'Add spinach.' },
+      ],
+      rankingConfidence: 0.8,
+    }));
+    const engine = new RankingEngineService(llm);
+    const memory = {
+      ingredient: 'egg',
+      contextValue: 'breakfast',
+      affinity: 0.9,
+      confidence: 0.95,
+    };
+    const ranked = await engine.rankAndExplain(
+      candidates,
+      { detectedFoods: [], detectedComponents: {} },
+      {},
+      {},
+      memory,
+    );
+    expect(ranked[0]!.resonanceMemory?.ingredient).toBe('egg');
+    expect(ranked[1]!.resonanceMemory).toBeUndefined();
+  });
 });

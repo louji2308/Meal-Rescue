@@ -14,6 +14,7 @@ import { Pantry } from '../database/models/pantry.model';
 import { Preference } from '../database/models/preference.model';
 import { RescueCreditGrant } from '../database/models/rescue-credit-grant.model';
 import { Rescue } from '../database/models/rescue.model';
+import { TasteMemory } from '../database/models/taste-memory.model';
 import { User } from '../database/models/user.model';
 import { createLlmClient } from './ai/llm-factory';
 import { FeedbackService } from './feedback.service';
@@ -23,6 +24,7 @@ import { MealAnalyzerService } from './meal-analyzer.service';
 import { PantryService } from './pantry.service';
 import { PreferenceLearningService } from './preference-learning.service';
 import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.service';
+import { TasteMemoryService } from './taste-memory.service';
 
 const pantryProvider: PantryProvider = {
   async getPantryItemNames(userId: string): Promise<string[]> {
@@ -50,6 +52,7 @@ const models = {
   User,
   RescueCreditGrant,
   NotificationLog,
+  TasteMemory,
 };
 
 export function buildServices(redis: Redis | null): {
@@ -57,16 +60,19 @@ export function buildServices(redis: Redis | null): {
   rescuePipeline: RescuePipelineService;
   feedback: FeedbackService;
   preferenceLearning: PreferenceLearningService;
+  tasteMemory: TasteMemoryService;
   pantry: PantryService;
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
 } {
   const llm = createLlmClient();
+  const tasteMemory = new TasteMemoryService(models);
   return {
     mealAnalyzer: new MealAnalyzerService(llm, redis),
-    rescuePipeline: new RescuePipelineService(llm, pantryProvider),
+    rescuePipeline: new RescuePipelineService(llm, pantryProvider, tasteMemory),
     feedback: new FeedbackService(models),
     preferenceLearning: new PreferenceLearningService(models),
+    tasteMemory,
     pantry: new PantryService(models),
     fridgeNegotiator: new FridgeNegotiatorService(),
     leftoverAlchemist: new LeftoverAlchemistService(),

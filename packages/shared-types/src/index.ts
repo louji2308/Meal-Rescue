@@ -119,6 +119,8 @@ export interface RankedRecommendation {
   rankScore: number;
   reasoning: string;
   naturalLanguageExplanation: string;
+  /** Memory the ranker surfaced; rendered by the "why this?" deep-dive. */
+  resonanceMemory?: MemoryReason;
 }
 
 export type UserDecision = 'accepted' | 'swapped' | 'rejected' | 'kept_as_is';
@@ -234,6 +236,81 @@ export interface PantryUpsertRequest {
 export interface PantryDeleteResponse {
   success: true;
   deletedId: UUID;
+}
+
+// ---------------------------------------------------------------------------
+// Taste Memory Bank (personalization) - per-context learned taste
+// ---------------------------------------------------------------------------
+
+export type TasteContextType =
+  'cuisine' | 'meal_time' | 'meal_pattern' | 'cuisine_family' | 'tradition_vs_modern' | 'global';
+
+export type MemorySource = 'feedback' | 'accept' | 'swap' | 'reject' | 'profile';
+
+export interface TasteMemoryEntry {
+  ingredient: string;
+  contextType: TasteContextType;
+  contextValue: string;
+  /** -1.0 avoid .. +1.0 love. Context-scoped, never a blanket per-ingredient score. */
+  affinity: Confidence;
+  confidence: Confidence;
+  observationCount: number;
+  source: MemorySource;
+  lastUpdated: ISO8601;
+}
+
+export type CulinaryFamily =
+  | 'indian'
+  | 'east_asian'
+  | 'mediterranean'
+  | 'mexican'
+  | 'american'
+  | 'middle_eastern'
+  | 'italian'
+  | 'none';
+
+export interface CulinaryCompassSeed {
+  family: CulinaryFamily;
+  /** -1.0 pure & traditional .. +1.0 loves modern fusion twists. */
+  traditionVsModern: Confidence;
+}
+
+export interface FoodPersonalityTrait {
+  id: string;
+  label: string;
+  description: string;
+  /** 0.0 .. 1.0 - how strongly this trait defines the user. */
+  strength: Confidence;
+}
+
+export interface FoodPersonality {
+  traits: FoodPersonalityTrait[];
+  bio: string;
+}
+
+export type TasteJournalKind =
+  'learned' | 'personality_shift' | 'milestone' | 'corrected' | 'culture';
+
+export interface TasteJournalEntry {
+  id: UUID;
+  createdAt: ISO8601;
+  text: string;
+  kind: TasteJournalKind;
+}
+
+export interface TasteJournalResponse {
+  entries: TasteJournalEntry[];
+  personality: FoodPersonality | null;
+}
+
+/** One memory behind a "why this?" deep-dive on a recommendation. */
+export interface MemoryReason {
+  ingredient: string;
+  contextValue: string;
+  affinity: Confidence;
+  confidence: Confidence;
+  /** When present, explains a cultural/context reason rather than a single ingredient. */
+  kind?: 'ingredient' | 'cuisine_family' | 'tradition';
 }
 
 // ---------------------------------------------------------------------------
