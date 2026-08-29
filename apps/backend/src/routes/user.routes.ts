@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 
 import { ErrorCategory, type PersonalizationInsight } from '@meal-rescue/shared-types';
 
@@ -110,5 +111,50 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       tasteMemory.getJournal(userId),
     ]);
     return reply.send({ memories, personality, journal });
+  });
+
+  app.get('/taste/culture', async (request, reply) => {
+    const { tasteMemory } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const affinities = await tasteMemory.getCuisineAffinities(userId);
+    const traditionVsModern = await tasteMemory.getTraditionVsModern(userId);
+    return reply.send({
+      affinities: Object.fromEntries(affinities),
+      traditionVsModern,
+      seeded: affinities.size > 0,
+    });
+  });
+
+  app.post('/taste/compass', async (request, reply) => {
+    const { tasteMemory } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const parsed = z
+      .object({
+        family: z.enum([
+          'indian',
+          'east_asian',
+          'mediterranean',
+          'mexican',
+          'american',
+          'middle_eastern',
+          'italian',
+          'none',
+        ]),
+        traditionVsModern: z.number().min(-1).max(1).default(0),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'INVALID_COMPASS_INPUT',
+        message: 'Body must be { family, traditionVsModern? }',
+        statusCode: 400,
+      });
+    }
+    await tasteMemory.seedCompass(userId, {
+      family: parsed.data.family,
+      traditionVsModern: parsed.data.traditionVsModern,
+    });
+    return reply.send({ ok: true });
   });
 }
