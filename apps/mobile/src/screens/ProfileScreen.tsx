@@ -178,6 +178,21 @@ export function ProfileScreen() {
               <Text style={styles.settingSub}>Version {APK_VERSION}</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Open taste journal"
+            onPress={() => navigation.navigate('TasteJournal')}
+            style={styles.settingRow}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="book-outline" size={22} color={colors.text} />
+            <View style={styles.settingLabel}>
+              <Text style={styles.settingTitle}>Taste Journal</Text>
+              <Text style={styles.settingSub}>What Meal Rescue remembers about you</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         <ErrorBanner error={error} />

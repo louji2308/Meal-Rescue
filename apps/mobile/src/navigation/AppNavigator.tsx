@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
 
@@ -18,6 +20,8 @@ import { PaywallScreen } from '../screens/PaywallScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
+import { ScrapsIntroScreen } from '../screens/ScrapsIntroScreen';
+import { TasteJournalScreen } from '../screens/TasteJournalScreen';
 import { useAuthStore } from '../stores/auth.store';
 import { useMonetization } from '../stores/monetization.store';
 import { colors } from '../theme';
@@ -45,11 +49,18 @@ const RootStack = createNativeStackNavigator<RootStackParamList>();
 export type RootStackParamList = {
   Tabs: undefined;
   Paywall: undefined;
+  TasteJournal: undefined;
 };
 
-function HomeStack() {
+const SCRAPS_INTRO_KEY = 'meal-rescue/scraps-intro-seen';
+
+function HomeStack({
+  initialRouteName = 'HomeMain',
+}: {
+  initialRouteName?: 'HomeMain' | 'Capture';
+}) {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen name="Capture" component={CaptureScreen} />
       <Stack.Screen name="Review" component={ReviewScreen} />
@@ -70,12 +81,16 @@ const TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> 
 /**
  * 5 tabs for Phase 5: Rescue (core loop), Fridge Negotiator, Leftover Alchemist, Pantry, Profile
  */
-function AuthenticatedTabs() {
+function AuthenticatedTabs({ initialHome = 'HomeMain' }: { initialHome?: 'HomeMain' | 'Capture' }) {
   const isPro = useMonetization((state) => state.isPro);
   const refreshTier = useMonetization((state) => state.refresh);
 
   useEffect(() => {
     void refreshTier();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshTier();
+    });
+    return () => sub.remove();
   }, [refreshTier]);
 
   return (
@@ -101,7 +116,9 @@ function AuthenticatedTabs() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={HomeStack} options={{ title: 'Rescue' }} />
+      <Tab.Screen name="Home" options={{ title: 'Rescue' }}>
+        {() => <HomeStack initialRouteName={initialHome} />}
+      </Tab.Screen>
       <Tab.Screen
         name="FridgeNegotiator"
         component={FridgeNegotiatorScreen}
@@ -121,22 +138,47 @@ function AuthenticatedTabs() {
 export function AppNavigator() {
   const token = useAuthStore((state) => state.token);
   const hydrated = useAuthStore((state) => state.hydrated);
+  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+  const [initialHome, setInitialHome] = useState<'HomeMain' | 'Capture'>('HomeMain');
 
-  if (!hydrated) {
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(SCRAPS_INTRO_KEY).then((value) => {
+      if (mounted) setIntroSeen(value === 'true');
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  function finishIntro(destination: 'home' | 'capture') {
+    AsyncStorage.setItem(SCRAPS_INTRO_KEY, 'true');
+    setInitialHome(destination === 'capture' ? 'Capture' : 'HomeMain');
+    setIntroSeen(true);
+  }
+
+  if (!hydrated || (token && introSeen === null)) {
     return null;
   }
 
   return (
     <NavigationContainer>
       {token ? (
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen name="Tabs" component={AuthenticatedTabs} />
-          <RootStack.Screen
-            name="Paywall"
-            component={PaywallScreen}
-            options={{ presentation: 'modal' }}
-          />
-        </RootStack.Navigator>
+        introSeen ? (
+          <RootStack.Navigator screenOptions={{ headerShown: false }}>
+            <RootStack.Screen name="Tabs">
+              {() => <AuthenticatedTabs initialHome={initialHome} />}
+            </RootStack.Screen>
+            <RootStack.Screen
+              name="Paywall"
+              component={PaywallScreen}
+              options={{ presentation: 'modal' }}
+            />
+            <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
+          </RootStack.Navigator>
+        ) : (
+          <ScrapsIntroScreen onFinish={finishIntro} />
+        )
       ) : (
         <LoginScreen />
       )}
