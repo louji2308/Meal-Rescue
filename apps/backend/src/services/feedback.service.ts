@@ -5,6 +5,7 @@ import type { FeedbackRequest, FeedbackResponse, UUID } from '@meal-rescue/share
 import type { Db } from '../database/models';
 import { AppError, ErrorCategory } from '../lib/errors';
 import { PreferenceLearningService } from './preference-learning.service';
+import { TasteMemoryService } from './taste-memory.service';
 
 /**
  * FeedbackService - handles post-rescue satisfaction feedback.
@@ -99,6 +100,11 @@ export class FeedbackService {
       satisfaction,
       feedbackText,
     );
+
+    const selectedRecommendation = rescue.selectedRecommendation as Record<string, unknown>;
+    const tasteMemory = new TasteMemoryService(this.models);
+    await tasteMemory.recordCultureContext(userId, { selectedRecommendation }, rescue.userDecision);
+    await tasteMemory.recordDecision(userId, rescue.userDecision, { selectedRecommendation });
 
     return {
       success: true,

@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   Constraints,
+  CulinaryFamily,
   DetectedFood,
   DetectedIngredient,
   RankedRecommendation,
@@ -87,6 +88,16 @@ export class RescuePipelineService {
     const preferences = await this.loadPreferences(userId);
     const pantry = this.pantryProvider ? await this.pantryProvider.getPantryItemNames(userId) : [];
 
+    const culture = this.tasteMemory
+      ? {
+          affinities: (await this.tasteMemory.getCuisineAffinities(userId)) as Map<
+            CulinaryFamily,
+            number
+          >,
+          traditionVsModern: await this.tasteMemory.getTraditionVsModern(userId),
+        }
+      : undefined;
+
     // 1. Generate diverse candidates
     const rawCandidates = this.generator.generateCandidates(
       detectedFoods,
@@ -95,6 +106,7 @@ export class RescuePipelineService {
       constraints,
       preferences,
       pantry,
+      culture,
     );
 
     // 2. Deterministic constraint filtering (allergies = hard)

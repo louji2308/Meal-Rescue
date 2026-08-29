@@ -16,11 +16,17 @@ import { randomUUID } from 'node:crypto';
 import type {
   ComponentKey,
   Constraints,
+  CulinaryFamily,
   DetectedFood,
   DetectedIngredient,
   RescueCandidate,
 } from '@meal-rescue/shared-types';
 
+import {
+  CULINARY_FAMILIES,
+  detectCuisineIntent,
+  matchAmbiguousFamily,
+} from './ai/culinary-families';
 import {
   CUISINE_PATTERNS,
   type IngredientRecord,
@@ -34,6 +40,11 @@ export interface UserPreferenceSnapshot {
   avoidedFoods?: string[];
 }
 
+export interface CultureContext {
+  affinities: Map<CulinaryFamily, number>;
+  traditionVsModern: number;
+}
+
 const MAX_CANDIDATES = 12;
 const TOP_PER_COMPONENT = 3;
 
@@ -45,12 +56,14 @@ export class CandidateGeneratorService {
     constraints: Constraints,
     preferences: UserPreferenceSnapshot,
     pantry: string[],
+    culture?: CultureContext,
   ): RescueCandidate[] {
     const candidates: RescueCandidate[] = [
       ...this.componentAdditions(detectedComponents, constraints),
       ...this.cuisineEnhancements(detectedFoods, constraints),
       ...this.minimalSubstitutions(detectedIngredients, preferences),
       ...this.favoriteAdditions(preferences, detectedFoods, pantry),
+      ...this.cultureAlignedAdditions(detectedFoods, constraints, culture),
     ];
 
     return dedupeByIdentity(candidates).slice(0, MAX_CANDIDATES);
@@ -175,6 +188,53 @@ export class CandidateGeneratorService {
       candidates.push(this.fromRecord(record, record.components, inPantry ? 0.9 : 0.7));
     }
     return candidates;
+  }
+
+  private cultureAlignedAdditions(
+    detectedFoods: DetectedFood[],
+    constraints: Constraints,
+    culture?: CultureContext,
+  ): RescueCandidate[] {
+    if (!culture || culture.affinities.size === 0) return [];
+    const foodNames = detectedFoods.map((f) => f.name.toLowerCase());
+
+    // Explicit intent always wins.
+    const intent = detectCuisineIntent(foodNames);
+    let family: CulinaryFamily | 'none' = intent;
+    if (family === 'none') {
+      family = matchAmbiguousFamily(foodNames, culture.affinities);
+    }
+    if (family === 'none') return [];
+    const def = CULINARY_FAMILIES.find((f) => f.family === family)!;
+    const noCooking = constraints.cookingRequired === false;
+    const maxTime = constraints.timeMinutes ?? 30;
+
+    const toCandidate = (name: string, alignment: number): RescueCandidate | null => {
+      const record = findIngredient(name.toLowerCase()) ?? findBestMatch(name);
+      if (!record) return null;
+      if (record.prepTimeMinutes > maxTime) return null;
+      if (noCooking && record.cookingSteps !== 0) return null;
+      return this.fromRecord(record, record.components, alignment);
+    };
+
+    const traditional = def.traditionalAnchor[0];
+    const modern = def.modernTwists[0];
+    const out: RescueCandidate[] = [];
+    const preference = culture.traditionVsModern;
+
+    // Emit both, ordered by the learned tradition/modern level.
+    if (preference >= 0) {
+      const m = modern ? toCandidate(modern, 0.85) : null;
+      const t = traditional ? toCandidate(traditional, 0.75) : null;
+      if (m) out.push(m);
+      if (t) out.push(t);
+    } else {
+      const t = traditional ? toCandidate(traditional, 0.85) : null;
+      const m = modern ? toCandidate(modern, 0.75) : null;
+      if (t) out.push(t);
+      if (m) out.push(m);
+    }
+    return out;
   }
 
   private fromRecord(
