@@ -4,6 +4,7 @@ import type { PersonalizationInsight, PreferenceLearned, UUID } from '@meal-resc
 
 import type { Db } from '../database/models';
 import { confidenceState } from './meal-completion.service';
+import { normalizeIngredientNames } from './ranking/cold-start-signals';
 import { TasteMemoryService } from './taste-memory.service';
 
 /**
@@ -40,13 +41,14 @@ export class PreferenceLearningService {
     },
     satisfaction: string,
     _feedbackText?: string | null,
+    modifications?: string[],
   ): Promise<PersonalizationInsight[]> {
     const insights: PersonalizationInsight[] = [];
 
     await this.tasteMemory.recordFeedback(userId, rescue, satisfaction);
-    // Seam for Plans 2/3: fill in the real modification ingredient list so
-    // only confirmed, observed behavior promotes a cold-start cell.
-    await this.promoteConfirmedSignals(userId, []);
+    // Seam for Plans 2/3: promote cold-start cells only when real, observed
+    // modification ingredients are present; otherwise nothing changes.
+    await this.promoteConfirmedSignals(userId, normalizeIngredientNames(modifications ?? []));
 
     const recommendation = rescue.selectedRecommendation as Record<string, unknown>;
     const candidate = recommendation.candidate as Record<string, unknown> | undefined;

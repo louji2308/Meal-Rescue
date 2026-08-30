@@ -12,6 +12,8 @@ import { TasteMemoryEntry } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
 import { PAIRS, getPair } from './onboarding';
+import { profileConfidenceFromFactors } from './ranking/cold-start-signals';
+import type { RankingProfileInput } from './ranking/cold-start-signals';
 
 export const FACTOR_LABELS: Record<AdditionFactorKey, string> = {
   nutritional: 'Balance',
@@ -108,6 +110,23 @@ export class MealCompletionService {
   async getSummary(userId: string): Promise<OnboardingSummaryResponse> {
     const profile = await this.getTasteProfile(userId);
     return this.getSummaryFromProfile(userId, profile);
+  }
+
+  /**
+   * Cold-start profile for the ranking layer (Plan 3). mealGroup is joined
+   * by the pipeline, which knows the analyzed meal's foods.
+   */
+  async getRankingInputs(userId: string): Promise<Omit<RankingProfileInput, 'mealGroup'>> {
+    const summary = await this.getSummary(userId);
+    return {
+      coldStartFactors: summary.factors.map((factor) => ({
+        factor: factor.factor,
+        affinity: factor.score,
+        confidence: factor.confidence,
+      })),
+      mealGroupAffinities: summary.mealGroupAffinities,
+      profileConfidence: profileConfidenceFromFactors(summary.factors),
+    };
   }
 
   // --- inference -------------------------------------------------------------

@@ -30,11 +30,15 @@ import { AppError } from '../lib/errors';
 import type { LlmClient } from './ai/llm-client';
 import { CandidateGeneratorService } from './candidate-generator.service';
 import { ConstraintEngineService } from './constraint-engine.service';
+import type { MealCompletionService } from './meal-completion.service';
 import { RankingEngineService } from './ranking-engine.service';
+import { additionsFromRescues, deriveMealGroup } from './ranking/cold-start-signals';
+import type { RankingProfileInput } from './ranking/cold-start-signals';
 import { TasteMemoryService } from './taste-memory.service';
 import { ValidationService } from './validation.service';
 
 const MAX_ALTERNATIVES = 2; // 1 recommendation + 2 alternatives = 3 choices
+const RECENT_RESCUES_LIMIT = 10; // anti-fatigue window (spec §8, soft/decaying)
 
 export interface PantryProvider {
   /** User's pantry item names; empty when pantry tracking is unused. */
@@ -49,17 +53,20 @@ export class RescuePipelineService {
   private readonly rankingEngine: RankingEngineService;
   private readonly validation: ValidationService;
   private readonly tasteMemory: TasteMemoryService | null;
+  private readonly mealCompletion: MealCompletionService | null;
 
   constructor(
     llm: LlmClient,
     private readonly pantryProvider: PantryProvider | null,
     tasteMemory?: TasteMemoryService,
+    mealCompletion?: MealCompletionService,
   ) {
     this.generator = new CandidateGeneratorService();
     this.constraintEngine = new ConstraintEngineService();
     this.rankingEngine = new RankingEngineService(llm);
     this.validation = new ValidationService();
     this.tasteMemory = tasteMemory ?? null;
+    this.mealCompletion = mealCompletion ?? null;
   }
 
   async generateRescue(
@@ -128,12 +135,23 @@ export class RescuePipelineService {
       ? await this.tasteMemory.findResonanceMemory(userId, feasible)
       : undefined;
 
+    const profile: RankingProfileInput | undefined = this.mealCompletion
+      ? {
+          ...(await this.mealCompletion.getRankingInputs(userId)),
+          mealGroup: deriveMealGroup(detectedFoods.map((food) => food.name)),
+        }
+      : undefined;
+
+    const recentlyShown = await this.recentlyShownAdditions(userId);
+
     const ranked = await this.rankingEngine.rankAndExplain(
       feasible,
       { detectedFoods, detectedComponents },
       constraints,
       preferences,
       resonanceMemory,
+      profile ?? null,
+      recentlyShown,
     );
 
     // 4. Safety validation - drop anything invalid, keep going
@@ -180,7 +198,7 @@ export class RescuePipelineService {
       reasoning: recommendation.reasoning,
       userDecision: 'pending',
       processingTimeMs,
-      modelVersion: 'pipeline:v1',
+      modelVersion: 'pipeline:v2',
     });
 
     return {
@@ -190,6 +208,18 @@ export class RescuePipelineService {
       alternatives,
       actions: ['rescue', 'swap', 'dont_have', 'keep_as_is'],
     };
+  }
+
+  /** Addition names recommended in the last rescues - the anti-fatigue input. */
+  private async recentlyShownAdditions(userId: string): Promise<string[]> {
+    const rescues = await Rescue.findAll({
+      where: { userId },
+      order: [['createdAt', 'DESC']],
+      limit: RECENT_RESCUES_LIMIT,
+    });
+    return additionsFromRescues(
+      rescues.map((row) => ({ selectedRecommendation: row.get('selectedRecommendation') })),
+    );
   }
 
   private async loadPreferences(

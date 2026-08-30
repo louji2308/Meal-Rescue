@@ -99,6 +99,7 @@ export class FeedbackService {
       },
       satisfaction,
       feedbackText,
+      outcome?.modifications,
     );
 
     const selectedRecommendation = rescue.selectedRecommendation as Record<string, unknown>;

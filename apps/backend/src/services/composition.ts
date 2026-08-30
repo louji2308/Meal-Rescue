@@ -71,15 +71,16 @@ export function buildServices(redis: Redis | null): {
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
+  const mealCompletion = new MealCompletionService(models);
   return {
     mealAnalyzer: new MealAnalyzerService(llm, redis),
-    rescuePipeline: new RescuePipelineService(llm, pantryProvider, tasteMemory),
+    rescuePipeline: new RescuePipelineService(llm, pantryProvider, tasteMemory, mealCompletion),
     feedback: new FeedbackService(models),
     preferenceLearning: new PreferenceLearningService(models),
     tasteMemory,
+    mealCompletion,
     pantry: new PantryService(models),
     fridgeNegotiator: new FridgeNegotiatorService(),
     leftoverAlchemist: new LeftoverAlchemistService(),
-    mealCompletion: new MealCompletionService(models),
   };
 }
