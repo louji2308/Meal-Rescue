@@ -20,10 +20,72 @@ import type { LlmClient } from './ai/llm-client';
 import { type RankingResult, rankingResultSchema } from './ai/llm-schemas';
 import { CANDIDATE_RANKING_SYSTEM_PROMPT } from './ai/prompts';
 import type { UserPreferenceSnapshot } from './candidate-generator.service';
+import { deriveMealGroup } from './ranking/cold-start-signals';
+import type { RankingProfileInput } from './ranking/cold-start-signals';
 
 export interface RankingMealContext {
   detectedFoods: Array<{ name: string }>;
   detectedComponents: Record<string, boolean>;
+}
+
+export interface RankingPayloadInput {
+  candidates: RescueCandidate[];
+  meal: RankingMealContext;
+  missingComponents: string[];
+  constraints: Constraints;
+  preferences: UserPreferenceSnapshot;
+  profile?: RankingProfileInput | null;
+  recentlyShown?: string[];
+}
+
+/** JSON payload shared by the LLM prompt and the deterministic fallback. */
+export function buildRankingPayload(input: RankingPayloadInput) {
+  const { candidates, meal, missingComponents, constraints, preferences, profile, recentlyShown } =
+    input;
+
+  const mealGroup =
+    profile && profile.mealGroup && profile.mealGroup !== 'other'
+      ? profile.mealGroup
+      : deriveMealGroup(meal.detectedFoods.map((food) => food.name));
+
+  return {
+    meal: { foods: meal.detectedFoods.map((food) => food.name) },
+    missingComponents,
+    constraints,
+    preferences: {
+      favorites: preferences.favoriteFoods ?? [],
+      avoided: preferences.avoidedFoods ?? [],
+      ...(profile
+        ? {
+            coldStartProfile: {
+              coldStartFactors: profile.coldStartFactors,
+              mealGroupAffinities: profile.mealGroupAffinities,
+              profileConfidence: profile.profileConfidence,
+            },
+          }
+        : {}),
+    },
+    recentlyShown,
+    candidates: candidates.map((candidate) => ({
+      id: candidate.id,
+      type: candidate.type,
+      additions: candidate.additions.map((addition) => ({ name: addition.name })),
+      substitutions: candidate.substitutions.map((substitution) => ({
+        original: substitution.original.name,
+        replacement: substitution.replacement.name,
+      })),
+      estimatedTime: candidate.estimatedTime,
+      estimatedCost: candidate.estimatedCost,
+      cookingSteps: candidate.cookingSteps,
+      nutritionalImprovement: candidate.nutritionalImprovement,
+      preferenceAlignment: candidate.preferenceAlignment,
+    })),
+    custom: {
+      mealGroup,
+      profile: profile ?? null,
+      recentlyShown,
+    },
+  };
 }
 
 export class RankingEngineService {
@@ -37,33 +99,21 @@ export class RankingEngineService {
     constraints: Constraints,
     preferences: UserPreferenceSnapshot,
     resonanceMemory?: MemoryReason,
+    profile?: RankingProfileInput | null,
+    recentlyShown: string[] = [],
   ): Promise<RankedRecommendation[]> {
     if (candidates.length === 0) return [];
 
     const missingComponents = identifyMissingComponents(meal.detectedComponents);
-    const payload = {
-      meal: { foods: meal.detectedFoods.map((food) => food.name) },
+    const payload = buildRankingPayload({
+      candidates,
+      meal,
       missingComponents,
       constraints,
-      preferences: {
-        favorites: preferences.favoriteFoods ?? [],
-        avoided: preferences.avoidedFoods ?? [],
-      },
-      candidates: candidates.map((candidate) => ({
-        id: candidate.id,
-        type: candidate.type,
-        additions: candidate.additions.map((addition) => ({ name: addition.name })),
-        substitutions: candidate.substitutions.map((substitution) => ({
-          original: substitution.original.name,
-          replacement: substitution.replacement.name,
-        })),
-        estimatedTime: candidate.estimatedTime,
-        estimatedCost: candidate.estimatedCost,
-        cookingSteps: candidate.cookingSteps,
-        nutritionalImprovement: candidate.nutritionalImprovement,
-        preferenceAlignment: candidate.preferenceAlignment,
-      })),
-    };
+      preferences,
+      profile,
+      recentlyShown,
+    });
 
     let result: RankingResult;
     try {

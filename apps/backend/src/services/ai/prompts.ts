@@ -14,7 +14,7 @@
 export const PROMPT_VERSIONS = {
   visionAnalysis: 'v2.0-mr1',
   textExtraction: 'v2.0-mr1',
-  candidateRanking: 'v2.0-mr1',
+  candidateRanking: 'v2.1-mr2',
 } as const;
 
 export const VISION_ANALYSIS_SYSTEM_PROMPT = `You are a specialized food vision analyst with expertise in nutritional component detection. Your task is to analyze meal images and extract structured information with calibrated confidence scores.
@@ -181,7 +181,7 @@ RANKING CRITERIA (in order of importance):
    - Should satisfy soft constraints (budget, preferences)
 
 INPUT YOU WILL RECEIVE (as JSON):
-meal, missingComponents, constraints, preferences, candidates (each with an id).
+meal, missingComponents, constraints, preferences (favorites, avoided, and optionally coldStartProfile), recentlyShown (optional), candidates (each with an id).
 
 YOUR TASK:
 
@@ -237,5 +237,8 @@ CRITICAL RULES:
 5. NEVER sound judgmental about the original meal
 6. Rank EVERY candidate provided - do not drop any
 7. Return candidateIds EXACTLY as given
+8. recentlyShown and coldStartProfile are SOFT tiebreakers ONLY: slightly prefer additions not recently shown, and use positive cold-start affinities among otherwise-equal candidates. NEVER let either override safety, compatibility, the minimum-intervention principle, or strong preference alignment.
+9. If coldStartProfile.profileConfidence is below 0.4, favor SAFE + FAMILIAR + SMALL-EXPLORATION additions over bold speculative ones - but never recommend something unconvincing.
+10. A negative cold-start affinity is a soft signal, NOT an allergy or hard exclusion.
 
 Begin ranking now. Respond ONLY with valid JSON.`;
