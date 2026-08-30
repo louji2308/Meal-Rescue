@@ -243,9 +243,20 @@ export interface PantryDeleteResponse {
 // ---------------------------------------------------------------------------
 
 export type TasteContextType =
-  'cuisine' | 'meal_time' | 'meal_pattern' | 'cuisine_family' | 'tradition_vs_modern' | 'global';
+  | 'cuisine'
+  | 'meal_time'
+  | 'meal_pattern'
+  | 'cuisine_family'
+  | 'tradition_vs_modern'
+  | 'global'
+  | 'addition_nutritional'
+  | 'addition_sensory'
+  | 'addition_satisfaction'
+  | 'addition_modification'
+  | 'addition_exploration'
+  | 'addition_x_meal_group';
 
-export type MemorySource = 'feedback' | 'accept' | 'swap' | 'reject' | 'profile';
+export type MemorySource = 'feedback' | 'accept' | 'swap' | 'reject' | 'profile' | 'cold_start';
 
 export interface TasteMemoryEntry {
   ingredient: string;
@@ -375,6 +386,84 @@ export interface LeftoverAlchemistResponse {
   identifiedComponents: FoodComponent[];
   transformations: Transformation[];
   effortRanking: EffortLevel[];
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4b: Meal-Completion Preference Learning (replaces Culinary Compass)
+// ---------------------------------------------------------------------------
+
+export type AdditionFactorKey =
+  'nutritional' | 'sensory' | 'satisfaction' | 'modification' | 'exploration';
+
+export type OnboardingRejectionReason =
+  | 'taste'
+  | 'too_expensive'
+  | 'too_much_effort'
+  | 'don_t_have'
+  | 'don_t_like_ingredient'
+  | 'not_appropriate_for_meal'
+  | 'not_hungry_enough';
+
+export type ConfidenceState = 'unknown' | 'inferred' | 'confirmed';
+
+export interface OnboardingAdditionOption {
+  name: string;
+  emoji: string;
+  /** e.g. 'protein', 'crunch', 'cream' - a plain role label, never a health claim. */
+  role: string;
+  blurb: string;
+}
+
+export interface OnboardingPair {
+  id: string;
+  baseMeal: {
+    name: string;
+    emoji: string;
+    /** e.g. 'rice_based' | 'noodle' | 'breakfast_bowl' | 'soup' | 'yogurt_bowl' | 'potato'. */
+    mealGroup: string;
+    /** Display-only context hint. Cold-start MUST NOT update cuisine preference from this. */
+    cuisineLabel: string;
+  };
+  optionA: OnboardingAdditionOption;
+  optionB: OnboardingAdditionOption;
+  /** Which latent factors this pair diagnoses and how strongly. Weights sum to 1. */
+  tests: Array<{ factor: AdditionFactorKey; weight: number }>;
+  question: string;
+}
+
+export interface OnboardingAnswer {
+  pairId: string;
+  /** 'A' | 'B' == which addition the user believes completes the base meal better. */
+  selected: 'A' | 'B' | null;
+  /** Set when the user doesn't have/accept ONE option; it is NOT a negative preference. */
+  unavailableOption: 'A' | 'B' | null;
+  rejectionReason?: OnboardingRejectionReason;
+}
+
+export interface OnboardingFactorSummary {
+  factor: AdditionFactorKey;
+  /** Friendly short label, e.g. 'Balance'. */
+  label: string;
+  /** -1..1 latent score. */
+  score: number;
+  confidence: ConfidenceState;
+  evidenceCount: number;
+}
+
+export interface OnboardingSummaryResponse {
+  factors: OnboardingFactorSummary[];
+  mealGroupAffinities: Record<string, number>;
+  seeded: boolean;
+}
+
+export interface OnboardingStartResponse {
+  pair: OnboardingPair | null;
+  seeded: boolean;
+}
+
+export interface OnboardingAnswerResponse {
+  next: OnboardingPair | null;
+  summary: OnboardingSummaryResponse | null;
 }
 
 // ---------------------------------------------------------------------------
