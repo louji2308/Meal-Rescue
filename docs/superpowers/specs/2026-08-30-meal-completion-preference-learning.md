@@ -59,10 +59,12 @@ new_affinity_score =
 ```
 
 - **Confidence is separate from score.** It is derived from `evidence_count` and **consistency** (agreement among evidence), not from score magnitude.
-- **Confidence states:** `UNKNOWN → INFERRED → CONFIRMED` (plus `RE-EVALUATE` on contradiction), each carrying:
-  - `source`: `COLD_START` | `BEHAVIOR`
-  - `evidence_count`
-  - `last_updated`
+- **Confidence states (derived, not stored):** `UNKNOWN → INFERRED → CONFIRMED` (plus `RE-EVALUATE` on contradiction). These are a **read-only interpretation computed from stored fields** — no new columns required.
+- **Stored confidence evidence** (maps onto the existing `taste_memories` / `preferences` tables):
+  - `confidence` (DECIMAL 3,2) — numeric, already exists
+  - `observationCount` — evidence count, already exists
+  - `source` — **conceptual** `COLD_START | BEHAVIOR`, **mapped onto** existing concrete values; V1 adds/reuses a `cold_start` value (the current enum is `feedback | accept | swap | reject | profile`)
+  - `lastUpdated` — already exists
 - **Behavioral override (§10):** a small number of repeated real-world contradictions rapidly down-weighs a cold-start prior.
 
 ---
@@ -82,6 +84,13 @@ new_affinity_score =
 ### Cuisine/country rule
 
 **Cuisine/country labels are scenario context metadata only. They MUST NOT update any cuisine preference during cold-start onboarding.** Choosing "egg" for "Indian — rice & dal" must never produce `Indian cuisine affinity += ...`. Cuisine factors may only be learned later from sustained real behavior, orthogonally to onboarding.
+
+### Context-type extension (verified against code)
+
+The existing `TasteMemoryContextType` union is `cuisine | meal_time | meal_pattern | cuisine_family | tradition_vs_modern | global`. V1 **adds** the following context types to persist the latent factors and meal-group evidence (the `context_type` column is `STRING(50)`, so no migration barrier, but the TS union and any switch over it must be extended):
+
+- `addition_nutritional` / `addition_sensory` / `addition_satisfaction` / `addition_modification` / `addition_exploration` — one per latent factor, with `context_value` = ingredient and `affinity` = that factor's score.
+- `addition_x_meal_group` — paired meal-context evidence, with `context_value` = `<ingredient>_x_<meal_group>` (e.g. `egg_x_rice_based`), `source = cold_start`, low confidence.
 
 ---
 
@@ -106,14 +115,14 @@ This states *"egg is generally a compatible candidate for this meal type"* — *
 
 ## 7. Ranking
 
-**Hard filters first, then a weighted additive score — never multiplication.**
+**Integration note (verified against code):** candidate ranking is currently **LLM-driven** — `RankingEngineService.rankAndExplain()` sends a `CANDIDATE_RANKING_SYSTEM_PROMPT` payload (including `preferences` favorites/avoided) to the LLM and falls back to a deterministic `HeuristicLlmClient` scorer. V1 therefore **extends the existing ranking path** rather than installing a new numeric scorer: the cold-start affinities, generic meal-context prior, freshness (anti-fatigue), and role-family diversity signals are (a) injected into the ranking prompt payload and (b) reinforced in the deterministic fallback scorer. Ranking still ends with **hard filters first**, and the deterministic fallback uses a **weighted additive score — never multiplication**:
 
 ```
 HARD FILTERS (pass/fail):
   available?   compatible (not contraindicated)?
   allowed?     practical?
 
-score =
+score (deterministic fallback / tuning target) =
     w1 * affinity
   + w2 * meal_context_compatibility
   + w3 * practicality
@@ -121,7 +130,7 @@ score =
   + w5 * diversity (role-family balance)
 ```
 
-Additive weights (tunable) + hard gates avoid a single low factor collapsing the whole result and are easier to debug/tune than multiplied scores.
+Weights are tunable and hard gates prevent any single low factor from collapsing the result.
 
 ### Recommendation-safety gate
 
@@ -161,6 +170,8 @@ SHOWN  VIEWED  SELECTED  RESCUED  SATISFIED  REJECTED  SKIPPED  UNAVAILABLE
 
 Distinction: `shown` ≠ `selected` ≠ `rescued` ≠ `satisfied`. Recommendations are evidence only once they reach the appropriate state.
 
+**Persistence:** the existing `taste_memories`/`preferences` tables store the *outcome* evidence (accept/reject/rescue, via `source`). The richer funnel (`SHOWN`, `VIEWED`, `SELECTED`, `SKIPPED`, `UNAVAILABLE`) and rejection reasons are **not** currently stored per-event — V1 adds a lightweight **addition-event log** (table or in the existing preferences store) recording `addition`, `state`, `rejection_reason?`, `meal_group`, `timestamp`, so the anti-fatigue `freshness` signal and `shown ≠ selected` tracking have real data. This log is also what later upgrades contextual priors into per-meal compatibility.
+
 ---
 
 ## 10. Behavioral Override
@@ -199,7 +210,7 @@ Confidence-state transition `UNKNOWN → INFERRED → CONFIRMED` with `source`/`
 
 ## 13. Extensibility
 
-The data model and learning interfaces are designed so observed rescue behavior can later upgrade contextual priors into **full meal × addition preferences** without migration pain. Personality remains read-only.
+The data model and learning interfaces are designed so observed rescue behavior can later upgrade contextual priors into **full meal × addition preferences** without migration pain. Personality remains read-only. The §9 addition-event log is the primary feed for that later per-meal compatibility learning.
 
 ---
 
