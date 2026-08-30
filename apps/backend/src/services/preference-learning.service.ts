@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { PersonalizationInsight, PreferenceLearned, UUID } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
+import { confidenceState } from './meal-completion.service';
 import { TasteMemoryService } from './taste-memory.service';
 
 /**
@@ -43,6 +44,9 @@ export class PreferenceLearningService {
     const insights: PersonalizationInsight[] = [];
 
     await this.tasteMemory.recordFeedback(userId, rescue, satisfaction);
+    // Seam for Plans 2/3: fill in the real modification ingredient list so
+    // only confirmed, observed behavior promotes a cold-start cell.
+    await this.promoteConfirmedSignals(userId, []);
 
     const recommendation = rescue.selectedRecommendation as Record<string, unknown>;
     const candidate = recommendation.candidate as Record<string, unknown> | undefined;
@@ -99,6 +103,27 @@ export class PreferenceLearningService {
     }
 
     return insights;
+  }
+
+  /** Promote a cold-start cell to "observed" once real behavior confirms it. */
+  async promoteConfirmedSignals(userId: string, ingredientNames: string[]): Promise<void> {
+    const rows = await this.models.TasteMemory.findAll({
+      where: { userId },
+    });
+    for (const row of rows) {
+      const memory = row.get();
+      if (
+        memory.source === 'cold_start' &&
+        ingredientNames.includes(String(memory.ingredient).toLowerCase()) &&
+        [0.4, 0.5].includes(Math.abs(Number(memory.affinity)))
+      ) {
+        const state = confidenceState(Number(memory.observationCount), Number(memory.affinity));
+        if (state === 'confirmed') {
+          row.set({ source: 'accept' });
+          await row.save();
+        }
+      }
+    }
   }
 
   async getLearnedPreferences(userId: UUID): Promise<PreferenceLearned[]> {
