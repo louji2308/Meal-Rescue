@@ -125,6 +125,60 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  app.get('/taste/onboarding', async (request, reply) => {
+    const { mealCompletion } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const state = await mealCompletion.startOnboarding(userId);
+    return reply.send(state);
+  });
+
+  app.post('/taste/onboarding/answers', async (request, reply) => {
+    const { mealCompletion } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const parsed = z
+      .object({
+        answer: z.object({
+          pairId: z.string().min(1),
+          selected: z.enum(['A', 'B']).nullable().default(null),
+          unavailableOption: z.enum(['A', 'B']).nullable().default(null),
+          rejectionReason: z
+            .enum([
+              'taste',
+              'too_expensive',
+              'too_much_effort',
+              'don_t_have',
+              'don_t_like_ingredient',
+              'not_appropriate_for_meal',
+              'not_hungry_enough',
+            ])
+            .optional(),
+        }),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'INVALID_ONBOARDING_INPUT',
+        message: 'Body must be { answer: OnboardingAnswer }',
+        statusCode: 400,
+      });
+    }
+    if (
+      parsed.data.answer.selected === null &&
+      parsed.data.answer.unavailableOption === null &&
+      parsed.data.answer.rejectionReason === undefined
+    ) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'INVALID_ONBOARDING_INPUT',
+        message: 'Answer must select an option, mark one unavailable, or state a reason',
+        statusCode: 400,
+      });
+    }
+    const result = await mealCompletion.answerOnboarding(userId, parsed.data.answer);
+    return reply.send(result);
+  });
+
   app.post('/taste/compass', async (request, reply) => {
     const { tasteMemory } = buildServices(app.redis);
     const userId = request.user.sub;

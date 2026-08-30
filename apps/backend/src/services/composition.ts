@@ -22,6 +22,7 @@ import { FeedbackService } from './feedback.service';
 import { FridgeNegotiatorService } from './fridge-negotiator.service';
 import { LeftoverAlchemistService } from './leftover-alchemist.service';
 import { MealAnalyzerService } from './meal-analyzer.service';
+import { MealCompletionService } from './meal-completion.service';
 import { PantryService } from './pantry.service';
 import { PreferenceLearningService } from './preference-learning.service';
 import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.service';
@@ -66,6 +67,7 @@ export function buildServices(redis: Redis | null): {
   pantry: PantryService;
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
+  mealCompletion: MealCompletionService;
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
@@ -78,5 +80,6 @@ export function buildServices(redis: Redis | null): {
     pantry: new PantryService(models),
     fridgeNegotiator: new FridgeNegotiatorService(),
     leftoverAlchemist: new LeftoverAlchemistService(),
+    mealCompletion: new MealCompletionService(models),
   };
 }
