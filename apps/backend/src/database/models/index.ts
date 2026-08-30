@@ -1,5 +1,6 @@
 import { Sequelize } from 'sequelize';
 
+import { AdditionEvent, defineAdditionEventModel } from './addition-event.model';
 import { Feedback, defineFeedbackModel } from './feedback.model';
 import { Meal, defineMealModel } from './meal.model';
 import { NotificationLog, defineNotificationLogModel } from './notification-log.model';
@@ -20,6 +21,7 @@ export interface DbModels {
   RescueCreditGrant: typeof RescueCreditGrant;
   NotificationLog: typeof NotificationLog;
   TasteMemory: typeof TasteMemory;
+  AdditionEvent: typeof AdditionEvent;
 }
 
 export interface Db {
@@ -42,6 +44,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     RescueCreditGrant: defineRescueCreditGrantModel(sequelize),
     NotificationLog: defineNotificationLogModel(sequelize),
     TasteMemory: defineTasteMemoryModel(sequelize),
+    AdditionEvent: defineAdditionEventModel(sequelize),
   };
 
   // --- Associations (implementation plan Step 1.2) ---
@@ -90,6 +93,13 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
+  models.User.hasMany(models.AdditionEvent, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.AdditionEvent.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
   return models;
 }
 
@@ -103,4 +113,5 @@ export const dbModels = {
   RescueCreditGrant,
   NotificationLog,
   TasteMemory,
+  AdditionEvent,
 };

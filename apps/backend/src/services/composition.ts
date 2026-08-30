@@ -7,6 +7,7 @@
  */
 import type { Redis } from 'ioredis';
 
+import { AdditionEvent } from '../database/models/addition-event.model';
 import { Feedback } from '../database/models/feedback.model';
 import { Meal } from '../database/models/meal.model';
 import { NotificationLog } from '../database/models/notification-log.model';
@@ -53,6 +54,7 @@ const models = {
   RescueCreditGrant,
   NotificationLog,
   TasteMemory,
+  AdditionEvent,
 };
 
 export function buildServices(redis: Redis | null): {
