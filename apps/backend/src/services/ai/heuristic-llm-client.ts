@@ -18,6 +18,27 @@
  */
 import type { ZodType } from 'zod';
 
+import {
+  COLD_START_WEIGHTS,
+  SAFETY_GATE_THRESHOLD,
+  SAFETY_PICK_BOOST,
+  SAFETY_PICK_MAX_MINUTES,
+  STRONG_AFFINITY,
+  STRONG_MEAL_CONTEXT,
+  STRONG_PRACTICALITY,
+  STRONG_PREFERENCE_FLOOR,
+  clamp01,
+  factorAffinityForCandidate,
+  familyBenefit,
+  familyCounts,
+  genericMealPrior,
+  normalize,
+  recencyPenalty,
+  recentAppearances,
+  roleClassForAddition,
+  roleFamily,
+} from '../ranking/cold-start-signals';
+import type { OnboardingMealGroup, RankingProfileInput } from '../ranking/cold-start-signals';
 import { INGREDIENTS, type IngredientRecord } from './ingredient-db';
 import type { CompleteJsonOptions, CompleteJsonResult, LlmClient } from './llm-client';
 import {
@@ -29,7 +50,7 @@ import {
   visionResultSchema,
 } from './llm-schemas';
 
-interface RankingPayload {
+export interface RankingPayload {
   missingComponents?: string[];
   candidates?: Array<{
     id: string;
@@ -41,6 +62,12 @@ interface RankingPayload {
     nutritionalImprovement?: Record<string, string>;
     preferenceAlignment?: number;
   }>;
+  /** Meal-completion cold-start + anti-fatigue inputs (Plan 3). */
+  custom?: {
+    mealGroup?: string;
+    profile?: RankingProfileInput | null;
+    recentlyShown?: string[];
+  };
 }
 
 export class HeuristicLlmClient implements LlmClient {
@@ -149,6 +176,10 @@ export class HeuristicLlmClient implements LlmClient {
 
     const missing = new Set(payload.missingComponents ?? []);
     const candidates = payload.candidates ?? [];
+    const profile = payload.custom?.profile;
+    const recentlyShown = payload.custom?.recentlyShown ?? [];
+    const mealGroup = (payload.custom?.mealGroup ?? 'other') as OnboardingMealGroup | 'other';
+    const profileConfidence = profile?.profileConfidence ?? 0;
 
     const scored = candidates.map((candidate) => {
       const improvementKeys = Object.keys(candidate.nutritionalImprovement ?? {});
@@ -168,14 +199,69 @@ export class HeuristicLlmClient implements LlmClient {
       const timeScore = Math.max(0, 1 - (candidate.estimatedTime ?? 10) / 30);
       const preference = candidate.preferenceAlignment ?? 0.5;
 
-      const overallScore = Number(
-        (0.35 * preference + 0.3 * coverage + 0.2 * minimal + 0.15 * timeScore).toFixed(3),
+      const factorAffinity = profile
+        ? factorAffinityForCandidate(
+            candidate,
+            profile,
+            payload.missingComponents ?? [],
+            recentlyShown,
+          )
+        : 0;
+      const affinity = clamp01(0.6 * preference + 0.4 * normalize(factorAffinity));
+
+      const roleClass = roleClassForAddition(candidate.additions?.[0]?.name ?? '');
+      const mealContext = clamp01(
+        0.6 * (0.5 + 5 * genericMealPrior(mealGroup, roleClass)) + 0.4 * coverage,
       );
+
+      const practicality = clamp01(0.7 * minimal + 0.3 * timeScore);
+      const freshness = clamp01(1 + recencyPenalty(recentAppearances(candidate, recentlyShown)));
+      const counts = familyCounts(recentlyShown);
+      const diversity = clamp01(1 + familyBenefit(roleFamily(roleClass), counts));
+
+      let overallScore =
+        COLD_START_WEIGHTS.w1 * affinity +
+        COLD_START_WEIGHTS.w2 * mealContext +
+        COLD_START_WEIGHTS.w3 * practicality +
+        COLD_START_WEIGHTS.w4 * freshness +
+        COLD_START_WEIGHTS.w5 * diversity;
+
+      // Safety gate (spec §7): low profile confidence favors safe + familiar
+      // + small-exploration picks among otherwise-equal candidates.
+      if (
+        profileConfidence < SAFETY_GATE_THRESHOLD &&
+        minimal === 1 &&
+        (candidate.estimatedTime ?? 10) <= SAFETY_PICK_MAX_MINUTES
+      ) {
+        overallScore += SAFETY_PICK_BOOST;
+      }
+
+      // Guardrail (spec §8): a strongly preferred, compatible, practical
+      // candidate always wins - diversity/freshness never override it.
+      if (
+        affinity >= STRONG_AFFINITY &&
+        mealContext >= STRONG_MEAL_CONTEXT &&
+        practicality >= STRONG_PRACTICALITY
+      ) {
+        overallScore = Math.max(overallScore, STRONG_PREFERENCE_FLOOR);
+      }
+
+      overallScore = clamp01(overallScore);
+
+      const signals = [
+        `affinity=${affinity.toFixed(2)}`,
+        `context=${mealContext.toFixed(2)}`,
+        `practicality=${practicality.toFixed(2)}`,
+        `freshness=${freshness.toFixed(2)}`,
+        `diversity=${diversity.toFixed(2)}`,
+      ];
+      if (profile) signals.push(`factor=${factorAffinity.toFixed(2)}`);
+      if (profileConfidence < SAFETY_GATE_THRESHOLD) signals.push('safety');
 
       return {
         candidateId: candidate.id,
-        overallScore,
-        reasoning: `deterministic score: preference=${preference.toFixed(2)} coverage=${coverage.toFixed(2)} minimal=${minimal.toFixed(2)} time=${timeScore.toFixed(2)}`,
+        overallScore: Number(overallScore.toFixed(3)),
+        reasoning: `deterministic score: ${signals.join(' ')}`,
         explanation: buildExplanation(candidate),
       };
     });

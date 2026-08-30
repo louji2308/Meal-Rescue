@@ -12,6 +12,8 @@ import type { AdditionFactorKey, ConfidenceState } from '@meal-rescue/shared-typ
 import { INGREDIENTS } from '../ai/ingredient-db';
 import type { OnboardingMealGroup } from '../onboarding/pair-catalog';
 
+export type { OnboardingMealGroup };
+
 export type ColdStartFactorKey = AdditionFactorKey;
 
 export interface ColdStartFactorSignal {
@@ -28,6 +30,9 @@ export interface ColdStartProfileInput {
   profileConfidence: number;
   mealGroup: OnboardingMealGroup | 'other';
 }
+
+/** Alias used by the ranking layer for the same cold-start profile shape. */
+export type RankingProfileInput = ColdStartProfileInput;
 
 export interface SignalCandidate {
   id: string;
