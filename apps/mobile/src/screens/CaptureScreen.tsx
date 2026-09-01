@@ -2,8 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { useState } from 'react';
+import type {
+  ExpoSpeechRecognitionErrorEvent,
+  ExpoSpeechRecognitionResultEvent,
+} from 'expo-speech-recognition';
+import { useEffect, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -29,6 +32,28 @@ import { PickedImage, analyzeMeal } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
 
 /**
+ * Voice dictation uses expo-speech-recognition, a third-party native module
+ * that is NOT bundled inside Expo Go. Lazy-require it (guarded) so the app
+ * still boots without a native development build; when it is absent we simply
+ * hide the voice input rather than crashing at load.
+ */
+type SpeechModule = {
+  requestPermissionsAsync: () => Promise<{ granted: boolean }>;
+  start: (options: { lang: string; interimResults: boolean; continuous: boolean }) => void;
+  stop: () => void;
+  addListener: (name: string, listener: (event: unknown) => void) => { remove: () => void };
+};
+
+let speechModule: SpeechModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  speechModule = require('expo-speech-recognition').ExpoSpeechRecognitionModule ?? null;
+} catch {
+  speechModule = null;
+}
+const SPEECH_AVAILABLE = speechModule != null && typeof speechModule.addListener === 'function';
+
+/**
  * Capture = photo OR text OR voice. All feed the same /meal/analyze endpoint.
  * The analyzing state is shown inline; success navigates to Review.
  */
@@ -44,21 +69,29 @@ export function CaptureScreen() {
   // Voice dictation - live transcript fills the same text field.
   const [recording, setRecording] = useState(false);
 
-  useSpeechRecognitionEvent('start', () => setRecording(true));
-  useSpeechRecognitionEvent('end', () => setRecording(false));
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results[0]?.transcript ?? '';
-    if (transcript) {
-      setText(transcript);
-      setImage(null);
-    }
-  });
-  useSpeechRecognitionEvent('error', (event) => {
-    setRecording(false);
-    if (event.error !== 'not-allowed' && event.error !== 'no-speech') {
-      setError(toApiError(new Error(`Voice input failed: ${event.error}`)));
-    }
-  });
+  useEffect(() => {
+    if (!SPEECH_AVAILABLE || !speechModule) return;
+    const subs = [
+      speechModule.addListener('start', () => setRecording(true)),
+      speechModule.addListener('end', () => setRecording(false)),
+      speechModule.addListener('result', (event) => {
+        const e = event as ExpoSpeechRecognitionResultEvent;
+        const transcript = e.results[0]?.transcript ?? '';
+        if (transcript) {
+          setText(transcript);
+          setImage(null);
+        }
+      }),
+      speechModule.addListener('error', (event) => {
+        const e = event as ExpoSpeechRecognitionErrorEvent;
+        setRecording(false);
+        if (e.error !== 'not-allowed' && e.error !== 'no-speech') {
+          setError(toApiError(new Error(`Voice input failed: ${e.error}`)));
+        }
+      }),
+    ];
+    return () => subs.forEach((sub) => sub.remove());
+  }, []);
 
   async function pickPhoto() {
     setError(null);
@@ -86,14 +119,18 @@ export function CaptureScreen() {
   }
 
   async function startDictation() {
+    if (!SPEECH_AVAILABLE || !speechModule) {
+      setError(toApiError(new Error('Voice input is not available in this build.')));
+      return;
+    }
     setError(null);
     try {
-      const perms = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      const perms = await speechModule.requestPermissionsAsync();
       if (!perms.granted) {
         setError(toApiError(new Error('Microphone access is needed for voice input.')));
         return;
       }
-      ExpoSpeechRecognitionModule.start({
+      speechModule.start({
         lang: 'en-US',
         interimResults: true,
         continuous: false,
@@ -104,7 +141,8 @@ export function CaptureScreen() {
   }
 
   function stopDictation() {
-    ExpoSpeechRecognitionModule.stop();
+    if (!SPEECH_AVAILABLE || !speechModule) return;
+    speechModule.stop();
   }
 
   async function handleAnalyze() {
@@ -135,9 +173,9 @@ export function CaptureScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={[typography.heading, styles.title]}>What are you eating?</Text>
+          <Text style={[typography.heading, styles.title]}>Show Scraps what's on your plate.</Text>
           <Text style={[typography.caption, styles.hint]}>
-            Take a photo, type it, or tell me - "instant noodles with egg".
+            Take a photo, type it, or tell Scraps - "instant noodles with egg".
           </Text>
 
           <ErrorBanner error={error} />
@@ -179,8 +217,13 @@ export function CaptureScreen() {
           <Text style={styles.or}>or</Text>
 
           <TouchableOpacity
-            style={[styles.voiceButton, recording && styles.voiceButtonRecording]}
+            style={[
+              styles.voiceButton,
+              recording && styles.voiceButtonRecording,
+              !SPEECH_AVAILABLE && styles.voiceButtonDisabled,
+            ]}
             activeOpacity={0.8}
+            disabled={!SPEECH_AVAILABLE}
             onPress={recording ? stopDictation : () => void startDictation()}
             accessibilityRole="button"
             accessibilityLabel={
@@ -190,10 +233,22 @@ export function CaptureScreen() {
             <Ionicons
               name={recording ? 'mic-off' : 'mic'}
               size={28}
-              color={recording ? colors.error : colors.primary}
+              color={
+                recording ? colors.error : SPEECH_AVAILABLE ? colors.primary : colors.textSecondary
+              }
             />
-            <Text style={[styles.voiceButtonText, recording && styles.voiceButtonTextRecording]}>
-              {recording ? 'Listening… tap to stop' : 'Tap to speak'}
+            <Text
+              style={[
+                styles.voiceButtonText,
+                recording && styles.voiceButtonTextRecording,
+                !SPEECH_AVAILABLE && styles.voiceButtonTextDisabled,
+              ]}
+            >
+              {recording
+                ? 'Listening… tap to stop'
+                : SPEECH_AVAILABLE
+                  ? 'Tap to speak'
+                  : 'Voice input unavailable in this build'}
             </Text>
           </TouchableOpacity>
 
@@ -282,6 +337,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FDECEA',
     borderColor: colors.error,
   },
+  voiceButtonDisabled: {
+    opacity: 0.6,
+    borderColor: colors.border,
+  },
   voiceButtonText: {
     fontSize: 16,
     fontWeight: '600',
@@ -289,5 +348,9 @@ const styles = StyleSheet.create({
   },
   voiceButtonTextRecording: {
     color: colors.error,
+  },
+  voiceButtonTextDisabled: {
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
 });

@@ -137,4 +137,109 @@ maybeDescribe('ads reward routes (integration)', () => {
     expect(body.granted).toBe(true);
     expect(new Date(body.proPassUntil).getTime()).toBeGreaterThan(Date.now());
   });
+
+  it('locks reward claims while a pro pass is live (one exclusive hour)', async () => {
+    const user = await registerTestUser(app);
+    const headers = { authorization: `Bearer ${user.token}` };
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/pro-pass',
+      headers,
+      payload: { adTransactionId: `lock-1-${randomUUID()}` },
+    });
+
+    const stack = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/pro-pass',
+      headers,
+      payload: { adTransactionId: `lock-2-${randomUUID()}` },
+    });
+    expect(stack.statusCode).toBe(403);
+    expect(stack.json().error.code).toBe('ADS_NOT_ELIGIBLE');
+
+    const fuel = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/rescue-fuel',
+      headers,
+      payload: { adTransactionId: `lock-3-${randomUUID()}` },
+    });
+    expect(fuel.statusCode).toBe(403);
+    expect(fuel.json().error.code).toBe('ADS_NOT_ELIGIBLE');
+  });
+
+  it('eligibility flips pro after claim and free again once the hour is over', async () => {
+    const user = await registerTestUser(app);
+    const headers = { authorization: `Bearer ${user.token}` };
+
+    const before = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ads/eligibility',
+      headers,
+    });
+    expect(before.json()).toMatchObject({ tier: 'free', canWatchProPass: true });
+
+    const claim = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/pro-pass',
+      headers,
+      payload: { adTransactionId: `cycle-1-${randomUUID()}` },
+    });
+    expect(claim.statusCode).toBe(201);
+
+    const during = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ads/eligibility',
+      headers,
+    });
+    expect(during.json()).toMatchObject({
+      tier: 'pro',
+      canWatchRescueFuel: false,
+      canWatchProPass: false,
+    });
+
+    await User.update(
+      { proPassUntil: new Date(Date.now() - 1_000) },
+      { where: { id: user.userId } },
+    );
+
+    const after = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ads/eligibility',
+      headers,
+    });
+    expect(after.json()).toMatchObject({ tier: 'free', canWatchProPass: true });
+  });
+
+  it('lets a user buy another one-hour pass after the previous one expires', async () => {
+    const user = await registerTestUser(app);
+    const headers = { authorization: `Bearer ${user.token}` };
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/pro-pass',
+      headers,
+      payload: { adTransactionId: `renew-1-${randomUUID()}` },
+    });
+    await User.update(
+      { proPassUntil: new Date(Date.now() - 1_000) },
+      { where: { id: user.userId } },
+    );
+
+    const renewal = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ads/rewards/pro-pass',
+      headers,
+      payload: { adTransactionId: `renew-2-${randomUUID()}` },
+    });
+    expect(renewal.statusCode).toBe(201);
+    const body = renewal.json();
+    expect(body.granted).toBe(true);
+    expect(new Date(body.proPassUntil).getTime() - Date.now()).toBeGreaterThan(59 * 60_000);
+
+    const check = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ads/eligibility',
+      headers,
+    });
+    expect(check.json()).toMatchObject({ tier: 'pro' });
+  });
 });

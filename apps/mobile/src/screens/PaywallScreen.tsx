@@ -5,7 +5,6 @@ import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
-import { PawStamp } from '../components/mascot/PawStamp';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywallNudge } from '../hooks/usePaywallNudge';
 import { claimProPass } from '../services/ads.api';
@@ -138,7 +137,6 @@ export function PaywallScreen() {
             accessible
             accessibilityLabel="Scraps the pro rescue cat"
           />
-          <PawStamp size={48} rotation={-18} style={styles.pawSeal} />
         </View>
         {nudge ? <Text style={styles.nudge}>{nudge}</Text> : null}
 
@@ -252,11 +250,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
   },
-  pawSeal: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-  },
+
   nudge: {
     textAlign: 'center',
     color: colors.primary,

@@ -11,7 +11,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { colors, spacing, typography } from '../theme';
 
 /**
- * Home = the loop's entry point: "What are you eating?"
+ * Home = the loop's entry point: "Feed Scraps a snapshot of your plate."
  * One primary action. No feed, no dashboard, no noise.
  */
 export function HomeScreen() {
@@ -33,10 +33,12 @@ export function HomeScreen() {
         <Text style={[typography.caption, styles.greeting]}>
           {user ? `Hi ${user.email.split('@')[0]}` : ' '}
         </Text>
-        <Text style={[typography.title, styles.question]}>What are you eating?</Text>
+        <Text style={[typography.title, styles.question]}>
+          Feed Scraps a snapshot of your plate.
+        </Text>
 
         <Text style={[typography.body, styles.subtitle]}>
-          Snap your meal and get the smallest change that makes it better.
+          One snap. One clever upgrade. A better meal, served.
         </Text>
 
         <TouchableOpacity

@@ -300,7 +300,7 @@ export interface FoodPersonality {
 }
 
 export type TasteJournalKind =
-  'learned' | 'personality_shift' | 'milestone' | 'corrected' | 'culture';
+  'learned' | 'personality_shift' | 'milestone' | 'corrected' | 'culture' | 'preference';
 
 export interface TasteJournalEntry {
   id: UUID;

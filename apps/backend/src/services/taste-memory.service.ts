@@ -214,6 +214,54 @@ export class TasteMemoryService {
   async getJournal(userId: string): Promise<TasteJournalEntry[]> {
     const profile = await this.getTasteProfile(userId);
     const entries: TasteJournalEntry[] = [];
+
+    // Onboarding-learned meal-add preferences (contextType: addition_*).
+    // Surface these first so a fresh user sees what they picked in the
+    // "finish a meal" comparisons, grouped by the factor each option tests.
+    const factorContexts: Array<{ context: string; label: string; emoji: string }> = [
+      { context: 'addition_nutritional', label: 'Balance', emoji: '📗' },
+      { context: 'addition_sensory', label: 'Texture & Flavor', emoji: '✨' },
+      { context: 'addition_satisfaction', label: 'Satisfaction', emoji: '😌' },
+      { context: 'addition_modification', label: 'Keeps it Interesting', emoji: '🔁' },
+      { context: 'addition_exploration', label: 'Adventurous', emoji: '🧭' },
+    ];
+    for (const { context, label, emoji } of factorContexts) {
+      const cells = profile
+        .filter((m) => m.contextType === context && m.contextValue === 'overall')
+        .sort(
+          (a, b) =>
+            Math.abs(b.affinity) - Math.abs(a.affinity) ||
+            new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime(),
+        );
+      if (cells.length === 0) continue;
+      const liked = cells
+        .filter((m) => m.affinity >= 0.2)
+        .slice(0, 3)
+        .map((m) => m.ingredient);
+      const avoided = cells
+        .filter((m) => m.affinity <= -0.2)
+        .slice(0, 3)
+        .map((m) => m.ingredient);
+      const latest = cells[0]!;
+      if (liked.length > 0) {
+        entries.push({
+          id: randomUUID(),
+          createdAt: latest.lastUpdated,
+          text: `${emoji} For ${label.toLowerCase()}, you gravitate toward ${liked.join(', ')}.`,
+          kind: 'preference',
+        });
+      }
+      if (avoided.length > 0) {
+        entries.push({
+          id: randomUUID(),
+          createdAt: latest.lastUpdated,
+          text: `${emoji} On ${label.toLowerCase()}, you tend to steer clear of ${avoided.join(', ')}.`,
+          kind: 'preference',
+        });
+      }
+    }
+
+    // Culture axis (tradition vs modern), learned from the Culinary Compass.
     const tradition = await this.getTraditionVsModern(userId);
     if (tradition !== 0) {
       entries.push({
@@ -226,6 +274,8 @@ export class TasteMemoryService {
         kind: 'culture',
       });
     }
+
+    // Ingredient-level learnings from rescue feedback (cuisine/meal context).
     const ingredients = profile.filter(
       (m) =>
         m.contextType === 'cuisine' ||
@@ -249,7 +299,11 @@ export class TasteMemoryService {
         kind: 'learned',
       });
     }
-    return entries;
+
+    // Sort: newest learnings first for a natural diary feel.
+    return entries.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }
 
   async buildPersonality(userId: string): Promise<FoodPersonality | null> {

@@ -114,4 +114,46 @@ maybeDescribe('rescue allowance engine (integration)', () => {
     await user.update({ proPassUntil: new Date(Date.now() - 60_000) });
     expect(effectiveTier(user)).toBe('free');
   });
+
+  it('effectiveTier flips to free exactly at the expiry instant', async () => {
+    const active = await seedUser();
+    await active.update({ proPassUntil: new Date(Date.now() + 5_000) });
+    expect(effectiveTier(active)).toBe('pro');
+
+    const expired = await seedUser();
+    await expired.update({ proPassUntil: new Date(Date.now() - 1_000) });
+    expect(effectiveTier(expired)).toBe('free');
+  });
+
+  it('grantProPass issues a pass of exactly ~60 minutes for any user id', async () => {
+    const before = Date.now();
+    for (let i = 0; i < 2; i++) {
+      const user = await seedUser();
+      expect(await grantProPass(user.id, `dur-${randomUUID()}`, 60)).toBe(true);
+      const reloaded = await User.findByPk(user.id);
+      const durationMs = reloaded!.proPassUntil!.getTime() - before;
+      expect(durationMs).toBeGreaterThanOrEqual(59.5 * 60_000);
+      expect(durationMs).toBeLessThanOrEqual(60.5 * 60_000);
+      expect(effectiveTier(reloaded!)).toBe('pro');
+    }
+  });
+
+  it('allows a fresh one-hour pass after the previous pass expires', async () => {
+    const user = await seedUser();
+    expect(await grantProPass(user.id, `renew-1-${randomUUID()}`, 60)).toBe(true);
+    await user.update({ proPassUntil: new Date(Date.now() - 60_000) });
+    expect(effectiveTier(user)).toBe('free');
+
+    expect(await grantProPass(user.id, `renew-2-${randomUUID()}`, 60)).toBe(true);
+    const reloaded = await User.findByPk(user.id);
+    expect(effectiveTier(reloaded!)).toBe('pro');
+    expect(reloaded!.proPassUntil!.getTime() - Date.now()).toBeGreaterThan(59 * 60_000);
+  });
+
+  it('an expired pro pass does not keep the unlimited-rescue allowance', async () => {
+    const user = await seedUser();
+    await user.update({ proPassUntil: new Date(Date.now() - 60_000) });
+    await seedRescues(user, 10);
+    expect(await consumeRescueAllowance(user)).toEqual({ allowed: false, reason: 'limit' });
+  });
 });
