@@ -25,6 +25,7 @@
     "db:start": "node scripts/db/db.js start",
     "db:stop": "node scripts/db/db.js stop",
     "db:status": "node scripts/db/db.js status",
+    "dev:all": "powershell -ExecutionPolicy Bypass -File scripts/dev-all.ps1",
     "db:migrate": "npm run db:migrate --workspace @meal-rescue/backend",
     "prepare": "husky"
   },
