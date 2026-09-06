@@ -112,6 +112,21 @@ export interface RescueCandidate {
   cookingSteps: number;
   nutritionalImprovement: NutritionalImpact;
   preferenceAlignment: number;
+  /**
+   * V2 decision metadata (plan §10). Filled by the v2/backend agent; mobile
+   * renders defensively if absent (pre-integration). Never exposes scores.
+   */
+  actionType?: DecisionAction;
+  estimatedMinutes?: number;
+  estimatedCostLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+  cookingRequired?: boolean;
+  satisfiesIntent?: boolean;
+  satisfiesReality?: boolean;
+  nutritionRationale?: {
+    protein?: boolean;
+    fibre?: boolean;
+    healthyFat?: boolean;
+  };
 }
 
 export interface RankedRecommendation {
@@ -144,6 +159,8 @@ export interface MealAnalysisResponse {
 export interface RescueGenerateRequest {
   mealId: UUID;
   constraints: Constraints;
+  /** V2 decision-layer input (intent / reality / craving lock). */
+  v2?: RescueGenerateV2ContextInput;
 }
 
 export interface RescueGenerateResponse {
@@ -155,6 +172,10 @@ export interface RescueGenerateResponse {
   recommendation: RankedRecommendation;
   alternatives: RankedRecommendation[];
   actions: Array<'rescue' | 'swap' | 'dont_have' | 'keep_as_is'>;
+  /** V2: the decision action class the pipeline chose for the best move. */
+  decision?: DecisionAction;
+  /** V2: audit trail for the best move (frozen shape; backend fills it). */
+  provenance?: AIProvenance;
 }
 
 export interface FeedbackRequest {
@@ -542,4 +563,112 @@ export interface RescueFuelClaimResponse {
 export interface ProPassClaimResponse {
   granted: boolean;
   proPassUntil: ISO8601 | null;
+}
+
+// ---------------------------------------------------------------------------
+// V2 (Shipaton 2026) - Decision Layer contract freeze. DO NOT rename/remove
+// fields; additive changes only, coordinated through the v2 branch owner.
+// ---------------------------------------------------------------------------
+
+/** Normalized internal intent. Display text is a mobile concern. */
+export type MealIntent = 'SATISFY' | 'PRESERVE' | 'LIGHTEN' | 'DECIDE' | 'NO_COOK';
+
+/** V2 decision layer frozen shapes. */
+export type RealityTimeBudget = 5 | 15 | 30;
+
+export type RealityBudgetLevel = 'LOW' | 'MEDIUM' | 'OPEN';
+
+export type CleanupTolerance = 'LOW' | 'MEDIUM' | 'HIGH';
+
+/** Hard constraints, modeled as reality (not preference). Optional = unknown. */
+export interface RealityContext {
+  timeAvailable?: RealityTimeBudget;
+  cookingAllowed: boolean;
+  budgetLevel?: RealityBudgetLevel;
+  useAvailableIngredients: boolean;
+  cleanupTolerance?: CleanupTolerance;
+}
+
+/** What the user wants preserved. Primary = locked craving; the engine must
+ *  modify around it supportively, never replace it. */
+export interface CravingProfile {
+  primary: string;
+  preservedElements: string[];
+  flexibleElements: string[];
+}
+
+export type DecisionAction =
+  'RESCUE' | 'ADD' | 'COMBINE' | 'USE_LEFTOVER' | 'USE_EXPIRING' | 'KEEP_AS_IS';
+
+/** Captured after the user completes the meal. Explicit evidence only. */
+export interface SatisfactionRecord {
+  rescueId: UUID;
+  result: 'EXACTLY' | 'ALMOST' | 'NOT_REALLY';
+  reason?: string[];
+  timestamp: ISO8601;
+}
+
+export type MealRescueEventType =
+  | 'MEAL_CAPTURED'
+  | 'INTENT_SELECTED'
+  | 'REALITY_SELECTED'
+  | 'CRAVING_LOCKED'
+  | 'RESCUE_STARTED'
+  | 'RECOMMENDATION_PRESENTED'
+  | 'RECOMMENDATION_SELECTED'
+  | 'MEAL_COMPLETED'
+  | 'SATISFACTION_RECORDED'
+  | 'NOTIFICATION_SENT'
+  | 'NOTIFICATION_OPENED';
+
+export interface DecisionEvent {
+  eventType: MealRescueEventType;
+  userId?: UUID;
+  mealId?: UUID;
+  rescueId?: UUID;
+  timestamp: ISO8601;
+  /** Free-form product payload; keep it small and non-sensitive. */
+  payload?: Record<string, unknown>;
+}
+
+/** Enough provenance to reproduce or audit any AI recommendation. */
+export interface AIProvenance {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  pipelineVersion: string;
+  rankingVersion: string;
+  fallbackUsed: boolean;
+  processingTimeMs: number;
+  validationOutcome: string;
+}
+
+// --- API payload extensions (additive) ---
+
+export interface RescueGenerateV2ContextInput {
+  /** Normalized intent from the mobile intent selector. Omit = DECIDE fallback. */
+  intent?: MealIntent;
+  /** Reality context from the mobile reality selector; optional = permissive. */
+  reality?: RealityContext;
+  /** Craving lock from the mobile craving UX; engine must respect preserved
+   *  elements and never replace the primary craving. */
+  craving?: CravingProfile;
+}
+
+export interface SatisfactionRecordRequest {
+  result: 'EXACTLY' | 'ALMOST' | 'NOT_REALLY';
+  reason?: string[];
+}
+
+export interface SatisfactionRecordResponse {
+  success: true;
+  recorded: SatisfactionRecord;
+  /** Plain-language, user-visible: how this feedback will influence the next rescue. */
+  personalizationImpact: string[];
+}
+
+/** OneSignal aftercare eligibility for the meal_completed check-in. */
+export interface AftercareEligibility {
+  eligible: boolean;
+  reason?: 'COOLDOWN' | 'NO_RESCUE' | 'ALREADY_SENT' | 'FEEDBACK_DISABLED' | 'OK';
 }
