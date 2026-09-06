@@ -144,3 +144,74 @@ export function onCustomerInfoChanged(listener: (info: CustomerInfo) => void): (
   getPurchases()?.addCustomerInfoUpdateListener(listener);
   return () => getPurchases()?.removeCustomerInfoUpdateListener(listener);
 }
+
+/**
+ * RevenueCat Ads tracking (manual integration).
+ *
+ * Reports rewarded-ad lifecycle events to RevenueCat for Ads attribution
+ * (Catvertising). No RevenueCat-side reward rules are required here - the
+ * app's own backend ledger grants the reward; the adTracker calls only feed
+ * revenue/impression data into the RevenueCat Ads dashboard.
+ *
+ * Requires react-native-purchases >= 10.2.0 and "Impression-level ad revenue"
+ * enabled in the AdMob dashboard.
+ * Source: https://www.revenuecat.com/docs/ad-monetization/manual-integration
+ */
+type AdTrackerEvent =
+  | { type: 'loaded' | 'displayed' | 'opened' }
+  | { type: 'revenue'; value: number; currency: string }
+  | { type: 'failed' };
+
+type AdTrackerInput = {
+  adUnitId: string;
+  impressionId: string;
+  placement: string;
+};
+
+export function trackRewardedAdEvent(event: AdTrackerEvent, ctx: AdTrackerInput): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { AdMediatorName, AdFormat, AdRevenuePrecision } = require('react-native-purchases');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Purchases = require('react-native-purchases').default;
+    const tracker = Purchases?.adTracker;
+    if (!tracker) return;
+    const base = {
+      networkName: null,
+      mediatorName: AdMediatorName.adMob,
+      adFormat: AdFormat.rewarded,
+      placement: ctx.placement,
+      adUnitId: ctx.adUnitId,
+      impressionId: ctx.impressionId,
+    };
+    switch (event.type) {
+      case 'loaded':
+        void tracker.trackAdLoaded(base);
+        break;
+      case 'displayed':
+        void tracker.trackAdDisplayed(base);
+        break;
+      case 'opened':
+        void tracker.trackAdOpened(base);
+        break;
+      case 'revenue':
+        void tracker.trackAdRevenue({
+          ...base,
+          revenueMicros: Math.round(event.value * 1_000_000),
+          currency: event.currency,
+          precision: AdRevenuePrecision.exact,
+        });
+        break;
+      case 'failed':
+        void tracker.trackAdFailedToLoad({
+          mediatorName: AdMediatorName.adMob,
+          adFormat: AdFormat.rewarded,
+          placement: ctx.placement,
+          adUnitId: ctx.adUnitId,
+        });
+        break;
+    }
+  } catch {
+    // Ad tracking is best-effort - never break the ad flow with it.
+  }
+}

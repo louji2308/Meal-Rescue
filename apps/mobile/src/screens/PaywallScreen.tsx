@@ -8,7 +8,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywallNudge } from '../hooks/usePaywallNudge';
 import { claimProPass } from '../services/ads.api';
-import { showRewardedAd } from '../services/ads.service';
+import { hasAdMobAppId, showRewardedAd } from '../services/ads.service';
 import { toApiError } from '../services/api';
 import {
   fetchCurrentPackages,
@@ -95,6 +95,10 @@ export function PaywallScreen() {
   async function handleFreeProHour() {
     setError(null);
     setPassNote(null);
+    if (!hasAdMobAppId()) {
+      setPassNote('Ads need a dev build with an AdMob App ID configured.');
+      return;
+    }
     setPassBusy(true);
     try {
       const txId = await showRewardedAd('pro-pass');

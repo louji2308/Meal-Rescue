@@ -3,8 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { SimulatedAdModal } from './src/components/ads/SimulatedAdModal';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { initializeAdsIfConfigured } from './src/services/ads.service';
 import {
   initializeOneSignalIfConfigured,
   logInToOneSignal,
@@ -34,6 +34,7 @@ export default function App() {
   useEffect(() => {
     void hydrate();
     initializeOneSignalIfConfigured();
+    void initializeAdsIfConfigured();
   }, [hydrate]);
 
   useEffect(() => {
@@ -51,7 +52,6 @@ export default function App() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AppNavigator />
-        <SimulatedAdModal />
         <StatusBar style="auto" />
       </QueryClientProvider>
     </SafeAreaProvider>

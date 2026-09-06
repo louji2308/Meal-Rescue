@@ -4,7 +4,7 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
 
 import { claimProPass, claimRescueFuel, getAdEligibility } from '../../services/ads.api';
-import { showRewardedAd } from '../../services/ads.service';
+import { hasAdMobAppId, showRewardedAd } from '../../services/ads.service';
 import { toApiError } from '../../services/api';
 import { colors, spacing, typography } from '../../theme';
 import { PrimaryButton } from '../PrimaryButton';
@@ -51,6 +51,11 @@ export function RescueFuelSheet({
   const handleWatchForCredits = useCallback(async () => {
     setBusy(true);
     setNote(null);
+    if (!hasAdMobAppId()) {
+      setNote('Ads need a dev build with an AdMob App ID configured.');
+      setBusy(false);
+      return;
+    }
     try {
       const txId = await showRewardedAd('rescue-fuel');
       const claim = await claimRescueFuel(txId);
@@ -76,6 +81,11 @@ export function RescueFuelSheet({
   const handleFreeProHour = useCallback(async () => {
     setBusy(true);
     setNote(null);
+    if (!hasAdMobAppId()) {
+      setNote('Ads need a dev build with an AdMob App ID configured.');
+      setBusy(false);
+      return;
+    }
     try {
       const txId = await showRewardedAd('pro-pass');
       const claim = await claimProPass(txId);
