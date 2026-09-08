@@ -1,87 +1,27 @@
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type {
-  Constraints,
-  MealAnalysisResponse,
-  RescueGenerateResponse,
-} from '@meal-rescue/shared-types';
-
-import { Chip } from '../components/Chip';
-import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
-import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
-import { toApiError } from '../services/api';
-import { requestNotificationPermissionOnce } from '../services/onesignal.service';
-import { generateRescue } from '../services/rescue.api';
+import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { colors, spacing, typography } from '../theme';
 
 /**
- * One screen, two jobs (kept together to avoid an extra step):
- * 1. Confirm what was detected - "Is that correct?" guards against
- *    hallucinated ingredients. Edit goes back to typing.
- * 2. Constraint shortcuts - tappable chips, never a form, skippable.
+ * REVIEW (plan §33): confirm what was detected before making decisions.
+ * The legacy constraint chips moved to the dedicated V2 Reality step
+ * (RealityScreen), so this screen stays focused on one job: is the plate right?
+ * "Looks good" goes straight into INTENT - one tap.
  */
-export function ReviewScreen({ route }: { route: { params: { analysis: MealAnalysisResponse } } }) {
+export function ReviewScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<HomeStackParamList, 'Review'>>();
   const { analysis } = route.params;
-
-  const [quick, setQuick] = useState(false);
-  const [noCooking, setNoCooking] = useState(false);
-  const [cheap, setCheap] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
-  const [fuelSheetVisible, setFuelSheetVisible] = useState(false);
 
   const foodNames = analysis.detectedFoods.map((food) => food.name);
   const needsConfirm = analysis.requiresConfirmation;
-
-  function buildConstraints(): Constraints {
-    const constraints: Constraints = {};
-    if (quick) {
-      constraints.timeMinutes = 5;
-      constraints.cookingRequired = false;
-    }
-    if (noCooking) {
-      constraints.cookingRequired = false;
-    }
-    if (cheap) {
-      constraints.budget = 'low';
-    }
-    return constraints;
-  }
-
-  async function runGenerate(): Promise<RescueGenerateResponse> {
-    const result: RescueGenerateResponse = await generateRescue(
-      analysis.mealId,
-      buildConstraints(),
-    );
-    navigation.navigate('RescueResult', { result });
-    void requestNotificationPermissionOnce();
-    return result;
-  }
-
-  async function handleRescue() {
-    setError(null);
-    setBusy(true);
-    try {
-      await runGenerate();
-    } catch (err) {
-      const apiErr = toApiError(err);
-      if (apiErr.code === 'DAILY_RESCUE_LIMIT') {
-        setFuelSheetVisible(true);
-      } else {
-        setError(apiErr);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -96,52 +36,34 @@ export function ReviewScreen({ route }: { route: { params: { analysis: MealAnaly
               </Text>
             ))}
           </View>
-          <View style={styles.components}>
-            <Text style={[typography.caption, styles.componentLine]}>
-              Protein: {analysis.detectedComponents.protein ? 'yes' : 'missing'} · Fiber:{' '}
-              {analysis.detectedComponents.fiber_sources ? 'yes' : 'missing'} · Healthy fat:{' '}
-              {analysis.detectedComponents.healthy_fat_sources ? 'yes' : 'missing'}
+          {foodNames.length === 0 ? (
+            <Text style={styles.foodItem}>
+              • {analysis.detectedIngredients.map((i) => i.name).join(', ') || 'A meal'}
             </Text>
-          </View>
+          ) : null}
         </View>
 
         {needsConfirm && (
           <View style={styles.confirmBox}>
-            <Text style={styles.confirmQuestion}>Is that correct?</Text>
+            <Text style={styles.confirmQuestion}>Is that right?</Text>
             <PrimaryButton
               label="Not quite - let me type it"
               variant="ghost"
-              onPress={() => navigation.navigate('Capture')}
+              onPress={() => navigation.goBack()}
               style={styles.editButton}
             />
           </View>
         )}
 
-        <Text style={[typography.heading, styles.constraintsTitle]}>Anything to keep in mind?</Text>
-        <Text style={[typography.caption, styles.constraintsHint]}>Optional - skip any.</Text>
-        <View style={styles.chips}>
-          <Chip label="5 minutes" selected={quick} onToggle={() => setQuick(!quick)} />
-          <Chip label="No cooking" selected={noCooking} onToggle={() => setNoCooking(!noCooking)} />
-          <Chip label="Keep it cheap" selected={cheap} onToggle={() => setCheap(!cheap)} />
+        <View style={styles.footer}>
+          <Text style={styles.prompt}>What do you want to do with it?</Text>
+          <PrimaryButton
+            label="Looks good — let’s decide"
+            onPress={() => navigation.navigate('Intent', { analysis })}
+            style={styles.decideButton}
+          />
         </View>
-
-        <ErrorBanner error={error} />
-
-        <PrimaryButton
-          label="Rescue my meal"
-          onPress={() => void handleRescue()}
-          busy={busy}
-          style={styles.rescueButton}
-        />
       </ScrollView>
-
-      <RescueFuelSheet
-        visible={fuelSheetVisible}
-        onClose={() => setFuelSheetVisible(false)}
-        retryGenerate={() => runGenerate()}
-        onRecovered={(result) => navigation.navigate('RescueResult', { result })}
-        onGoPro={() => rootNavigation.navigate('Paywall')}
-      />
     </SafeAreaView>
   );
 }
@@ -164,6 +86,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+    marginBottom: spacing.md,
   },
   foodList: {
     gap: spacing.xs,
@@ -172,15 +95,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  components: {
-    marginTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-  },
-  componentLine: {},
   confirmBox: {
-    marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
   confirmQuestion: {
     fontSize: 16,
@@ -193,20 +109,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     minHeight: 40,
   },
-  constraintsTitle: {
-    marginTop: spacing.lg,
-    marginBottom: spacing.xs,
-  },
-  constraintsHint: {
-    marginBottom: spacing.sm,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  rescueButton: {
+  footer: {
     marginTop: 'auto',
+  },
+  prompt: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  decideButton: {
+    marginBottom: spacing.sm,
   },
 });

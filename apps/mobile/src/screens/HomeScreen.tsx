@@ -33,12 +33,10 @@ export function HomeScreen() {
         <Text style={[typography.caption, styles.greeting]}>
           {user ? `Hi ${user.email.split('@')[0]}` : ' '}
         </Text>
-        <Text style={[typography.title, styles.question]}>
-          Feed Scraps a snapshot of your plate.
-        </Text>
+        <Text style={[typography.title, styles.question]}>I have food. What do I do with it?</Text>
 
         <Text style={[typography.body, styles.subtitle]}>
-          One snap. One clever upgrade. A better meal, served.
+          Tell us what’s on your plate. We’ll find the best next move — in about two taps.
         </Text>
 
         <TouchableOpacity
@@ -46,10 +44,10 @@ export function HomeScreen() {
           activeOpacity={0.8}
           onPress={() => navigation.navigate('Capture')}
           accessibilityRole="button"
-          accessibilityLabel="Capture a meal"
+          accessibilityLabel="Describe your meal"
         >
           <Ionicons name="camera" size={28} color={colors.surface} />
-          <Text style={styles.ctaText}>Capture a meal</Text>
+          <Text style={styles.ctaText}>Tell us what’s on your plate</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
