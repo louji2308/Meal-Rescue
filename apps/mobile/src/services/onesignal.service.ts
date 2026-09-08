@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import type { NotificationClickEvent } from 'react-native-onesignal';
 
 /**
  * OneSignal bootstrap. The SDK initializes only when
@@ -86,6 +87,74 @@ export function onNotificationClick(handler: (deepLink: string | null) => void):
   if (!os) return () => undefined;
   const listener = (event: { notification?: { additionalData?: { deepLink?: string } } }) => {
     handler(event.notification?.additionalData?.deepLink ?? null);
+  };
+  os.Notifications.addEventListener('click', listener);
+  return () => os.Notifications.removeEventListener('click', listener);
+}
+
+/** True when a OneSignal app id is configured. Keyless = dry-run mode. */
+export function hasOneSignalAppId(): boolean {
+  return Boolean(process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID);
+}
+
+/** Payload carried by an aftercare (satisfaction check-in) notification. */
+export interface AftercareNotificationPayload {
+  rescueId: string;
+  recommendation: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Reads the aftercare payload from a notification click's additionalData.
+ * Returns null when the tap wasn't an aftercare notification, so the root
+ * listener can ignore non-aftercare pushes safely.
+ */
+export function readAftercareFromClick(event: {
+  notification?: { additionalData?: Record<string, unknown> };
+}): AftercareNotificationPayload | null {
+  const data = event.notification?.additionalData;
+  if (!data || !isRecord(data)) return null;
+  if (data.kind !== 'aftercare' && data.aftercare !== true) return null;
+  const rescueId = data.rescueId;
+  const recommendation = data.recommendation;
+  if (typeof rescueId !== 'string' || rescueId.length === 0) return null;
+  return {
+    rescueId,
+    recommendation: typeof recommendation === 'string' ? recommendation : '',
+  };
+}
+
+/** Extracts the raw click payload, routing around the SDK's `object` typing. */
+function aftercarePayloadFromClick(
+  event: NotificationClickEvent,
+): AftercareNotificationPayload | null {
+  const additionalData = event.notification?.additionalData;
+  if (!additionalData || typeof additionalData !== 'object') return null;
+  return readAftercareFromClick({
+    notification: { additionalData: additionalData as Record<string, unknown> },
+  });
+}
+
+/**
+ * Aftercare notification-open listener.
+ *
+ * Fires only for taps on aftercare (satisfaction check-in) pushes - other
+ * pushes are ignored so the app never hijacks a generic notification open.
+ * Works keyless: when OneSignal is unconfigured this subscribes nothing and
+ * returns a no-op unsubscribe.
+ */
+export function onAftercareNotificationClick(
+  handler: (payload: AftercareNotificationPayload) => void,
+): () => void {
+  if (!hasOneSignalAppId()) return () => undefined;
+  const os = getOneSignal();
+  if (!os) return () => undefined;
+  const listener = (event: NotificationClickEvent) => {
+    const payload = aftercarePayloadFromClick(event);
+    if (payload) handler(payload);
   };
   os.Notifications.addEventListener('click', listener);
   return () => os.Notifications.removeEventListener('click', listener);
