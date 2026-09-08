@@ -8,7 +8,11 @@ import { AppState } from 'react-native';
 
 import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
 
-import { SatisfactionCheckinScreen } from '../components/aftercare/SatisfactionCheckinScreen';
+import {
+  SatisfactionCheckinParams,
+  SatisfactionCheckinScreen,
+} from '../components/aftercare/SatisfactionCheckinScreen';
+import { navigationRef } from '../components/aftercare/navigation';
 import { SATISFACTION_ROUTE } from '../components/aftercare/slots';
 import { PawStamp } from '../components/mascot/PawStamp';
 import { CaptureScreen } from '../screens/CaptureScreen';
@@ -43,7 +47,7 @@ export type HomeStackParamList = {
   RescueLoading: { mealId: string; foods: string[] };
   RescueResult: { result: RescueGenerateResponse; rescueId?: string };
   Feedback: { rescueId: string; recommendation: string };
-  [SATISFACTION_ROUTE]: { rescueId?: string; recommendation?: string } | undefined;
+  [SATISFACTION_ROUTE]: SatisfactionCheckinParams;
 };
 
 export type RootTabParamList = {
@@ -194,7 +198,7 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {token ? (
         !introSeen ? (
           <ScrapsIntroScreen onFinish={finishIntro} />
