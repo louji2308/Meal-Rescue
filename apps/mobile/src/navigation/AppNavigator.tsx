@@ -8,17 +8,23 @@ import { AppState } from 'react-native';
 
 import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
 
+import { SatisfactionCheckinScreen } from '../components/aftercare/SatisfactionCheckinScreen';
+import { SATISFACTION_ROUTE } from '../components/aftercare/slots';
 import { PawStamp } from '../components/mascot/PawStamp';
 import { CaptureScreen } from '../screens/CaptureScreen';
+import { CravingScreen } from '../screens/CravingScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
 import { FridgeNegotiatorScreen } from '../screens/FridgeNegotiatorScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { IntentScreen } from '../screens/IntentScreen';
 import { LeftoverAlchemistScreen } from '../screens/LeftoverAlchemistScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { MealCompletionOnboardingScreen } from '../screens/MealCompletionOnboardingScreen';
 import { PantryScreen } from '../screens/PantryScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { RealityScreen } from '../screens/RealityScreen';
+import { RescueLoadingScreen } from '../screens/RescueLoadingScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
 import { ScrapsIntroScreen } from '../screens/ScrapsIntroScreen';
@@ -31,8 +37,13 @@ export type HomeStackParamList = {
   HomeMain: undefined;
   Capture: undefined;
   Review: { analysis: MealAnalysisResponse };
-  RescueResult: { result: RescueGenerateResponse };
+  Intent: { analysis: MealAnalysisResponse };
+  Reality: { intentLabel: string; mealId: string; foods: string[] };
+  Craving: { mealId: string; foods: string[] };
+  RescueLoading: { mealId: string; foods: string[] };
+  RescueResult: { result: RescueGenerateResponse; rescueId?: string };
   Feedback: { rescueId: string; recommendation: string };
+  [SATISFACTION_ROUTE]: { rescueId?: string; recommendation?: string } | undefined;
 };
 
 export type RootTabParamList = {
@@ -66,8 +77,13 @@ function HomeStack({
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen name="Capture" component={CaptureScreen} />
       <Stack.Screen name="Review" component={ReviewScreen} />
+      <Stack.Screen name="Intent" component={IntentScreen} />
+      <Stack.Screen name="Reality" component={RealityScreen} />
+      <Stack.Screen name="Craving" component={CravingScreen} />
+      <Stack.Screen name="RescueLoading" component={RescueLoadingScreen} />
       <Stack.Screen name="RescueResult" component={RescueResultScreen} />
       <Stack.Screen name="Feedback" component={FeedbackScreen} />
+      <Stack.Screen name={SATISFACTION_ROUTE} component={SatisfactionCheckinScreen} />
     </Stack.Navigator>
   );
 }

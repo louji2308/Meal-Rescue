@@ -1,53 +1,49 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
-import { Share } from 'react-native';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
-  MemoryReason,
-  RankedRecommendation,
+  DecisionAction,
   RescueCandidate,
   RescueGenerateResponse,
 } from '@meal-rescue/shared-types';
 
-import { ErrorBanner } from '../components/ErrorBanner';
-import { PrimaryButton } from '../components/PrimaryButton';
-import { StaplesShelf } from '../components/ads/StaplesShelf';
-import { PawStamp } from '../components/mascot/PawStamp';
-import { PLATE_DIFF_LAND_MS, PlateDiffReveal } from '../components/plate/PlateDiffReveal';
+import { LivingPlateSlot, SatisfactionCheckinSlot } from '../components/aftercare/slots';
+import { BestMoveCard } from '../components/decision/BestMoveCard';
+import { ReversibilityEditor } from '../components/decision/ReversibilityEditor';
+import { actionLine, costLine } from '../components/decision/copy';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { getAdEligibility } from '../services/ads.api';
-import { toApiError } from '../services/api';
-import { generateRescue } from '../services/rescue.api';
-import { colors, spacing, typography } from '../theme';
+import { colors, spacing } from '../theme';
 
 /**
- * The rescue result - deliberately plain (product spec):
- *   Your meal / Rescue / Why / Time · Effort
- * ONE recommendation plus at most TWO alternatives.
- * Exactly four actions: rescue, swap, dont_have, keep_as_is.
- * Plus share button for the growth loop.
+ * RESCUE RESULT (V2 redesign, plan §9 / §13 / §35).
+ *
+ * Hero = ONE best move (BestMoveCard). Below: "or switch it up" alternatives,
+ * then in-place reversibility editing. KEEP_AS_IS renders a "You're done" card.
+ * Finally the aftercare slots (Living Plate + Satisfaction Check-in) so the
+ * feedback loop continues without another screen hop.
  */
 export function RescueResultScreen({
   route,
 }: {
-  route: { params: { result: RescueGenerateResponse } };
+  route: { params: { result: RescueGenerateResponse; rescueId?: string } };
 }) {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const { phase, tint } = useDayPhase();
   const background = phase === 'night' ? colors.background : tint;
   const initial: RescueGenerateResponse = route.params.result;
+  const rescueId = route.params.rescueId ?? initial.rescueId;
 
-  const [current, setCurrent] = useState(initial);
-  const [chosen, setChosen] = useState<RankedRecommendation>(initial.recommendation);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [chosen, setChosen] = useState(initial.recommendation);
+  const [additions, setAdditions] = useState<string[]>(
+    chosen.candidate.additions.map((a) => a.name),
+  );
   const [isPro, setIsPro] = useState(false);
-  const [showWhy, setShowWhy] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
     getAdEligibility()
@@ -55,190 +51,107 @@ export function RescueResultScreen({
       .catch(() => setIsPro(false));
   }, []);
 
-  async function handleDontHave() {
-    setError(null);
-    setBusy(true);
-    try {
-      const avoid = [
-        ...chosen.candidate.additions.map((addition) => addition.name),
-        ...chosen.candidate.substitutions.map((substitution) => substitution.replacement.name),
-      ];
-      const next = await generateRescue(current.originalMeal.mealId, {
-        avoidIngredients: avoid,
-      });
-      setCurrent(next);
-      setChosen(next.recommendation);
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
+  const action: DecisionAction | undefined = initial.decision ?? chosen.candidate.actionType;
+  const foods = initial.originalMeal.foods;
+
+  // Editable "working" candidate copy so reversibility updates the hero live.
+  const working: RescueCandidate = useMemo(
+    () => ({
+      ...chosen.candidate,
+      additions: additions.map((name) => ({ name })),
+    }),
+    [chosen, additions],
+  );
+
+  function handleReplace(index: number, replacement: string) {
+    setAdditions((prev) => prev.map((name, i) => (i === index ? replacement : name)));
   }
 
-  async function handleShare() {
-    try {
-      await Share.share({
-        title: 'My Meal Rescue',
-        message: `My meal: ${current.originalMeal.foods.join(', ')}\nRescue: ${describeCandidate(chosen.candidate)}\nWhy: ${chosen.naturalLanguageExplanation}\n${chosen.candidate.estimatedTime} min · Extra effort: ${describeMeta(chosen.candidate).split('·')[1]?.trim() || ''}\n\nMade with Meal Rescue`,
-      });
-    } catch {
-      // Share cancelled or failed - silently ignore
-    }
+  function handleRemove(index: number) {
+    setAdditions((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleDoThis() {
+    // Existing rescue completion endpoint (feedback) loop - no lock-in.
+    const workingLabel = actionLine(action, additions);
+    navigation.navigate('Feedback', { rescueId, recommendation: workingLabel });
   }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <PlateDiffReveal
-          foods={current.originalMeal.foods}
-          additionLabel={`＋ ${describeAddition(chosen.candidate)}`}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <BestMoveCard
+          action={action}
+          candidate={working}
+          foods={foods}
+          isPro={isPro}
+          onDoThis={handleDoThis}
+          busy={false}
         />
-        <Animated.View
-          entering={FadeInDown.delay(PLATE_DIFF_LAND_MS).duration(320)}
-          style={[styles.card, isPro && styles.pawCard]}
-        >
-          {isPro && <PawStamp size={28} rotation={-12} opacity={0.85} style={styles.cardStamp} />}
-          <Text style={[typography.heading, styles.rescueLine]}>
-            {describeCandidate(chosen.candidate)}
-          </Text>
-          <Text style={[typography.body, styles.why]}>{chosen.naturalLanguageExplanation}</Text>
-          <Text style={[typography.caption, styles.meta]}>{describeMeta(chosen.candidate)}</Text>
-          {chosen.resonanceMemory && (
-            <View style={styles.memoryBox}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Why this suggestion"
-                accessibilityState={{ expanded: showWhy }}
-                onPress={() => setShowWhy((v) => !v)}
-                style={styles.memoryToggle}
-              >
-                <Text style={styles.memoryToggleText}>
-                  {showWhy ? 'Why this? -' : 'Why this? +'}
-                </Text>
-              </Pressable>
-              {showWhy && (
-                <Text style={styles.memoryDetail}>
-                  {renderMemoryReason(chosen.resonanceMemory)}
-                </Text>
-              )}
-            </View>
-          )}
-        </Animated.View>
 
-        <StaplesShelf staples={chosen.candidate.additions.map((addition) => addition.name)} />
+        <ReversibilityEditor
+          additions={additions}
+          onReplace={handleReplace}
+          onRemove={handleRemove}
+        />
 
-        <ErrorBanner error={error} />
-
-        <View style={styles.actions}>
-          <PrimaryButton
-            label="Rescue my meal"
-            onPress={() =>
-              navigation.navigate('Feedback', {
-                rescueId: current.rescueId,
-                recommendation: describeCandidate(chosen.candidate),
-              })
-            }
-            disabled={busy}
-            style={styles.actionButton}
-          />
-          {current.alternatives.length > 0 && (
-            <PrimaryButton
-              label="Show me a swap"
-              variant="secondary"
-              onPress={() => setChosen(current.alternatives[0]!)}
-              disabled={busy}
-              style={styles.actionButton}
-            />
-          )}
-          <PrimaryButton
-            label="I don't have these"
-            variant="ghost"
-            onPress={() => void handleDontHave()}
-            busy={busy}
-            style={styles.actionButton}
-          />
-          <PrimaryButton
-            label="Keep it as-is"
-            variant="ghost"
-            onPress={() => navigation.popToTop()}
-            disabled={busy}
-            style={styles.actionButton}
-          />
-          <PrimaryButton
-            label="Share rescue"
-            variant="secondary"
-            onPress={handleShare}
-            style={styles.actionButton}
-          />
-        </View>
-
-        {current.alternatives.length > 0 && (
+        {initial.alternatives.length > 0 && (
           <View style={styles.alternatives}>
-            <Text style={[typography.caption, styles.alternativesTitle]}>
-              Other options ({current.alternatives.length})
-            </Text>
-            {current.alternatives.map((alternative) => (
+            <Text style={styles.alternativesTitle}>Or switch it up</Text>
+            {initial.alternatives.slice(0, showMore ? undefined : 3).map((alternative) => {
+              const isActive = alternative.candidate.id === chosen.candidate.id;
+              return (
+                <TouchableOpacity
+                  key={alternative.candidate.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${alternative.candidate.additions
+                    .map((a) => a.name)
+                    .join(' + ')} instead`}
+                  style={[styles.altCard, isActive ? styles.altCardActive : null]}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    const next = alternative;
+                    setChosen(next);
+                    setAdditions(next.candidate.additions.map((a) => a.name));
+                  }}
+                >
+                  <Text style={styles.altTitle}>
+                    {actionLine(
+                      alternative.candidate.actionType,
+                      alternative.candidate.additions.map((a) => a.name),
+                    )}
+                  </Text>
+                  <Text style={styles.altMeta}>
+                    {costLine(
+                      alternative.candidate.estimatedMinutes,
+                      alternative.candidate.estimatedCostLevel,
+                    )}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            {initial.alternatives.length > 3 && !showMore && (
               <TouchableOpacity
-                key={alternative.candidate.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Use ${describeCandidate(alternative.candidate)} instead`}
-                style={[
-                  styles.alternativeCard,
-                  alternative.candidate.id === chosen.candidate.id ? styles.chosenCard : null,
-                ]}
-                activeOpacity={0.7}
-                onPress={() => setChosen(alternative)}
+                onPress={() => setShowMore(true)}
+                style={styles.more}
               >
-                <Text style={styles.alternativeTitle}>
-                  {describeCandidate(alternative.candidate)}
-                </Text>
-                <Text style={styles.alternativeMeta}>{describeMeta(alternative.candidate)}</Text>
+                <Text style={styles.moreText}>Show a few more</Text>
               </TouchableOpacity>
-            ))}
+            )}
           </View>
         )}
+
+        <View style={styles.aftercare}>
+          <LivingPlateSlot result={initial} />
+          <SatisfactionCheckinSlot
+            rescueId={rescueId}
+            recommendation={actionLine(action, additions)}
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function describeAddition(candidate: RescueCandidate): string {
-  if (candidate.additions.length > 0) {
-    return candidate.additions.map((a) => a.name).join(' + ');
-  }
-  const sub = candidate.substitutions[0];
-  return sub ? `${sub.original.name} → ${sub.replacement.name}` : 'Prep tweak';
-}
-
-function describeCandidate(candidate: RescueCandidate): string {
-  const parts: string[] = [];
-  if (candidate.additions.length > 0) {
-    parts.push(`Add ${candidate.additions.map((a) => a.name).join(' + ')}`);
-  }
-  for (const substitution of candidate.substitutions) {
-    parts.push(`Swap ${substitution.original.name} for ${substitution.replacement.name}`);
-  }
-  return parts.length > 0 ? parts.join(' · ') : 'Adjust how you prepare it';
-}
-
-function describeMeta(candidate: RescueCandidate): string {
-  const effort =
-    candidate.cookingSteps === 0 ? 'Low' : candidate.cookingSteps <= 2 ? 'Medium' : 'High';
-  return `${candidate.estimatedTime} min · Extra effort: ${effort}`;
-}
-
-function renderMemoryReason(memory: MemoryReason): string {
-  if (memory.kind === 'cuisine_family') {
-    return `This fits the ${memory.contextValue} cooking style you've warmed up to — tell us if you want a change.`;
-  }
-  if (memory.kind === 'tradition') {
-    return `You've leaned ${
-      memory.affinity >= 0 ? 'into modern twists' : 'toward pure, traditional plates'
-    } lately, so we're matching that.`;
-  }
-  return `We remember you ${
-    memory.affinity >= 0 ? `liked ${memory.ingredient}` : `steer clear of ${memory.ingredient}`
-  } in ${memory.contextValue} dishes, so we factored that in.`;
 }
 
 const styles = StyleSheet.create({
@@ -249,61 +162,18 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.lg,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  pawCard: {
     paddingBottom: spacing.xl,
   },
-  cardStamp: {
-    position: 'absolute',
-    right: spacing.sm,
-    bottom: spacing.sm,
-  },
-  rescueLine: {
-    color: colors.primary,
-    marginBottom: spacing.sm,
-  },
-  why: {
-    marginBottom: spacing.sm,
-  },
-  meta: {},
-  memoryBox: {
-    marginTop: spacing.sm,
-  },
-  memoryToggle: {
-    alignSelf: 'flex-start',
-    paddingVertical: spacing.xs,
-  },
-  memoryToggleText: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  memoryDetail: {
-    marginTop: spacing.xs,
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  actions: {
-    gap: spacing.sm,
+  alternatives: {
     marginTop: spacing.lg,
   },
-  actionButton: {},
-  alternatives: {
-    marginTop: spacing.xl,
-  },
   alternativesTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  alternativeCard: {
+  altCard: {
     backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
@@ -311,18 +181,30 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  chosenCard: {
+  altCardActive: {
     borderColor: colors.primary,
     backgroundColor: colors.primaryLight,
   },
-  alternativeTitle: {
+  altTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text,
     marginBottom: spacing.xs,
   },
-  alternativeMeta: {
+  altMeta: {
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  more: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  moreText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  aftercare: {
+    marginTop: spacing.xl,
   },
 });
