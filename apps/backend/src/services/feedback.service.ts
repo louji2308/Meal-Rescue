@@ -6,6 +6,7 @@ import type { Db } from '../database/models';
 import { AppError, ErrorCategory } from '../lib/errors';
 import { PreferenceLearningService } from './preference-learning.service';
 import { TasteMemoryService } from './taste-memory.service';
+import { DecisionEventService } from './v2/decision-events.service';
 
 /**
  * FeedbackService - handles post-rescue satisfaction feedback.
@@ -18,10 +19,12 @@ import { TasteMemoryService } from './taste-memory.service';
 export class FeedbackService {
   private readonly models: Db['models'];
   private readonly preferenceLearning: PreferenceLearningService;
+  private readonly decisionEvents: DecisionEventService;
 
   constructor(models: Db['models']) {
     this.models = models;
     this.preferenceLearning = new PreferenceLearningService(models);
+    this.decisionEvents = new DecisionEventService(models);
   }
 
   async submitFeedback(
@@ -73,6 +76,22 @@ export class FeedbackService {
       rescue.outcome = outcome;
     }
     await rescue.save();
+
+    // Meal completion event (plan §9): fires once a user reports the rescue as
+    // completed. The V2 aftercare check-in gate depends on this event existing.
+    if (outcome?.completed) {
+      await this.decisionEvents.record({
+        eventType: 'MEAL_COMPLETED',
+        userId,
+        rescueId,
+        payload: {
+          userDecision: rescue.userDecision,
+          decisionAction: rescue.decisionAction,
+          actualTime: outcome.actualTime ?? null,
+          modifications: outcome.modifications ?? [],
+        },
+      });
+    }
 
     await this.models.Feedback.create({
       id: randomUUID(),

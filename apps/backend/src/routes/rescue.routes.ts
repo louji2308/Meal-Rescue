@@ -24,9 +24,36 @@ const constraintsSchema = z
   })
   .strict();
 
+const realitySchema = z
+  .object({
+    timeAvailable: z.union([z.literal(5), z.literal(15), z.literal(30)]).optional(),
+    cookingAllowed: z.boolean(),
+    budgetLevel: z.enum(['LOW', 'MEDIUM', 'OPEN']).optional(),
+    useAvailableIngredients: z.boolean(),
+    cleanupTolerance: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
+  })
+  .strict();
+
+const cravingSchema = z
+  .object({
+    primary: z.string().min(1).max(80),
+    preservedElements: z.array(z.string().min(1).max(80)).max(10).default([]),
+    flexibleElements: z.array(z.string().min(1).max(80)).max(10).default([]),
+  })
+  .strict();
+
+const v2Schema = z
+  .object({
+    intent: z.enum(['SATISFY', 'PRESERVE', 'LIGHTEN', 'DECIDE', 'NO_COOK']).optional(),
+    reality: realitySchema.optional(),
+    craving: cravingSchema.optional(),
+  })
+  .strict();
+
 const generateSchema = z.object({
   mealId: z.string().uuid(),
   constraints: constraintsSchema.default({}),
+  v2: v2Schema.optional(),
 });
 
 /**
@@ -69,6 +96,7 @@ export async function rescueRoutes(app: FastifyInstance): Promise<void> {
       parsed.data.mealId,
       request.user.sub,
       parsed.data.constraints,
+      parsed.data.v2,
     );
     return reply.status(201).send(response);
   });

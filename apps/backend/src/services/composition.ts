@@ -8,6 +8,7 @@
 import type { Redis } from 'ioredis';
 
 import { AdditionEvent } from '../database/models/addition-event.model';
+import { DecisionEvent } from '../database/models/decision-event.model';
 import { Feedback } from '../database/models/feedback.model';
 import { Meal } from '../database/models/meal.model';
 import { NotificationLog } from '../database/models/notification-log.model';
@@ -15,6 +16,7 @@ import { Pantry } from '../database/models/pantry.model';
 import { Preference } from '../database/models/preference.model';
 import { RescueCreditGrant } from '../database/models/rescue-credit-grant.model';
 import { Rescue } from '../database/models/rescue.model';
+import { SatisfactionRecordModel } from '../database/models/satisfaction-record.model';
 import { TasteMemory } from '../database/models/taste-memory.model';
 import { User } from '../database/models/user.model';
 import { createLlmClient } from './ai/llm-factory';
@@ -27,6 +29,9 @@ import { PantryService } from './pantry.service';
 import { PreferenceLearningService } from './preference-learning.service';
 import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.service';
 import { TasteMemoryService } from './taste-memory.service';
+import { AftercareService } from './v2/aftercare.service';
+import { DecisionEventService } from './v2/decision-events.service';
+import { SatisfactionService } from './v2/satisfaction.service';
 
 const pantryProvider: PantryProvider = {
   async getPantryItemNames(userId: string): Promise<string[]> {
@@ -56,6 +61,8 @@ const models = {
   NotificationLog,
   TasteMemory,
   AdditionEvent,
+  SatisfactionRecord: SatisfactionRecordModel,
+  DecisionEvent,
 };
 
 export function buildServices(redis: Redis | null): {
@@ -68,17 +75,28 @@ export function buildServices(redis: Redis | null): {
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
   mealCompletion: MealCompletionService;
+  satisfaction: SatisfactionService;
+  aftercare: AftercareService;
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
   const mealCompletion = new MealCompletionService(models);
+  const decisionEvents = new DecisionEventService(models);
   return {
     mealAnalyzer: new MealAnalyzerService(llm, redis),
-    rescuePipeline: new RescuePipelineService(llm, pantryProvider, tasteMemory, mealCompletion),
+    rescuePipeline: new RescuePipelineService(
+      llm,
+      pantryProvider,
+      tasteMemory,
+      mealCompletion,
+      decisionEvents,
+    ),
     feedback: new FeedbackService(models),
     preferenceLearning: new PreferenceLearningService(models),
     tasteMemory,
     mealCompletion,
+    satisfaction: new SatisfactionService(models),
+    aftercare: new AftercareService(models),
     pantry: new PantryService(models),
     fridgeNegotiator: new FridgeNegotiatorService(),
     leftoverAlchemist: new LeftoverAlchemistService(),

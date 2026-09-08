@@ -93,6 +93,10 @@ export class RankingEngineService {
 
   constructor(private readonly llm: LlmClient) {}
 
+  /**
+   * Optional out-param tracking whether the deterministic fallback was used,
+   * so provenance (AIProvenance.fallbackUsed) reflects real behavior.
+   */
   async rankAndExplain(
     candidates: RescueCandidate[],
     meal: RankingMealContext,
@@ -101,6 +105,7 @@ export class RankingEngineService {
     resonanceMemory?: MemoryReason,
     profile?: RankingProfileInput | null,
     recentlyShown: string[] = [],
+    tracking?: { fallbackUsed: boolean },
   ): Promise<RankedRecommendation[]> {
     if (candidates.length === 0) return [];
 
@@ -126,6 +131,7 @@ export class RankingEngineService {
       result = response.data;
     } catch {
       // Graceful degradation (architecture doc): deterministic scoring.
+      if (tracking) tracking.fallbackUsed = true;
       const fallback = await this.fallbackClient.completeJson({
         systemPrompt: CANDIDATE_RANKING_SYSTEM_PROMPT,
         userContent: payload,

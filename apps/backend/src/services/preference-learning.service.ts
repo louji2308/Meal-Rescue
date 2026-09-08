@@ -42,6 +42,7 @@ export class PreferenceLearningService {
     satisfaction: string,
     _feedbackText?: string | null,
     modifications?: string[],
+    weightBoost = 1,
   ): Promise<PersonalizationInsight[]> {
     const insights: PersonalizationInsight[] = [];
 
@@ -66,7 +67,13 @@ export class PreferenceLearningService {
 
     if (satisfaction === 'better') {
       for (const ingredient of allIngredients) {
-        await this.upsertPreference(userId, 'favorite_ingredient', ingredient, { count: 1 }, 0.15);
+        await this.upsertPreference(
+          userId,
+          'favorite_ingredient',
+          ingredient,
+          { count: 1 },
+          0.15 * weightBoost,
+        );
       }
       insights.push({
         type: 'favorite_ingredient',
@@ -75,7 +82,13 @@ export class PreferenceLearningService {
       });
     } else if (satisfaction === 'not_for_me') {
       for (const ingredient of allIngredients) {
-        await this.upsertPreference(userId, 'avoided_ingredient', ingredient, { count: 1 }, 0.2);
+        await this.upsertPreference(
+          userId,
+          'avoided_ingredient',
+          ingredient,
+          { count: 1 },
+          0.2 * weightBoost,
+        );
       }
       insights.push({
         type: 'avoided_ingredient',
@@ -87,21 +100,45 @@ export class PreferenceLearningService {
     const effort = candidate?.cookingSteps as number | undefined;
     if (effort !== undefined) {
       const tolerance = effort <= 1 ? 'low' : effort <= 3 ? 'medium' : 'high';
-      await this.upsertPreference(userId, 'prep_tolerance', tolerance, { maxSteps: effort }, 0.1);
+      await this.upsertPreference(
+        userId,
+        'prep_tolerance',
+        tolerance,
+        { maxSteps: effort },
+        0.1 * weightBoost,
+      );
     }
 
     const timeMinutes = rescue.constraints?.timeMinutes as number | undefined;
     if (timeMinutes !== undefined) {
       const pattern = timeMinutes <= 10 ? 'quick' : timeMinutes <= 30 ? 'moderate' : 'elaborate';
-      await this.upsertPreference(userId, 'time_pattern', pattern, { minutes: timeMinutes }, 0.08);
+      await this.upsertPreference(
+        userId,
+        'time_pattern',
+        pattern,
+        { minutes: timeMinutes },
+        0.08 * weightBoost,
+      );
     }
 
     const decision = rescue.userDecision;
     if (decision === 'accepted' || decision === 'swapped') {
       const patternKey = additions.length > 0 ? 'addition' : 'substitution';
-      await this.upsertPreference(userId, 'rescue_pattern', patternKey, { success: true }, 0.12);
+      await this.upsertPreference(
+        userId,
+        'rescue_pattern',
+        patternKey,
+        { success: true },
+        0.12 * weightBoost,
+      );
     } else if (decision === 'rejected' || decision === 'kept_as_is') {
-      await this.upsertPreference(userId, 'rescue_pattern', 'rejected', { success: false }, 0.15);
+      await this.upsertPreference(
+        userId,
+        'rescue_pattern',
+        'rejected',
+        { success: false },
+        0.15 * weightBoost,
+      );
     }
 
     return insights;

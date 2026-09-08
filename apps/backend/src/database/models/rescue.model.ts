@@ -41,6 +41,11 @@ export class Rescue extends Model<
   declare feedbackTimestamp: Date | null;
   declare processingTimeMs: number | null;
   declare modelVersion: string | null;
+  /** V2 decision metadata: normalized intent, resolved context, winner action. */
+  declare intent: string | null;
+  declare decisionAction: string | null;
+  declare v2Context: object | null;
+  declare provenance: object | null;
   declare readonly createdAt: CreationOptional<Date>;
 }
 
@@ -115,6 +120,25 @@ export function defineRescueModel(sequelize: Sequelize): typeof Rescue {
       },
       feedbackTimestamp: {
         type: DataTypes.DATE,
+        allowNull: true,
+      },
+      intent: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      decisionAction: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        validate: {
+          isIn: [['RESCUE', 'ADD', 'COMBINE', 'USE_LEFTOVER', 'USE_EXPIRING', 'KEEP_AS_IS']],
+        },
+      },
+      v2Context: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
+      provenance: {
+        type: DataTypes.JSONB,
         allowNull: true,
       },
       processingTimeMs: {

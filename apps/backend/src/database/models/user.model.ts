@@ -34,6 +34,8 @@ export class User extends Model<
   /** Push quiet hours in LOCAL hours (0-23); null = defaults (22-8). */
   declare quietStartHour: number | null;
   declare quietEndHour: number | null;
+  /** Opt-out for the V2 satisfaction check-in loop (aftercare). Defaults on. */
+  declare feedbackEnabled: CreationOptional<boolean>;
   /** Client-reported UTC offset in minutes; anchors "local day" math. */
   declare tzOffsetMinutes: CreationOptional<number>;
   declare readonly createdAt: CreationOptional<Date>;
@@ -95,6 +97,11 @@ export function defineUserModel(sequelize: Sequelize): typeof User {
         type: DataTypes.INTEGER,
         allowNull: true,
         validate: { min: 0, max: 23 },
+      },
+      feedbackEnabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
       },
       tzOffsetMinutes: {
         type: DataTypes.INTEGER,

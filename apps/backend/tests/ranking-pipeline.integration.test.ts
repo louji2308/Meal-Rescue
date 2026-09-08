@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 
 import { closeDatabase, initializeDatabase, sequelize } from '../src/database';
 import { AdditionEvent } from '../src/database/models/addition-event.model';
+import { DecisionEvent } from '../src/database/models/decision-event.model';
 import { Feedback } from '../src/database/models/feedback.model';
 import { Meal } from '../src/database/models/meal.model';
 import { NotificationLog } from '../src/database/models/notification-log.model';
@@ -11,6 +12,7 @@ import { Pantry } from '../src/database/models/pantry.model';
 import { Preference } from '../src/database/models/preference.model';
 import { RescueCreditGrant } from '../src/database/models/rescue-credit-grant.model';
 import { Rescue } from '../src/database/models/rescue.model';
+import { SatisfactionRecordModel } from '../src/database/models/satisfaction-record.model';
 import { TasteMemory } from '../src/database/models/taste-memory.model';
 import { User } from '../src/database/models/user.model';
 import { HeuristicLlmClient } from '../src/services/ai/heuristic-llm-client';
@@ -31,6 +33,8 @@ const integrationModels = {
   NotificationLog,
   TasteMemory,
   AdditionEvent,
+  SatisfactionRecord: SatisfactionRecordModel,
+  DecisionEvent,
 } as const;
 
 const describeDb = hasDb ? describe : describe.skip;

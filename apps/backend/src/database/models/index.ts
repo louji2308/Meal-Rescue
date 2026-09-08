@@ -1,6 +1,7 @@
 import { Sequelize } from 'sequelize';
 
 import { AdditionEvent, defineAdditionEventModel } from './addition-event.model';
+import { DecisionEvent, defineDecisionEventModel } from './decision-event.model';
 import { Feedback, defineFeedbackModel } from './feedback.model';
 import { Meal, defineMealModel } from './meal.model';
 import { NotificationLog, defineNotificationLogModel } from './notification-log.model';
@@ -8,6 +9,10 @@ import { Pantry, definePantryModel } from './pantry.model';
 import { Preference, definePreferenceModel } from './preference.model';
 import { RescueCreditGrant, defineRescueCreditGrantModel } from './rescue-credit-grant.model';
 import { Rescue, defineRescueModel } from './rescue.model';
+import {
+  SatisfactionRecordModel,
+  defineSatisfactionRecordModel,
+} from './satisfaction-record.model';
 import { TasteMemory, defineTasteMemoryModel } from './taste-memory.model';
 import { User, defineUserModel } from './user.model';
 
@@ -22,6 +27,8 @@ export interface DbModels {
   NotificationLog: typeof NotificationLog;
   TasteMemory: typeof TasteMemory;
   AdditionEvent: typeof AdditionEvent;
+  SatisfactionRecord: typeof SatisfactionRecordModel;
+  DecisionEvent: typeof DecisionEvent;
 }
 
 export interface Db {
@@ -45,6 +52,8 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     NotificationLog: defineNotificationLogModel(sequelize),
     TasteMemory: defineTasteMemoryModel(sequelize),
     AdditionEvent: defineAdditionEventModel(sequelize),
+    SatisfactionRecord: defineSatisfactionRecordModel(sequelize),
+    DecisionEvent: defineDecisionEventModel(sequelize),
   };
 
   // --- Associations (implementation plan Step 1.2) ---
@@ -100,6 +109,26 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
+  models.User.hasMany(models.SatisfactionRecord, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.SatisfactionRecord.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.Rescue.hasMany(models.SatisfactionRecord, {
+    foreignKey: { name: 'rescueId', allowNull: false },
+  });
+  models.SatisfactionRecord.belongsTo(models.Rescue, {
+    foreignKey: { name: 'rescueId', allowNull: false },
+  });
+
+  models.User.hasMany(models.DecisionEvent, {
+    foreignKey: { name: 'userId', allowNull: true },
+  });
+  models.DecisionEvent.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: true },
+  });
+
   return models;
 }
 
@@ -114,4 +143,6 @@ export const dbModels = {
   NotificationLog,
   TasteMemory,
   AdditionEvent,
+  SatisfactionRecord: SatisfactionRecordModel,
+  DecisionEvent,
 };
