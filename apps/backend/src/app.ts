@@ -14,6 +14,7 @@ import { authRoutes } from './modules/auth/auth.routes';
 import redisPlugin from './plugins/redis';
 import { adsRoutes } from './routes/ads.routes';
 import { aftercareRoutes } from './routes/aftercare.routes';
+import { decisionRoutes } from './routes/decision.routes';
 import { feedbackRoutes } from './routes/feedback.routes';
 import { fridgeRoutes } from './routes/fridge.routes';
 import { leftoverRoutes } from './routes/leftover.routes';
@@ -127,6 +128,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(mealRoutes, { prefix: '/api/v1/meal' });
   await app.register(rescueRoutes, { prefix: '/api/v1/rescue' });
+  await app.register(decisionRoutes, { prefix: '/api/v1/rescue' });
   await app.register(feedbackRoutes, { prefix: '/api/v1/rescue' });
   await app.register(satisfactionRoutes, { prefix: '/api/v1/rescue' });
   await app.register(aftercareRoutes, { prefix: '/api/v1/rescue' });

@@ -15,7 +15,7 @@ import type { CustomerInfo, PurchasesOfferings, PurchasesPackage } from 'react-n
  * native binary.
  */
 
-const ENTITLEMENT_ID = 'pro';
+export const ENTITLEMENT_ID = 'mealrescue_pro';
 
 let configured = false;
 

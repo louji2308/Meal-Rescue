@@ -294,15 +294,14 @@ maybeDescribe('v2 decision journeys (integration)', () => {
     expect((await eligibility()).json()).toEqual({ eligible: false, reason: 'NO_RESCUE' });
 
     // The feedback route only accepts a rescue the user has already decided.
-    // There is no decide-endpoint in scope yet, so seed the decision directly.
-    await Rescue.update(
-      {
-        userDecision: 'accepted',
-        decisionAction: 'ADD',
-        selectedRecommendation: body.recommendation,
-      },
-      { where: { id: rescueId, userId } },
-    );
+    // Commit the decision through the decide endpoint (plan §9 / §27).
+    const decide = await app.inject({
+      method: 'POST',
+      url: `/api/v1/rescue/${rescueId}/decide`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { action: 'accepted' },
+    });
+    expect(decide.statusCode).toBe(201);
 
     // Completed via the feedback route (mechanical, fires MEAL_COMPLETED).
     const feedback = await app.inject({

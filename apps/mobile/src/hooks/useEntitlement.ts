@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { PurchasesPackage } from 'react-native-purchases';
 
 import {
+  ENTITLEMENT_ID,
   fetchIsPro,
   isRevenueCatConfigured,
   onCustomerInfoChanged,
@@ -39,7 +40,7 @@ export function useEntitlement() {
   useEffect(() => {
     void refresh();
     return onCustomerInfoChanged((info) => {
-      setIsPro(info.entitlements.active['pro'] !== undefined);
+      setIsPro(info.entitlements.active[ENTITLEMENT_ID] !== undefined);
     });
   }, [refresh]);
 

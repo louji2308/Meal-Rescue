@@ -31,6 +31,7 @@ import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.se
 import { TasteMemoryService } from './taste-memory.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
+import { DecisionService } from './v2/decision.service';
 import { SatisfactionService } from './v2/satisfaction.service';
 
 const pantryProvider: PantryProvider = {
@@ -77,6 +78,7 @@ export function buildServices(redis: Redis | null): {
   mealCompletion: MealCompletionService;
   satisfaction: SatisfactionService;
   aftercare: AftercareService;
+  decision: DecisionService;
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
@@ -97,6 +99,7 @@ export function buildServices(redis: Redis | null): {
     mealCompletion,
     satisfaction: new SatisfactionService(models),
     aftercare: new AftercareService(models),
+    decision: new DecisionService(models),
     pantry: new PantryService(models),
     fridgeNegotiator: new FridgeNegotiatorService(),
     leftoverAlchemist: new LeftoverAlchemistService(),

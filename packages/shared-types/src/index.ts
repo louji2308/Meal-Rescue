@@ -667,6 +667,24 @@ export interface SatisfactionRecordResponse {
   personalizationImpact: string[];
 }
 
+/**
+ * Commit the user's actual action for a rescue (plan §9 / §27).
+ *
+ * `userDecision` starts as 'pending' on the rescue row; the decide endpoint
+ * is what flips it to a real UserDecision so satisfaction feedback and the
+ * meal_completed aftercare gate become reachable. Last write wins.
+ */
+export interface DecideRequest {
+  action: UserDecision;
+}
+
+export interface DecideResponse {
+  success: true;
+  rescueId: UUID;
+  userDecision: UserDecision;
+  decisionTimestamp: ISO8601;
+}
+
 /** OneSignal aftercare eligibility for the meal_completed check-in. */
 export interface AftercareEligibility {
   eligible: boolean;

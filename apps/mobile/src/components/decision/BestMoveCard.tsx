@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { DecisionAction, RescueCandidate } from '@meal-rescue/shared-types';
 
@@ -26,6 +26,7 @@ export function BestMoveCard({
   isPro,
   onDoThis,
   busy,
+  onKeepAsIs,
 }: {
   action: DecisionAction | undefined;
   candidate: RescueCandidate;
@@ -33,6 +34,7 @@ export function BestMoveCard({
   isPro: boolean;
   onDoThis: () => void;
   busy: boolean;
+  onKeepAsIs?: () => void;
 }) {
   const additions = candidate.additions.map((a) => a.name);
   const isKeepAsIs =
@@ -54,6 +56,18 @@ export function BestMoveCard({
             </Text>
           </View>
         </View>
+        {onKeepAsIs && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="That’s it — I’m keeping it as is"
+            onPress={onKeepAsIs}
+            disabled={busy}
+            style={styles.keepCta}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.keepCtaText}>That’s it — done</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -141,5 +155,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     color: colors.text,
+  },
+  keepCta: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  keepCtaText: {
+    color: colors.success,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

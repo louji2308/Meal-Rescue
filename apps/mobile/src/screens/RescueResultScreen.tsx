@@ -8,8 +8,10 @@ import type {
   DecisionAction,
   RescueCandidate,
   RescueGenerateResponse,
+  UserDecision,
 } from '@meal-rescue/shared-types';
 
+import { ErrorBanner } from '../components/ErrorBanner';
 import { LivingPlateSlot, SatisfactionCheckinSlot } from '../components/aftercare/slots';
 import { BestMoveCard } from '../components/decision/BestMoveCard';
 import { ReversibilityEditor } from '../components/decision/ReversibilityEditor';
@@ -17,6 +19,8 @@ import { actionLine, costLine } from '../components/decision/copy';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { getAdEligibility } from '../services/ads.api';
+import { ApiError } from '../services/api';
+import { commitDecisionSafe } from '../services/decision.api';
 import { colors, spacing } from '../theme';
 
 /**
@@ -44,6 +48,8 @@ export function RescueResultScreen({
   );
   const [isPro, setIsPro] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [committing, setCommitting] = useState(false);
+  const [commitError, setCommitError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     getAdEligibility()
@@ -71,10 +77,39 @@ export function RescueResultScreen({
     setAdditions((prev) => prev.filter((_, i) => i !== index));
   }
 
+  /** The user's actual choice: swapped to an alternative, kept as-is, or did the move. */
+  function decisionForChoice(): UserDecision {
+    const choseAlternative = chosen.candidate.id !== initial.recommendation.candidate.id;
+    if (choseAlternative) return 'swapped';
+    if (action === 'KEEP_AS_IS') return 'kept_as_is';
+    return 'accepted';
+  }
+
+  /**
+   * The feedback route (and the meal_completed aftercare gate) require the
+   * rescue to be DECIDED first - commit the user's action, then navigate.
+   */
+  async function commitThenNavigate(userDecision: UserDecision) {
+    if (committing) return;
+    setCommitting(true);
+    setCommitError(null);
+    const outcome = await commitDecisionSafe(rescueId, userDecision);
+    if (outcome.ok) {
+      const workingLabel = actionLine(action, additions);
+      navigation.navigate('Feedback', { rescueId, recommendation: workingLabel });
+    } else {
+      setCommitError(outcome.error);
+    }
+    setCommitting(false);
+  }
+
   function handleDoThis() {
     // Existing rescue completion endpoint (feedback) loop - no lock-in.
-    const workingLabel = actionLine(action, additions);
-    navigation.navigate('Feedback', { rescueId, recommendation: workingLabel });
+    void commitThenNavigate(decisionForChoice());
+  }
+
+  function handleKeepAsIs() {
+    void commitThenNavigate('kept_as_is');
   }
 
   return (
@@ -86,8 +121,11 @@ export function RescueResultScreen({
           foods={foods}
           isPro={isPro}
           onDoThis={handleDoThis}
-          busy={false}
+          busy={committing}
+          onKeepAsIs={handleKeepAsIs}
         />
+
+        <ErrorBanner error={commitError} />
 
         <ReversibilityEditor
           additions={additions}
