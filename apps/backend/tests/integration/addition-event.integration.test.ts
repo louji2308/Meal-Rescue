@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { closeDatabase, initializeDatabase, sequelize } from '../../src/database';
 import { AdditionEvent } from '../../src/database/models/addition-event.model';
+import { User } from '../../src/database/models/user.model';
 
 const hasDb = Boolean(process.env.TEST_DATABASE_URL);
 const maybeDescribe = hasDb ? describe : describe.skip;
@@ -16,11 +17,23 @@ maybeDescribe('addition_events (integration)', () => {
     await closeDatabase();
   });
 
+  async function seedUser() {
+    return User.create({
+      id: randomUUID(),
+      email: `addition-${randomUUID()}@mealrescue.test`,
+      passwordHash: null,
+      subscriptionTier: 'free',
+      rescueCredits: 0,
+      locale: 'en-US',
+      tzOffsetMinutes: 0,
+    });
+  }
+
   it('persists an onboarding answer row', async () => {
-    const userId = randomUUID();
+    const user = await seedUser();
     const row = await AdditionEvent.create({
       id: randomUUID(),
-      userId,
+      userId: user.id,
       pairId: 'pair-01',
       baseMealName: 'Plain steamed rice',
       baseMealGroup: 'rice_based',
@@ -40,9 +53,10 @@ maybeDescribe('addition_events (integration)', () => {
   });
 
   it('persists an unavailable answer that is not a negative preference', async () => {
+    const user = await seedUser();
     const row = await AdditionEvent.create({
       id: randomUUID(),
-      userId: randomUUID(),
+      userId: user.id,
       pairId: 'pair-02',
       baseMealName: 'Instant noodles',
       baseMealGroup: 'noodle',

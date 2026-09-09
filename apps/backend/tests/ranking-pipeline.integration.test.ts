@@ -115,10 +115,13 @@ describeDb('ranking pipeline wiring', () => {
     const user = await seedUser();
     const mealCompletion = new MealCompletionService(integrationModels);
     const inputs = await mealCompletion.getRankingInputs(user.id);
-    expect(inputs).toEqual({
-      coldStartFactors: [],
-      mealGroupAffinities: {},
-      profileConfidence: 0,
-    });
+    expect(inputs.mealGroupAffinities).toEqual({});
+    expect(inputs.profileConfidence).toBe(0);
+    expect(inputs.coldStartFactors).toHaveLength(5);
+    for (const factor of inputs.coldStartFactors) {
+      expect(factor.affinity).toBe(0);
+      expect(factor.confidence).toBe('unknown');
+    }
+    expect(new Set(inputs.coldStartFactors.map((factor) => factor.factor)).size).toBe(5);
   });
 });
