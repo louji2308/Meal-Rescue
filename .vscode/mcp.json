@@ -1,0 +1,1 @@
+﻿{ "servers": { "mobile": { "command": "npx", "args": ["-y", "mobile-mcp"] } } }

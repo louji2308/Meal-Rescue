@@ -45,7 +45,9 @@ apps/mobile/android/
 # ---------------------------------------------------------------------------
 # Editor / IDE / agent tooling
 #-----------
-.vscode/
+!.vscode/
+.vscode/*
+!.vscode/mcp.json
 .idea/
 .claude/
 *.swp
