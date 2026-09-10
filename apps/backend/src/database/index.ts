@@ -44,10 +44,9 @@ export async function initializeDatabase(): Promise<Db> {
 
   const models = initializeModels(sequelize);
 
-  // Dev convenience only - production uses migrations.
-  if (env.NODE_ENV === 'development') {
-    await sequelize.sync({ alter: true });
-  }
+  // Auto-create/update tables from models.
+  // TODO: Replace with proper migration runner when the schema stabilises.
+  await sequelize.sync({ alter: true });
 
   initialized = true;
   return { sequelize, models };
