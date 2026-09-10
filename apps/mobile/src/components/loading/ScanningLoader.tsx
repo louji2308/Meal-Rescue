@@ -17,11 +17,13 @@ export function buildScanSteps(mealText: string | null): string[] {
   const subject = mealText?.trim()
     ? `"${mealText.trim().slice(0, 40)}${mealText.length > 40 ? '…' : ''}"`
     : 'your meal';
+  const food = mealText?.trim() ?? 'meal';
+  const firstFood = food.split(/[,+]/)[0]?.trim() ?? food;
   return [
     `Reading ${subject}`,
-    'Spotting proteins…',
-    'Checking fiber & healthy fats…',
-    'Finding your smallest change…',
+    `Looking at ${firstFood}…`,
+    'Finding the best move…',
+    'One more second…',
   ];
 }
 
