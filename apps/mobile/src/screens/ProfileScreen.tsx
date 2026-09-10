@@ -22,6 +22,7 @@ import { PawStamp } from '../components/mascot/PawStamp';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { getLearnedPreferences, getPersonalizationInsights } from '../services/preference.api';
+import { getTasteBundle } from '../services/taste.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
@@ -41,6 +42,7 @@ export function ProfileScreen() {
 
   const [preferences, setPreferences] = useState<PreferenceLearned[]>([]);
   const [insights, setInsights] = useState<PersonalizationInsight[]>([]);
+  const [tasteCount, setTasteCount] = useState(0);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [notificationsOn, setNotificationsOn] = useState(true);
   const tier = useMonetization((state) => state.tier);
@@ -63,12 +65,16 @@ export function ProfileScreen() {
 
   async function loadProfile() {
     try {
-      const [prefs, ins] = await Promise.all([
+      const [prefs, ins, bundle] = await Promise.all([
         getLearnedPreferences(),
         getPersonalizationInsights(),
+        getTasteBundle().catch(() => null),
       ]);
       setPreferences(prefs);
       setInsights(ins);
+      if (bundle) {
+        setTasteCount(bundle.journal.length + (bundle.memories?.length ?? 0));
+      }
     } catch (err) {
       setError(toApiError(err));
     }
@@ -265,7 +271,7 @@ export function ProfileScreen() {
           </View>
         )}
 
-        {insights.length === 0 && preferences.length === 0 && (
+        {insights.length === 0 && preferences.length === 0 && tasteCount === 0 && (
           <View style={styles.empty}>
             <Ionicons
               name="sparkles-outline"
