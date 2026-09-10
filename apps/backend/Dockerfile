@@ -17,6 +17,7 @@ COPY apps/backend apps/backend
 
 RUN npm run build --workspace @meal-rescue/shared-types \
   && npm run build --workspace @meal-rescue/backend \
+  && ls -la apps/backend/dist/ \
   && npm prune --omit=dev --workspace @meal-rescue/backend
 
 FROM node:20-alpine AS runner
