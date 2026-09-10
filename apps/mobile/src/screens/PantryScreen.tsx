@@ -107,23 +107,6 @@ export function PantryScreen() {
     }
   }
 
-  const STARTER_STAPLES = ['eggs', 'rice', 'olive oil', 'salt', 'butter', 'bread'];
-
-  async function handleAddStaples() {
-    setError(null);
-    setBusy(true);
-    try {
-      for (const staple of STARTER_STAPLES) {
-        await upsertPantryItem({ ingredientName: staple, usePriority: 0 });
-      }
-      loadPantry();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleSnapGroceries() {
     setError(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -294,13 +277,6 @@ export function PantryScreen() {
                 label="Snap your groceries"
                 onPress={() => void handleSnapGroceries()}
                 busy={snapBusy}
-                style={styles.emptyAction}
-              />
-              <PrimaryButton
-                label="Add my staples"
-                variant="secondary"
-                onPress={() => void handleAddStaples()}
-                busy={busy}
                 style={styles.emptyAction}
               />
             </View>

@@ -118,6 +118,30 @@ export function CaptureScreen() {
     setText('');
   }
 
+  async function takePhoto() {
+    setError(null);
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setError(toApiError(new Error('Camera access is needed to snap your meal.')));
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.8,
+      allowsMultipleSelection: false,
+    });
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+    const asset = result.assets[0]!;
+    setImage({
+      uri: asset.uri,
+      name: asset.fileName ?? 'meal.jpg',
+      mimeType: asset.mimeType ?? 'image/jpeg',
+    });
+    setText('');
+  }
+
   async function startDictation() {
     if (!SPEECH_AVAILABLE || !speechModule) {
       setError(toApiError(new Error('Voice input is not available in this build.')));
@@ -180,22 +204,40 @@ export function CaptureScreen() {
 
           <ErrorBanner error={error} />
 
-          <TouchableOpacity
-            style={[styles.photoBox, image ? styles.photoBoxFilled : null]}
-            activeOpacity={0.8}
-            onPress={() => void pickPhoto()}
-            accessibilityRole="button"
-            accessibilityLabel="Choose a meal photo"
-          >
-            {image ? (
+          {image ? (
+            <TouchableOpacity
+              style={styles.photoBoxFilled}
+              activeOpacity={0.8}
+              onPress={() => void pickPhoto()}
+              accessibilityRole="button"
+              accessibilityLabel="Change meal photo"
+            >
               <Image source={{ uri: image.uri }} style={styles.preview} />
-            ) : (
-              <View style={styles.photoPlaceholder}>
-                <Ionicons name="camera" size={32} color={colors.textSecondary} />
-                <Text style={styles.photoHint}>Choose a photo</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.photoActions}>
+              <TouchableOpacity
+                style={styles.photoAction}
+                activeOpacity={0.8}
+                onPress={() => void takePhoto()}
+                accessibilityRole="button"
+                accessibilityLabel="Take a photo of your meal"
+              >
+                <Ionicons name="camera" size={28} color={colors.primary} />
+                <Text style={styles.photoActionText}>Take photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.photoAction}
+                activeOpacity={0.8}
+                onPress={() => void pickPhoto()}
+                accessibilityRole="button"
+                accessibilityLabel="Choose a photo from library"
+              >
+                <Ionicons name="images" size={28} color={colors.primary} />
+                <Text style={styles.photoActionText}>Choose photo</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <Text style={styles.or}>or</Text>
 
@@ -277,27 +319,36 @@ const styles = StyleSheet.create({
   hint: {
     marginBottom: spacing.lg,
   },
-  photoBox: {
-    height: 200,
+  photoActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  photoAction: {
+    flex: 1,
+    height: 100,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: 'dashed',
     backgroundColor: colors.surface,
-    overflow: 'hidden',
-  },
-  photoBoxFilled: {
-    borderStyle: 'solid',
-  },
-  photoPlaceholder: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  photoHint: {
-    color: colors.textSecondary,
+  photoActionText: {
+    color: colors.primary,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  photoBoxFilled: {
+    height: 200,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
   },
   preview: {
     flex: 1,

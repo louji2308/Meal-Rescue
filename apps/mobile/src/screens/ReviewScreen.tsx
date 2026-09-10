@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,31 +24,29 @@ export function ReviewScreen() {
   const foodNames = analysis.detectedFoods.map((food) => food.name);
   const needsConfirm = analysis.requiresConfirmation;
 
+  const mealSummary =
+    foodNames.length > 0
+      ? foodNames.length === 1
+        ? foodNames[0]
+        : foodNames.slice(0, -1).join(', ') + ' and ' + foodNames[foodNames.length - 1]
+      : analysis.detectedIngredients.map((i) => i.name).join(', ') || 'your meal';
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[typography.heading, styles.title]}>Your meal</Text>
+        <View style={styles.hero}>
+          <Ionicons name="restaurant-outline" size={32} color={colors.primary} />
+          <Text style={[typography.heading, styles.title]}>Here's what I see</Text>
+        </View>
 
         <View style={styles.card}>
-          <View style={styles.foodList}>
-            {foodNames.map((name) => (
-              <Text key={name} style={styles.foodItem}>
-                • {name}
-              </Text>
-            ))}
-          </View>
-          {foodNames.length === 0 ? (
-            <Text style={styles.foodItem}>
-              • {analysis.detectedIngredients.map((i) => i.name).join(', ') || 'A meal'}
-            </Text>
-          ) : null}
+          <Text style={styles.mealText}>{mealSummary}</Text>
         </View>
 
         {needsConfirm && (
           <View style={styles.confirmBox}>
-            <Text style={styles.confirmQuestion}>Is that right?</Text>
             <PrimaryButton
-              label="Not quite - let me type it"
+              label="Hmm, that's not quite right"
               variant="ghost"
               onPress={() => navigation.goBack()}
               style={styles.editButton}
@@ -56,9 +55,8 @@ export function ReviewScreen() {
         )}
 
         <View style={styles.footer}>
-          <Text style={styles.prompt}>What do you want to do with it?</Text>
           <PrimaryButton
-            label="Looks good — let’s decide"
+            label="Looks good — let's decide"
             onPress={() => navigation.navigate('Intent', { analysis })}
             style={styles.decideButton}
           />
@@ -77,46 +75,39 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.lg,
   },
+  hero: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
+  },
   title: {
-    marginBottom: spacing.md,
+    textAlign: 'center',
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    alignItems: 'center',
   },
-  foodList: {
-    gap: spacing.xs,
-  },
-  foodItem: {
-    fontSize: 16,
+  mealText: {
+    fontSize: 18,
+    fontWeight: '600',
     color: colors.text,
+    textAlign: 'center',
   },
   confirmBox: {
     marginBottom: spacing.md,
   },
-  confirmQuestion: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
   editButton: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 0,
     minHeight: 40,
   },
   footer: {
     marginTop: 'auto',
-  },
-  prompt: {
-    textAlign: 'center',
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
   },
   decideButton: {
     marginBottom: spacing.sm,
