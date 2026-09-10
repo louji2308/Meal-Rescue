@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -32,12 +33,33 @@ export function FridgeNegotiatorScreen() {
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [results, setResults] = useState<FridgeNegotiateResponse | null>(null);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
   function parseIngredients(text: string): string[] {
     return text
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+  }
+
+  async function handleCamera() {
+    try {
+      const { launchCameraAsync } = await import('expo-image-picker');
+      const res = await launchCameraAsync({ quality: 0.8 });
+      if (!res.canceled && res.assets?.[0]) {
+        setPhotoUri(res.assets[0].uri);
+      }
+    } catch {
+      // camera not available on emulator without camera
+    }
+  }
+
+  async function handleLibrary() {
+    const { launchImageLibraryAsync } = await import('expo-image-picker');
+    const res = await launchImageLibraryAsync({ quality: 0.8 });
+    if (!res.canceled && res.assets?.[0]) {
+      setPhotoUri(res.assets[0].uri);
+    }
   }
 
   async function handleSubmit() {
@@ -151,6 +173,38 @@ export function FridgeNegotiatorScreen() {
             value={ingredientsText}
             onChangeText={setIngredientsText}
           />
+
+          {photoUri ? (
+            <View style={styles.photoWrap}>
+              <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+              <TouchableOpacity
+                style={styles.photoRemove}
+                onPress={() => setPhotoUri(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.photoRemoveText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.photoButtons}>
+              <TouchableOpacity
+                style={styles.photoButton}
+                activeOpacity={0.8}
+                onPress={handleCamera}
+              >
+                <Text style={styles.photoButtonIcon}>📷</Text>
+                <Text style={styles.photoButtonLabel}>Snap your fridge</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.photoButton}
+                activeOpacity={0.8}
+                onPress={handleLibrary}
+              >
+                <Text style={styles.photoButtonIcon}>🖼️</Text>
+                <Text style={styles.photoButtonLabel}>Choose a photo</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.row}>
             <View style={styles.field}>
@@ -356,5 +410,55 @@ const styles = StyleSheet.create({
   retryText: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  photoButtons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  photoButton: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  photoButtonIcon: {
+    fontSize: 24,
+  },
+  photoButtonLabel: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  photoWrap: {
+    position: 'relative',
+    marginBottom: spacing.lg,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  photo: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  photoRemove: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: colors.text,
+    borderRadius: 12,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoRemoveText: {
+    color: colors.surface,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

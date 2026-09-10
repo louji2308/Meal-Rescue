@@ -28,7 +28,7 @@ export function StepShell({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={[typography.caption, styles.step]}>STEP {step} OF 3</Text>
+          <Text style={[typography.caption, styles.step]}>{step} of 3 quick questions</Text>
           <Text style={[typography.title, styles.title]}>{title}</Text>
           {subtitle ? <Text style={[typography.body, styles.subtitle]}>{subtitle}</Text> : null}
         </View>

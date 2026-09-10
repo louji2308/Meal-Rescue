@@ -38,10 +38,34 @@ export function PantryScreen() {
   const [newQty, setNewQty] = useState('');
   const [newUnit, setNewUnit] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
+  const [usedHint, setUsedHint] = useState(false);
 
   useEffect(() => {
     loadPantry();
   }, []);
+
+  function parseRelativeDate(input: string): string | null {
+    const lower = input.toLowerCase().trim();
+    const now = new Date();
+    if (lower === 'today') return now.toISOString().slice(0, 10);
+    if (lower === 'tomorrow' || lower === 'tmr') {
+      now.setDate(now.getDate() + 1);
+      return now.toISOString().slice(0, 10);
+    }
+    const inDays = lower.match(/^in\s+(\d+)\s+days?$/);
+    if (inDays) {
+      now.setDate(now.getDate() + parseInt(inDays[1], 10));
+      return now.toISOString().slice(0, 10);
+    }
+    const daysMatch = lower.match(/^(\d+)\s+days?$/);
+    if (daysMatch) {
+      now.setDate(now.getDate() + parseInt(daysMatch[1], 10));
+      return now.toISOString().slice(0, 10);
+    }
+    const isoMatch = input.trim().match(/^\d{4}-\d{2}-\d{2}$/);
+    if (isoMatch) return input.trim();
+    return null;
+  }
 
   async function loadPantry() {
     setBusy(true);
@@ -62,11 +86,12 @@ export function PantryScreen() {
     if (!newName.trim()) return;
     setBusy(true);
     try {
+      const expiryDate = newExpiry.trim() ? parseRelativeDate(newExpiry) : null;
       const payload: PantryUpsertRequest = {
         ingredientName: newName.trim(),
         quantity: newQty ? Number(newQty) : null,
         unit: newUnit || null,
-        expiresAt: newExpiry ? new Date(newExpiry).toISOString() : null,
+        expiresAt: expiryDate ? new Date(expiryDate).toISOString() : null,
         usePriority: 0,
       };
       await upsertPantryItem(payload);
@@ -84,6 +109,7 @@ export function PantryScreen() {
   }
 
   async function handleDelete(itemId: string) {
+    setUsedHint(true);
     setBusy(true);
     try {
       await deletePantryItem(itemId);
@@ -96,6 +122,7 @@ export function PantryScreen() {
   }
 
   async function handleUse(item: PantryItem) {
+    setUsedHint(true);
     setBusy(true);
     try {
       await markPantryItemUsed(item.id);
@@ -202,7 +229,7 @@ export function PantryScreen() {
               />
               <TextInput
                 style={styles.smallInput}
-                placeholder="Expiry (YYYY-MM-DD)"
+                placeholder="Expires (tomorrow, in 3 days)"
                 value={newExpiry}
                 onChangeText={setNewExpiry}
               />
@@ -302,7 +329,9 @@ export function PantryScreen() {
                       {item.unit ? ' ' + item.unit : ''}
                     </Text>
                   )}
-                  <Text style={styles.itemHint}>Tap to use · Long press to delete</Text>
+                  {!usedHint && (
+                    <Text style={styles.itemHint}>Tap to use · Long press to delete</Text>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}

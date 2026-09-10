@@ -239,8 +239,6 @@ export function CaptureScreen() {
             </View>
           )}
 
-          <Text style={styles.or}>or</Text>
-
           <TextInput
             accessibilityLabel="Describe your meal"
             style={styles.input}
@@ -255,8 +253,6 @@ export function CaptureScreen() {
               }
             }}
           />
-
-          <Text style={styles.or}>or</Text>
 
           <TouchableOpacity
             style={[
@@ -353,12 +349,6 @@ const styles = StyleSheet.create({
   preview: {
     flex: 1,
     width: '100%',
-  },
-  or: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginVertical: spacing.md,
-    fontSize: 14,
   },
   input: {
     backgroundColor: colors.surface,
