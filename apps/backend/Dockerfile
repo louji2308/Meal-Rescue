@@ -9,7 +9,7 @@ COPY package.json package-lock.json* ./
 COPY apps/backend/package.json apps/backend/
 COPY packages/shared-types/package.json packages/shared-types/
 
-RUN npm install --workspace @meal-rescue/backend --workspace @meal-rescue/shared-types
+RUN npm install --ignore-scripts --workspace @meal-rescue/backend --workspace @meal-rescue/shared-types
 
 COPY tsconfig.base.json ./
 COPY packages/shared-types packages/shared-types
