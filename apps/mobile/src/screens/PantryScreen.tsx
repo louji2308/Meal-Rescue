@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -206,38 +207,10 @@ export function PantryScreen() {
 
         {showAdd && (
           <View style={styles.addForm}>
-            <Text style={styles.formTitle}>Add to Pantry</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ingredient name"
-              value={newName}
-              onChangeText={setNewName}
-            />
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.smallInput}
-                placeholder="Qty"
-                value={newQty}
-                onChangeText={setNewQty}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.smallInput}
-                placeholder="Unit (g, pcs, cup)"
-                value={newUnit}
-                onChangeText={setNewUnit}
-              />
-              <TextInput
-                style={styles.smallInput}
-                placeholder="Expires (tomorrow, in 3 days)"
-                value={newExpiry}
-                onChangeText={setNewExpiry}
-              />
-            </View>
-            <View style={styles.formActions}>
-              <PrimaryButton
-                label="Cancel"
-                variant="ghost"
+            <View style={styles.formHeader}>
+              <Text style={styles.formTitle}>Add to Pantry</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={() => {
                   setShowAdd(false);
                   setNewName('');
@@ -245,14 +218,51 @@ export function PantryScreen() {
                   setNewUnit('');
                   setNewExpiry('');
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Close form"
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="What did you get?"
+              placeholderTextColor={colors.textSecondary}
+              value={newName}
+              onChangeText={setNewName}
+              autoFocus
+            />
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.qtyInput}
+                placeholder="Qty"
+                placeholderTextColor={colors.textSecondary}
+                value={newQty}
+                onChangeText={setNewQty}
+                keyboardType="numeric"
               />
-              <PrimaryButton
-                label="Add"
-                onPress={() => void handleAdd()}
-                busy={busy}
-                disabled={!newName.trim()}
+              <TextInput
+                style={styles.unitInput}
+                placeholder="Unit"
+                placeholderTextColor={colors.textSecondary}
+                value={newUnit}
+                onChangeText={setNewUnit}
               />
             </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Expires (tomorrow, in 3 days)"
+              placeholderTextColor={colors.textSecondary}
+              value={newExpiry}
+              onChangeText={setNewExpiry}
+            />
+            <PrimaryButton
+              label="Add to pantry"
+              onPress={() => void handleAdd()}
+              busy={busy}
+              disabled={!newName.trim()}
+              style={styles.addButton}
+            />
           </View>
         )}
 
@@ -379,10 +389,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   formTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: spacing.md,
   },
   input: {
     backgroundColor: colors.background,
@@ -399,7 +414,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  smallInput: {
+  qtyInput: {
     flex: 1,
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -409,11 +424,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     fontSize: 14,
   },
-  formActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+  unitInput: {
+    flex: 2,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
   },
   section: {
     backgroundColor: colors.primaryLight,

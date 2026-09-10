@@ -12,7 +12,7 @@ import type {
 } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
-import { LivingPlateSlot, SatisfactionCheckinSlot } from '../components/aftercare/slots';
+import { SatisfactionCheckinSlot } from '../components/aftercare/slots';
 import { BestMoveCard } from '../components/decision/BestMoveCard';
 import { ReversibilityEditor } from '../components/decision/ReversibilityEditor';
 import { actionLine, costLine } from '../components/decision/copy';
@@ -192,7 +192,6 @@ export function RescueResultScreen({
         )}
 
         <View style={styles.aftercare}>
-          <LivingPlateSlot result={initial} />
           <SatisfactionCheckinSlot
             rescueId={rescueId}
             recommendation={actionLine(action, additions)}

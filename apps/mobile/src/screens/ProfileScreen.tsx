@@ -193,6 +193,21 @@ export function ProfileScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Take taste quiz"
+            onPress={() => navigation.navigate('TasteOnboarding')}
+            style={styles.settingRow}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="sparkles-outline" size={22} color={colors.text} />
+            <View style={styles.settingLabel}>
+              <Text style={styles.settingTitle}>Taste Quiz</Text>
+              <Text style={styles.settingSub}>Help us learn your preferences</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         <ErrorBanner error={error} />

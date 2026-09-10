@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
   Image,
@@ -192,7 +193,7 @@ export function FridgeNegotiatorScreen() {
                 activeOpacity={0.8}
                 onPress={handleCamera}
               >
-                <Text style={styles.photoButtonIcon}>📷</Text>
+                <Ionicons name="camera" size={28} color={colors.primary} />
                 <Text style={styles.photoButtonLabel}>Snap your fridge</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -200,7 +201,7 @@ export function FridgeNegotiatorScreen() {
                 activeOpacity={0.8}
                 onPress={handleLibrary}
               >
-                <Text style={styles.photoButtonIcon}>🖼️</Text>
+                <Ionicons name="images" size={28} color={colors.primary} />
                 <Text style={styles.photoButtonLabel}>Choose a photo</Text>
               </TouchableOpacity>
             </View>
@@ -426,13 +427,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
-  photoButtonIcon: {
-    fontSize: 24,
-  },
   photoButtonLabel: {
     fontSize: 13,
-    color: colors.text,
-    fontWeight: '500',
+    color: colors.primary,
+    fontWeight: '600',
   },
   photoWrap: {
     position: 'relative',

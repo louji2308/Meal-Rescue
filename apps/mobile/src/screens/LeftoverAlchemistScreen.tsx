@@ -119,6 +119,16 @@ export function LeftoverAlchemistScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.content}>
+          <TouchableOpacity
+            style={styles.closeButton}
+            activeOpacity={0.8}
+            onPress={() => setResults(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close results"
+          >
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+
           <Text style={[typography.heading, styles.title]}>Transformations</Text>
           <Text style={styles.subtitle}>Pick a format</Text>
 
@@ -180,7 +190,7 @@ export function LeftoverAlchemistScreen() {
             onPress={() => setResults(null)}
             activeOpacity={0.8}
           >
-            <Text style={styles.retryText}>New leftovers</Text>
+            <Text style={styles.retryText}>Try different leftovers</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -269,6 +279,10 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.lg,
+  },
+  closeButton: {
+    alignSelf: 'flex-end',
+    marginBottom: spacing.md,
   },
   title: {
     textAlign: 'center',

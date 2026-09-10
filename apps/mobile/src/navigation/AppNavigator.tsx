@@ -30,6 +30,7 @@ import { RescueLoadingScreen } from '../screens/RescueLoadingScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
 import { TasteJournalScreen } from '../screens/TasteJournalScreen';
+import { TasteOnboardingScreen } from '../screens/TasteOnboardingScreen';
 import { syncSubscription } from '../services/ads.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useMonetization } from '../stores/monetization.store';
@@ -64,6 +65,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   Paywall: undefined;
   TasteJournal: undefined;
+  TasteOnboarding: undefined;
 };
 
 function HomeStack() {
@@ -173,6 +175,11 @@ export function AppNavigator() {
             options={{ presentation: 'modal' }}
           />
           <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
+          <RootStack.Screen
+            name="TasteOnboarding"
+            component={TasteOnboardingScreen}
+            options={{ presentation: 'modal' }}
+          />
         </RootStack.Navigator>
       ) : (
         <LoginScreen />

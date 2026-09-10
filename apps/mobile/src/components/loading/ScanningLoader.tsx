@@ -17,14 +17,7 @@ export function buildScanSteps(mealText: string | null): string[] {
   const subject = mealText?.trim()
     ? `"${mealText.trim().slice(0, 40)}${mealText.length > 40 ? '…' : ''}"`
     : 'your meal';
-  const food = mealText?.trim() ?? 'meal';
-  const firstFood = food.split(/[,+]/)[0]?.trim() ?? food;
-  return [
-    `Reading ${subject}`,
-    `Looking at ${firstFood}…`,
-    'Finding the best move…',
-    'One more second…',
-  ];
+  return [`Reading ${subject}`, 'Checking your pantry…', 'Finding the best move…'];
 }
 
 interface ScanStep {
@@ -32,7 +25,7 @@ interface ScanStep {
   state: 'done' | 'active' | 'pending';
 }
 
-const STEP_MS = 3200;
+const STEP_MS = 2800;
 
 export function ScanningLoader({ mealText }: { mealText: string | null }) {
   const steps = useMemo(() => buildScanSteps(mealText), [mealText]);
