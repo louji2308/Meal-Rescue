@@ -35,7 +35,7 @@ services:
       dockerfile: apps/backend/Dockerfile
     container_name: meal-rescue-backend
     ports:
-      - '3000:3000'
+      - '3010:3010'
     environment:
       DATABASE_URL: postgresql://meal_rescue:local_password@postgres:5432/meal_rescue_dev
       REDIS_URL: redis://redis:6379

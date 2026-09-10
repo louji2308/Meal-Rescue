@@ -33,9 +33,9 @@ COPY --from=builder --chown=app:app /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder --chown=app:app /app/apps/backend/package.json ./apps/backend/package.json
 
 USER app
-EXPOSE 3000
+EXPOSE 3010
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD wget -qO- http://localhost:3000/health || exit 1
+  CMD wget -qO- http://localhost:3010/health || exit 1
 
 CMD ["node", "apps/backend/dist/server.js"]
