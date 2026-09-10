@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
@@ -9,7 +9,6 @@ import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
-import { ScanningLoader } from '../components/loading/ScanningLoader';
 import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { generateRescueV2 } from '../services/rescue.api';
@@ -32,8 +31,7 @@ export function RescueLoadingScreen({
 }) {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { mealId, foods } = route.params;
-  const mealText = foods.join(', ');
+  const { mealId } = route.params;
   const buildV2Context = useDecisionStore((state) => state.buildV2Context);
   const reset = useDecisionStore((state) => state.reset);
   const userId = useAuthStore((state) => state.user?.id ?? null);
@@ -76,7 +74,9 @@ export function RescueLoadingScreen({
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={[typography.heading, styles.title]}>Finding your best move…</Text>
-        <ScanningLoader mealText={mealText} />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
         <ErrorBanner error={error} />
         {error ? (
           <PrimaryButton label="Try again" onPress={() => void runGenerate()} busy={busy} />
@@ -110,6 +110,10 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
     marginBottom: spacing.sm,
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
   },
   foot: {
     textAlign: 'center',

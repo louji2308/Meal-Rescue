@@ -8,6 +8,7 @@ import type {
 } from 'expo-speech-recognition';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -24,7 +25,6 @@ import type { MealAnalysisResponse } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { ScanningLoader } from '../components/loading/ScanningLoader';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
@@ -293,7 +293,11 @@ export function CaptureScreen() {
           {(text.trim() || image) && !busy && (
             <PrimaryButton label="Let's see what we can do" onPress={() => void handleAnalyze()} />
           )}
-          {busy && <ScanningLoader mealText={image ? null : text} />}
+          {busy && (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -308,6 +312,10 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.lg,
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
   },
   title: {
     marginBottom: spacing.xs,
