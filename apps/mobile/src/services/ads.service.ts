@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import type {
   AdEventType as GmaAdEventType,
+  InterstitialAd as GmaInterstitialAd,
   RewardedAd as GmaRewardedAd,
   RewardedAdEventType as GmaRewardedAdEventType,
 } from 'react-native-google-mobile-ads';
@@ -175,5 +176,70 @@ export function showRewardedAd(purpose = 'reward'): Promise<string> {
     });
 
     rewarded.load();
+  });
+}
+
+function interstitialAdUnitId(): string | null {
+  if (Platform.OS === 'android') {
+    return process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ANDROID_ID || null;
+  }
+  return process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS_ID || null;
+}
+
+/**
+ * Shows a real interstitial ad. Resolves when the ad is closed; rejects when
+ * the ad fails to load, is dismissed, or the native SDK is unavailable.
+ *
+ * The placement label is reserved for future analytics/ILRD attribution.
+ */
+export function showInterstitialAd(_placement = 'interstitial'): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const gma = getAdMob();
+    if (!gma || !adsReady || !hasAdMobAppId()) {
+      reject(new Error('AdMob is not configured - set an AdMob App ID and run a dev build.'));
+      return;
+    }
+
+    const { InterstitialAd, AdEventType, TestIds } = gma;
+    const adUnitId = interstitialAdUnitId() ?? (__DEV__ ? TestIds.INTERSTITIAL : '');
+
+    if (!adUnitId) {
+      reject(new Error('No interstitial ad unit configured - set an ad unit id in env.'));
+      return;
+    }
+
+    const interstitial: GmaInterstitialAd = InterstitialAd.createForAdRequest(adUnitId, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+
+    const removeListeners: (() => void)[] = [];
+    let settled = false;
+
+    const settle = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      removeListeners.forEach((r) => r());
+      removeListeners.length = 0;
+      if (error) reject(error);
+      else resolve();
+    };
+
+    const on = (type: GmaAdEventType, listener: (payload: unknown) => void) => {
+      removeListeners.push(interstitial.addAdEventListener(type, listener as never));
+    };
+
+    on(AdEventType.LOADED, () => {
+      interstitial.show().catch(() => settle());
+    });
+
+    on(AdEventType.CLOSED, () => {
+      settle();
+    });
+
+    on(AdEventType.ERROR, (payload) => {
+      settle(payload instanceof Error ? payload : new Error('Interstitial ad failed to load.'));
+    });
+
+    interstitial.load();
   });
 }

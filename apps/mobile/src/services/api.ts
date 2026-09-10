@@ -6,11 +6,11 @@ import type { ErrorResponse } from '@meal-rescue/shared-types';
  * Typed API client for the Meal Rescue backend.
  *
  * Base URL comes from EXPO_PUBLIC_API_BASE_URL. Note for local dev:
- * - iOS simulator: http://localhost:3000 works
- * - Android emulator: use http://10.0.2.2:3000 (host loopback alias)
+ * - iOS simulator: http://localhost:3010 works
+ * - Android emulator: use http://10.0.2.2:3010 (host loopback alias)
  */
 export const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000',
+  baseURL: process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3010',
   timeout: 30_000,
 });
 

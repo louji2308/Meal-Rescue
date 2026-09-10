@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,6 +19,7 @@ import { actionLine, costLine } from '../components/decision/copy';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { getAdEligibility } from '../services/ads.api';
+import { hasAdMobAppId, showInterstitialAd } from '../services/ads.service';
 import { ApiError } from '../services/api';
 import { commitDecisionSafe } from '../services/decision.api';
 import { colors, spacing } from '../theme';
@@ -50,12 +51,22 @@ export function RescueResultScreen({
   const [showMore, setShowMore] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [commitError, setCommitError] = useState<ApiError | null>(null);
+  const adShown = useRef(false);
 
   useEffect(() => {
     getAdEligibility()
       .then((eligibility) => setIsPro(eligibility.tier === 'pro'))
       .catch(() => setIsPro(false));
   }, []);
+
+  useEffect(() => {
+    if (adShown.current || isPro || !hasAdMobAppId()) return;
+    adShown.current = true;
+    const timer = setTimeout(() => {
+      showInterstitialAd('rescue-result').catch(() => {});
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [isPro]);
 
   const action: DecisionAction | undefined = initial.decision ?? chosen.candidate.actionType;
   const foods = initial.originalMeal.foods;

@@ -64,9 +64,14 @@ Thumbs.db
 
 # Local embedded PG data directory (never commit)
 pgdata/
-.local\db
+.local/
+
+# Railway IAC pull artifacts
+.railway-config-pull-*/
+
 start
 # implementation files
 
 implementationplan.md
 implementation-v2.md
+implementation-audit-fixes.md

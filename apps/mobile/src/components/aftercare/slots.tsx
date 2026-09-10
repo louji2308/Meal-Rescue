@@ -59,9 +59,11 @@ export function SatisfactionCheckinSlot({
       if (outcome.ok) {
         setEligible(outcome.data.eligible);
         if (outcome.data.eligible && !hasOneSignalAppId()) {
+          /* eslint-disable no-console */
           console.log(
             `[dry-run] would send aftercare for rescue=${rescueId} (one check-in, cooldown respected)`,
           );
+          /* eslint-enable no-console */
           setDryRun(true);
         }
       } else {

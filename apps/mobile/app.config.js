@@ -1,7 +1,9 @@
 const EXPO_PUBLIC_ADMOB_ANDROID_APP_ID = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
 const EXPO_PUBLIC_ADMOB_IOS_APP_ID = process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID;
+const EXPO_PUBLIC_ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
 
 const admobAppId = (id) => (id && id.length > 0 ? id : undefined);
+const optionalPlugin = (plugin, config) => (config ? [plugin, config] : plugin);
 
 module.exports = {
   expo: {
@@ -46,6 +48,7 @@ module.exports = {
           optimizeAdLoading: true,
         },
       ],
+      optionalPlugin('onesignal-expo-plugin', EXPO_PUBLIC_ONESIGNAL_APP_ID ? { mode: 'production' } : undefined),
     ],
   },
 };

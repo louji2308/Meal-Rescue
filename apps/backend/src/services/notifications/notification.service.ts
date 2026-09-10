@@ -24,7 +24,7 @@ import { User } from '../../database/models/user.model';
 
 const QUIET_DEFAULT_START = 22;
 const QUIET_DEFAULT_END = 8;
-const ONESIGNAL_ENDPOINT = 'https://onesignal.com/api/v1/notifications';
+const ONESIGNAL_ENDPOINT = 'https://api.onesignal.com/notifications';
 
 export const NOTIFICATION_KINDS = ['rescue_window', 'spoiler_alert', 'generic'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -143,7 +143,8 @@ export async function sendToUser(input: SendPushInput): Promise<PushOutcome> {
         },
         body: JSON.stringify({
           app_id: env.ONESIGNAL_APP_ID,
-          include_one_user_ids: [user.id],
+          include_aliases: { external_id: [user.id] },
+          target_channel: 'push',
           headings: { en: title },
           contents: { en: body },
           data: deepLink ? { deepLink } : {},

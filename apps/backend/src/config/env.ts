@@ -79,6 +79,10 @@ const envSchema = z.object({
 
   // Monitoring
   SENTRY_DSN: z.string().optional(),
+
+  // Ad reward configuration
+  AD_REWARD_CREDITS: z.coerce.number().int().positive().default(2),
+  PRO_PASS_MINUTES: z.coerce.number().int().positive().default(60),
 });
 
 export type Env = z.infer<typeof envSchema>;

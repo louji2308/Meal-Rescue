@@ -31,8 +31,8 @@
     "firebase": "^11.7.0",
     "react": "19.2.3",
     "react-native": "0.86.2",
-    "react-native-google-mobile-ads": "^16.5.0",
-    "react-native-onesignal": "^5.5.7",
+    "react-native-google-mobile-ads": "15.8.3",
+    "react-native-onesignal": "^5.5.9",
     "react-native-purchases": "^10.7.2",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "onesignal-expo-plugin": "^2.7.1",
     "typescript": "~6.0.3"
   }
 }

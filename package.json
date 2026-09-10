@@ -49,5 +49,8 @@
     "*.{md,json,yml,yaml}": [
       "prettier --write"
     ]
+  },
+  "dependencies": {
+    "react-native-google-mobile-ads": "^15.8.3"
   }
 }

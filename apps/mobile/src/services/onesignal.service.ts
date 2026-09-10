@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Alert } from 'react-native';
 import type { NotificationClickEvent } from 'react-native-onesignal';
 
 /**
@@ -160,4 +160,57 @@ export function onAftercareNotificationClick(
   return () => os.Notifications.removeEventListener('click', listener);
 }
 
-export const onesignalPlatform = Platform.OS;
+/**
+ * Push Subscription Verification Dialog.
+ *
+ * Google requires push subscription verification to deliver notifications
+ * to Android users. When the server assigns a subscription ID, the SDK's
+ * push subscription observer fires with a non-empty value. To comply,
+ * show a dialog asking the user if they want to receive notifications,
+ * and only request permission when they tap the button.
+ *
+ * Call this once after OneSignal initialization. Returns an unsubscribe function.
+ */
+let _subscriptionVerifierUnsub: (() => void) | null = null;
+
+export function registerPushSubscriptionVerifier(): () => void {
+  if (_subscriptionVerifierUnsub) return _subscriptionVerifierUnsub;
+  if (!hasOneSignalAppId()) return () => undefined;
+
+  const os = getOneSignal();
+  if (!os) return () => undefined;
+
+  const listener = (event: { current?: { id?: string } }) => {
+    const subId = event.current?.id;
+    // Server-assigned IDs are non-empty and not prefixed with "local-"
+    if (subId && subId.length > 0 && !subId.startsWith('local-')) {
+      // Only show dialog if permission hasn't been granted yet
+      os.Notifications.getPermissionAsync()
+        .then((granted) => {
+          if (granted) return;
+          Alert.alert(
+            'Meal Rescue',
+            'Would you like to receive meal rescue reminders and updates?',
+            [
+              { text: 'Not now', style: 'cancel' },
+              {
+                text: 'Yes',
+                onPress: () => {
+                  void os.Notifications.requestPermission(true);
+                },
+              },
+            ],
+            { cancelable: false },
+          );
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  os.User.pushSubscription.addEventListener('change', listener);
+  _subscriptionVerifierUnsub = () => {
+    os.User.pushSubscription.removeEventListener('change', listener);
+    _subscriptionVerifierUnsub = null;
+  };
+  return _subscriptionVerifierUnsub;
+}

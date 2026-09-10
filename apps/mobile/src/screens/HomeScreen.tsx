@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
+import { hasAdMobAppId, showInterstitialAd } from '../services/ads.service';
 import { useAuthStore } from '../stores/auth.store';
+import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
 
 /**
@@ -17,8 +19,19 @@ import { colors, spacing, typography } from '../theme';
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const user = useAuthStore((state) => state.user);
+  const isPro = useMonetization((state) => state.isPro);
   const { phase, tint } = useDayPhase();
   const background = phase === 'night' ? colors.background : tint;
+  const adShown = useRef(false);
+
+  useEffect(() => {
+    if (adShown.current || isPro || !hasAdMobAppId()) return;
+    adShown.current = true;
+    const timer = setTimeout(() => {
+      showInterstitialAd('home-open').catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [isPro]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>

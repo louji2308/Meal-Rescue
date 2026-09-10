@@ -29,6 +29,7 @@ const VALUE_PROPS = [
 const STATIC_PRICING = [
   { id: 'monthly', title: 'Monthly', price: '$4.99 / month' },
   { id: 'annual', title: 'Annual', price: '$39.99 / year' },
+  { id: 'lifetime', title: 'Lifetime', price: '$79.99' },
 ];
 
 /**
@@ -106,9 +107,7 @@ export function PaywallScreen() {
       if (claim.granted && claim.proPassUntil) {
         await refresh();
         void useMonetization.getState().refresh();
-        setPassNote(
-          `You've got Pro free until ${new Date(claim.proPassUntil).toLocaleTimeString()}.`,
-        );
+        setPassNote(`You've got Pro free until ${new Date(claim.proPassUntil).toLocaleString()}.`);
       } else {
         setPassNote('Ad not counted this time - try again?');
       }

@@ -12,6 +12,7 @@ import {
   logInToOneSignal,
   logOutFromOneSignal,
   onAftercareNotificationClick,
+  registerPushSubscriptionVerifier,
 } from './src/services/onesignal.service';
 import {
   configurePurchasesIfReady,
@@ -52,6 +53,7 @@ export default function App() {
   useEffect(() => {
     void hydrate();
     initializeOneSignalIfConfigured();
+    registerPushSubscriptionVerifier();
     void initializeAdsIfConfigured();
   }, [hydrate]);
 

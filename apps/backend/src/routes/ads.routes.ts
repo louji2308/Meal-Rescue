@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { RATE_LIMITS } from '../config/constants';
+import { env } from '../config/env';
 import { User } from '../database/models/user.model';
 import { AppError, ErrorCategory } from '../lib/errors';
 import {
@@ -17,8 +18,8 @@ const claimSchema = z.object({
   adTransactionId: z.string().min(8).max(255),
 });
 
-const FUEL_CREDITS = 2;
-const PRO_PASS_MINUTES = 60;
+const FUEL_CREDITS = env.AD_REWARD_CREDITS;
+const PRO_PASS_MINUTES = env.PRO_PASS_MINUTES;
 
 /**
  * Ads eligibility + reward claims.
