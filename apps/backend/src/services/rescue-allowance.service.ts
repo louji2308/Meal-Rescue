@@ -55,6 +55,7 @@ export async function consumeRescueAllowance(
 
   if ((user.rescueCredits ?? 0) > 0) {
     await user.decrement('rescueCredits');
+    await user.reload();
     return { allowed: true };
   }
 
@@ -110,7 +111,14 @@ export async function grantProPass(
   minutes: number,
 ): Promise<boolean> {
   if (!(await claimOnce(userId, `propass:${txId}`))) return false;
-  const until = new Date(Date.now() + minutes * 60_000);
+  const user = await User.findByPk(userId);
+  if (!user) return false;
+
+  const now = Date.now();
+  const base =
+    user.proPassUntil && user.proPassUntil.getTime() > now ? user.proPassUntil.getTime() : now;
+  const until = new Date(base + minutes * 60_000);
+
   await User.update({ proPassUntil: until }, { where: { id: userId } });
   return true;
 }

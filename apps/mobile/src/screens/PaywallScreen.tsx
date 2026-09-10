@@ -8,6 +8,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywallNudge } from '../hooks/usePaywallNudge';
 import { claimProPass } from '../services/ads.api';
+import { syncSubscription } from '../services/ads.api';
 import { hasAdMobAppId, showRewardedAd } from '../services/ads.service';
 import { toApiError } from '../services/api';
 import {
@@ -39,8 +40,9 @@ const STATIC_PRICING = [
  */
 export function PaywallScreen() {
   const navigation = useNavigation();
-  const { isPro, refresh } = useEntitlement();
+  const { refresh: refreshEntitlement } = useEntitlement();
   const nudge = usePaywallNudge();
+  const isPro = useMonetization((state) => state.isPro);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
@@ -71,7 +73,10 @@ export function PaywallScreen() {
         return;
       }
       await purchasePackage(target);
-      await refresh();
+      // Sync RevenueCat entitlement → backend DB so Profile/Home see pro
+      await syncSubscription().catch(() => {});
+      await refreshEntitlement();
+      void useMonetization.getState().refresh();
       navigation.goBack();
     } catch (err) {
       setError(toApiError(err));
@@ -87,7 +92,12 @@ export function PaywallScreen() {
     try {
       const ok = await restorePurchases();
       setRestoredNote(ok ? 'Purchases restored.' : 'Nothing to restore yet.');
-      if (ok) await refresh();
+      if (ok) {
+        // Sync RevenueCat entitlement → backend DB so Profile/Home see pro
+        await syncSubscription().catch(() => {});
+        await refreshEntitlement();
+        void useMonetization.getState().refresh();
+      }
     } finally {
       setBusy(false);
     }
@@ -105,7 +115,7 @@ export function PaywallScreen() {
       const txId = await showRewardedAd('pro-pass');
       const claim = await claimProPass(txId);
       if (claim.granted && claim.proPassUntil) {
-        await refresh();
+        await refreshEntitlement();
         void useMonetization.getState().refresh();
         setPassNote(`You've got Pro free until ${new Date(claim.proPassUntil).toLocaleString()}.`);
       } else {

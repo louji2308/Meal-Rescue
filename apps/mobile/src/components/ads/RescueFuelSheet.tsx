@@ -31,6 +31,8 @@ export function RescueFuelSheet({
   onGoPro,
 }: RescueFuelSheetProps) {
   const [credits, setCredits] = useState<number | null>(null);
+  const [canWatchRescueFuel, setCanWatchRescueFuel] = useState(true);
+  const [canWatchProPass, setCanWatchProPass] = useState(true);
   const [proPassUntil, setProPassUntil] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -41,6 +43,8 @@ export function RescueFuelSheet({
     getAdEligibility()
       .then((eligibility) => {
         setCredits(eligibility.rescueCredits);
+        setCanWatchRescueFuel(eligibility.canWatchRescueFuel);
+        setCanWatchProPass(eligibility.canWatchProPass);
         if (eligibility.tier === 'pro') {
           setNote('You already have full access - just keep going.');
         }
@@ -116,17 +120,19 @@ export function RescueFuelSheet({
             accessibilityLabel="Watch a short ad for two extra rescues"
             style={styles.option}
             activeOpacity={0.8}
-            disabled={busy || proPassUntil !== null}
+            disabled={busy || !canWatchRescueFuel || proPassUntil !== null}
             onPress={() => void handleWatchForCredits()}
           >
             <View style={styles.optionTextWrap}>
               <Text style={styles.optionTitle}>Watch a short ad</Text>
-              <Text style={styles.optionBody}>+2 extra rescues for today</Text>
+              <Text style={styles.optionBody}>
+                {!canWatchRescueFuel ? 'No more ads available today' : '+2 extra rescues for today'}
+              </Text>
             </View>
             {credits !== null && credits > 0 && <Text style={styles.creditBadge}>{credits}</Text>}
           </TouchableOpacity>
 
-          {!proPassUntil && (
+          {canWatchProPass && !proPassUntil && (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Try Pro free for one hour"

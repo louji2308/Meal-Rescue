@@ -23,6 +23,7 @@ import { notificationRoutes } from './routes/notification.routes';
 import { pantryRoutes } from './routes/pantry.routes';
 import { rescueRoutes } from './routes/rescue.routes';
 import { satisfactionRoutes } from './routes/satisfaction.routes';
+import { subscriptionRoutes } from './routes/subscription.routes';
 import { userRoutes } from './routes/user.routes';
 import { webhookRoutes } from './routes/webhook.routes';
 
@@ -137,6 +138,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fridgeRoutes, { prefix: '/api/v1/fridge' });
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
   await app.register(adsRoutes, { prefix: '/api/v1/ads' });
+  await app.register(subscriptionRoutes, { prefix: '/api/v1' });
   await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
   await app.register(webhookRoutes, { prefix: '/api/v1' });
 

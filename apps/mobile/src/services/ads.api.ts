@@ -27,3 +27,13 @@ export async function claimProPass(adTransactionId: string): Promise<ProPassClai
   });
   return res.data;
 }
+
+/**
+ * Sync subscription tier from RevenueCat to the backend.
+ * Call after purchase, restore, or on app start to ensure the backend's
+ * subscription_tier matches RevenueCat's entitlement state.
+ */
+export async function syncSubscription(): Promise<{ tier: 'free' | 'pro' }> {
+  const res = await api.post<{ tier: 'free' | 'pro' }>('/api/v1/subscription/sync');
+  return res.data;
+}

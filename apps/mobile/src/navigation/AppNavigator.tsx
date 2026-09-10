@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
@@ -23,7 +22,6 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { IntentScreen } from '../screens/IntentScreen';
 import { LeftoverAlchemistScreen } from '../screens/LeftoverAlchemistScreen';
 import { LoginScreen } from '../screens/LoginScreen';
-import { MealCompletionOnboardingScreen } from '../screens/MealCompletionOnboardingScreen';
 import { PantryScreen } from '../screens/PantryScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -31,8 +29,8 @@ import { RealityScreen } from '../screens/RealityScreen';
 import { RescueLoadingScreen } from '../screens/RescueLoadingScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
-import { ScrapsIntroScreen } from '../screens/ScrapsIntroScreen';
 import { TasteJournalScreen } from '../screens/TasteJournalScreen';
+import { syncSubscription } from '../services/ads.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useMonetization } from '../stores/monetization.store';
 import { colors } from '../theme';
@@ -68,16 +66,9 @@ export type RootStackParamList = {
   TasteJournal: undefined;
 };
 
-const SCRAPS_INTRO_KEY = 'meal-rescue/scraps-intro-seen';
-const ONBOARDING_KEY = 'meal-rescue/completion-onboarding-done';
-
-function HomeStack({
-  initialRouteName = 'HomeMain',
-}: {
-  initialRouteName?: 'HomeMain' | 'Capture';
-}) {
+function HomeStack() {
   return (
-    <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen name="Capture" component={CaptureScreen} />
       <Stack.Screen name="Review" component={ReviewScreen} />
@@ -103,14 +94,20 @@ const TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> 
 /**
  * 5 tabs for Phase 5: Rescue (core loop), Fridge Negotiator, Leftover Alchemist, Pantry, Profile
  */
-function AuthenticatedTabs({ initialHome = 'HomeMain' }: { initialHome?: 'HomeMain' | 'Capture' }) {
+function AuthenticatedTabs() {
   const isPro = useMonetization((state) => state.isPro);
   const refreshTier = useMonetization((state) => state.refresh);
 
   useEffect(() => {
+    // Sync RevenueCat entitlement → backend on every app start / foreground
+    // so the DB stays in sync even if webhooks are slow or missed.
+    void syncSubscription().catch(() => {});
     void refreshTier();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void refreshTier();
+      if (state === 'active') {
+        void syncSubscription().catch(() => {});
+        void refreshTier();
+      }
     });
     return () => sub.remove();
   }, [refreshTier]);
@@ -139,7 +136,7 @@ function AuthenticatedTabs({ initialHome = 'HomeMain' }: { initialHome?: 'HomeMa
       })}
     >
       <Tab.Screen name="Home" options={{ title: 'Rescue' }}>
-        {() => <HomeStack initialRouteName={initialHome} />}
+        {() => <HomeStack />}
       </Tab.Screen>
       <Tab.Screen
         name="FridgeNegotiator"
@@ -160,63 +157,23 @@ function AuthenticatedTabs({ initialHome = 'HomeMain' }: { initialHome?: 'HomeMa
 export function AppNavigator() {
   const token = useAuthStore((state) => state.token);
   const hydrated = useAuthStore((state) => state.hydrated);
-  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
-  const [initialHome, setInitialHome] = useState<'HomeMain' | 'Capture'>('HomeMain');
-  // Brand-new users are walked through the meal-completion onboarding right after
-  // the Scraps intro; returning users who already passed onboarding never get it.
-  const [justOnboarded, setJustOnboarded] = useState(false);
-  const [onboardingDone, setOnboardingDone] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    AsyncStorage.getItem(SCRAPS_INTRO_KEY).then((value) => {
-      if (mounted) setIntroSeen(value === 'true');
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  function finishIntro(destination: 'home' | 'capture') {
-    AsyncStorage.setItem(SCRAPS_INTRO_KEY, 'true');
-    setInitialHome(destination === 'capture' ? 'Capture' : 'HomeMain');
-    setIntroSeen(true);
-    setJustOnboarded(true);
-  }
-
-  function finishOnboarding(skipped: boolean) {
-    AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    setOnboardingDone(true);
-    if (skipped) {
-      setInitialHome('HomeMain');
-      setIntroSeen(true);
-    }
-  }
-
-  if (!hydrated || (token && introSeen === null)) {
+  if (!hydrated) {
     return null;
   }
 
   return (
     <NavigationContainer ref={navigationRef}>
       {token ? (
-        !introSeen ? (
-          <ScrapsIntroScreen onFinish={finishIntro} />
-        ) : justOnboarded && !onboardingDone ? (
-          <MealCompletionOnboardingScreen onComplete={finishOnboarding} />
-        ) : (
-          <RootStack.Navigator screenOptions={{ headerShown: false }}>
-            <RootStack.Screen name="Tabs">
-              {() => <AuthenticatedTabs initialHome={initialHome} />}
-            </RootStack.Screen>
-            <RootStack.Screen
-              name="Paywall"
-              component={PaywallScreen}
-              options={{ presentation: 'modal' }}
-            />
-            <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
-          </RootStack.Navigator>
-        )
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="Tabs">{() => <AuthenticatedTabs />}</RootStack.Screen>
+          <RootStack.Screen
+            name="Paywall"
+            component={PaywallScreen}
+            options={{ presentation: 'modal' }}
+          />
+          <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
+        </RootStack.Navigator>
       ) : (
         <LoginScreen />
       )}

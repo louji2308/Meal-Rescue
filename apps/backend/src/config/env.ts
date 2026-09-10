@@ -43,6 +43,11 @@ const envSchema = z.object({
   // boot without it; the webhook route rejects requests when unset.
   REVENUECAT_WEBHOOK_SECRET: z.string().optional(),
 
+  // RevenueCat V1 REST API secret key (sk_...) for server-to-server
+  // entitlement verification. Optional so dev/test boot without it;
+  // the sync endpoint returns 503 when unset.
+  REVENUECAT_API_KEY: z.string().optional(),
+
   // OneSignal push engagement engine. Optional - when either value is
   // empty/unset the engine stays in dry-run mode: scheduling, quiet hours
   // and the dedupe ledger still run, but nothing leaves the server.

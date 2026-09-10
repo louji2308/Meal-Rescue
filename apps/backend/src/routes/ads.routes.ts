@@ -62,13 +62,15 @@ export async function adsRoutes(app: FastifyInstance): Promise<void> {
       user.id,
       startOfLocalDay(user.tzOffsetMinutes ?? 0),
     );
+    const adCapLeft = await hasAdCapLeft(user);
+    const hasActiveProPass = user.proPassUntil != null && user.proPassUntil.getTime() > Date.now();
     return {
       tier,
       rescuesToday,
       dailyLimit: RATE_LIMITS.free.rescuesPerDay,
       rescueCredits: user.rescueCredits ?? 0,
-      canWatchRescueFuel: true,
-      canWatchProPass: true,
+      canWatchRescueFuel: adCapLeft && !hasActiveProPass,
+      canWatchProPass: adCapLeft && !hasActiveProPass,
     };
   });
 
@@ -120,6 +122,16 @@ export async function adsRoutes(app: FastifyInstance): Promise<void> {
         statusCode: 429,
         recoverable: true,
         suggestedAction: 'Upgrade to Pro for unlimited rescues',
+      });
+    }
+    const hasActiveProPass = user.proPassUntil != null && user.proPassUntil.getTime() > Date.now();
+    if (hasActiveProPass) {
+      throw new AppError({
+        category: ErrorCategory.FORBIDDEN,
+        code: 'ALREADY_PRO_PASS',
+        message: 'You already have an active Pro pass',
+        statusCode: 403,
+        recoverable: false,
       });
     }
     const granted = await grantProPass(user.id, parsed.data.adTransactionId, PRO_PASS_MINUTES);
