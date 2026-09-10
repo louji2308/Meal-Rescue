@@ -28,7 +28,6 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder --chown=app:app /app/node_modules ./node_modules
 COPY --from=builder --chown=app:app /app/packages/shared-types/dist ./node_modules/@meal-rescue/shared-types/dist
 COPY --from=builder --chown=app:app /app/packages/shared-types/package.json ./node_modules/@meal-rescue/shared-types/package.json
-COPY --from=builder --chown=app:app /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=builder --chown=app:app /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder --chown=app:app /app/apps/backend/package.json ./apps/backend/package.json
 
