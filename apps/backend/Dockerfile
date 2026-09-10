@@ -17,7 +17,6 @@ COPY apps/backend apps/backend
 
 RUN npm run build --workspace @meal-rescue/shared-types \
   && npm run build --workspace @meal-rescue/backend \
-  && ls -la apps/backend/dist/ \
   && npm prune --omit=dev --workspace @meal-rescue/backend
 
 FROM node:20-alpine AS runner
@@ -38,4 +37,4 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD wget -qO- http://localhost:3010/health || exit 1
 
-CMD ["node", "apps/backend/dist/server.js"]
+CMD ["node", "apps/backend/dist/src/server.js"]
