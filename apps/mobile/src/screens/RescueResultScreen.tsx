@@ -64,7 +64,7 @@ export function RescueResultScreen({
     adShown.current = true;
     const timer = setTimeout(() => {
       showInterstitialAd('rescue-result').catch(() => {});
-    }, 2000);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [isPro]);
 

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -41,12 +40,12 @@ export function FeedbackScreen() {
 
   const options: Array<{
     value: FeedbackRequest['satisfaction'];
-    icon: keyof typeof Ionicons.glyphMap;
+    emoji: string;
     label: string;
   }> = [
-    { value: 'better', icon: 'happy-outline', label: 'Better' },
-    { value: 'same', icon: 'remove-outline', label: 'About the same' },
-    { value: 'not_for_me', icon: 'sad-outline', label: 'Not for me' },
+    { value: 'better', emoji: '😊', label: 'Better' },
+    { value: 'same', emoji: '😐', label: 'About the same' },
+    { value: 'not_for_me', emoji: '😕', label: 'Not for me' },
   ];
 
   async function handleSubmit() {
@@ -91,7 +90,7 @@ export function FeedbackScreen() {
                 activeOpacity={0.8}
                 onPress={() => setSatisfaction(opt.value)}
               >
-                <Ionicons name={opt.icon} size={32} color={colors.text} style={styles.emoji} />
+                <Text style={styles.emoji}>{opt.emoji}</Text>
                 <Text
                   style={[
                     styles.optionLabel,

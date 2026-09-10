@@ -21,6 +21,20 @@ export function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const isPro = useMonetization((state) => state.isPro);
   const { phase, tint } = useDayPhase();
+
+  const greeting = (() => {
+    const name = user?.email.split('@')[0] ?? '';
+    switch (phase) {
+      case 'morning':
+        return `Good morning, ${name}`;
+      case 'afternoon':
+        return `Good afternoon, ${name}`;
+      case 'evening':
+        return `Good evening, ${name}`;
+      case 'night':
+        return `Hey ${name}, late night snack?`;
+    }
+  })();
   const background = phase === 'night' ? colors.background : tint;
   const adShown = useRef(false);
 
@@ -43,9 +57,7 @@ export function HomeScreen() {
           accessible
           accessibilityLabel="Scraps the rescue cat"
         />
-        <Text style={[typography.caption, styles.greeting]}>
-          {user ? `Hi ${user.email.split('@')[0]}` : ' '}
-        </Text>
+        <Text style={[typography.caption, styles.greeting]}>{user ? greeting : ' '}</Text>
         <Text style={[typography.title, styles.question]}>I have food. What do I do with it?</Text>
 
         <Text style={[typography.body, styles.subtitle]}>

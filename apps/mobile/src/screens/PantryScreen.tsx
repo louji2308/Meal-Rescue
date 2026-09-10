@@ -270,7 +270,7 @@ export function PantryScreen() {
             <Text style={styles.emptyText}>
               {snapBusy
                 ? 'Scraps is scanning your shelf…'
-                : 'Snap what you have on hand and I will stock it for you. Or tap a few staples to get going.'}
+                : 'Snap what you have on hand and I will stock it for you.'}
             </Text>
             <View style={styles.emptyActions}>
               <PrimaryButton

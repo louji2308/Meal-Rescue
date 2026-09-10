@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -51,6 +53,15 @@ export function LoginScreen() {
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <View style={styles.logoWrap}>
+          <Image
+            source={require('../../assets/home-cat.png')}
+            style={styles.cat}
+            resizeMode="contain"
+            accessible
+            accessibilityLabel="Scraps the rescue cat"
+          />
+        </View>
         <Text style={[typography.title, styles.title]}>Meal Rescue</Text>
         <Text style={[typography.body, styles.subtitle]}>
           The smallest change that makes your meal better.
@@ -119,6 +130,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: spacing.lg,
+  },
+  logoWrap: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  cat: {
+    width: 120,
+    height: 105,
   },
   title: {
     textAlign: 'center',

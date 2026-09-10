@@ -295,7 +295,7 @@ export function CaptureScreen() {
           </TouchableOpacity>
 
           {(text.trim() || image) && !busy && (
-            <PrimaryButton label="Understand my meal" onPress={() => void handleAnalyze()} />
+            <PrimaryButton label="Let's see what we can do" onPress={() => void handleAnalyze()} />
           )}
           {busy && <ScanningLoader mealText={image ? null : text} />}
         </ScrollView>

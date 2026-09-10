@@ -115,7 +115,7 @@ export function TasteJournalScreen() {
           style={styles.backRow}
         >
           <Ionicons name="arrow-back" size={20} color={colors.text} />
-          <Text style={styles.backText}>Profile</Text>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
         <View style={styles.hero}>
