@@ -275,7 +275,16 @@ export type TasteContextType =
   | 'addition_satisfaction'
   | 'addition_modification'
   | 'addition_exploration'
-  | 'addition_x_meal_group';
+  | 'addition_x_meal_group'
+  | 'sensory_flavor'
+  | 'sensory_texture'
+  | 'sensory_temperature'
+  | 'sensory_intensity'
+  | 'treatment'
+  | 'role'
+  | 'modification_magnitude'
+  | 'preservation_preference'
+  | 'novelty_tolerance';
 
 export type MemorySource = 'feedback' | 'accept' | 'swap' | 'reject' | 'profile' | 'cold_start';
 

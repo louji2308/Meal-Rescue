@@ -19,6 +19,8 @@ import { Rescue } from '../database/models/rescue.model';
 import { SatisfactionRecordModel } from '../database/models/satisfaction-record.model';
 import { TasteCombination } from '../database/models/taste-combination.model';
 import { TasteEvent } from '../database/models/taste-event.model';
+import { TasteSensoryPreference } from '../database/models/taste-sensory-preference.model';
+import { TasteTreatmentPreference } from '../database/models/taste-treatment-preference.model';
 import { TasteExposure } from '../database/models/taste-exposure.model';
 import { TasteMemory } from '../database/models/taste-memory.model';
 import { User } from '../database/models/user.model';
@@ -69,6 +71,8 @@ const models = {
   TasteEvent,
   TasteExposure,
   TasteCombination,
+  TasteSensoryPreference,
+  TasteTreatmentPreference,
   AdditionEvent,
   SatisfactionRecord: SatisfactionRecordModel,
   DecisionEvent,
