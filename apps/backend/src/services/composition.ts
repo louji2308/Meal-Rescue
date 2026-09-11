@@ -38,6 +38,9 @@ import { TasteExposureService } from './taste-exposure.service';
 import { TasteMemoryService } from './taste-memory.service';
 import { TasteSensoryService } from './taste-sensory.service';
 import { TasteTreatmentService } from './taste-treatment.service';
+import { CuisineCompatibilityService } from './cuisine-compatibility.service';
+import { ModificationMagnitudeService } from './modification-magnitude.service';
+import { ContextSignalService } from './context-signal.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
 import { DecisionService } from './v2/decision.service';
@@ -90,6 +93,9 @@ export function buildServices(redis: Redis | null): {
   tasteExposure: TasteExposureService;
   tasteSensory: TasteSensoryService;
   tasteTreatment: TasteTreatmentService;
+  cuisineCompatibility: CuisineCompatibilityService;
+  modificationMagnitude: ModificationMagnitudeService;
+  contextSignal: typeof ContextSignalService;
   pantry: PantryService;
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
@@ -104,6 +110,8 @@ export function buildServices(redis: Redis | null): {
   const tasteExposure = new TasteExposureService(models);
   const tasteSensory = new TasteSensoryService(models);
   const tasteTreatment = new TasteTreatmentService(models);
+  const cuisineCompatibility = new CuisineCompatibilityService(models);
+  const modificationMagnitude = new ModificationMagnitudeService(models);
   const mealCompletion = new MealCompletionService(models);
   const decisionEvents = new DecisionEventService(models);
   return {
@@ -122,6 +130,9 @@ export function buildServices(redis: Redis | null): {
     tasteExposure,
     tasteSensory,
     tasteTreatment,
+    cuisineCompatibility,
+    modificationMagnitude,
+    contextSignal: ContextSignalService,
     mealCompletion,
     satisfaction: new SatisfactionService(models),
     aftercare: new AftercareService(models),
