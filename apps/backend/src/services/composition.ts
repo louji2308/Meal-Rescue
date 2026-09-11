@@ -31,6 +31,7 @@ import { MealCompletionService } from './meal-completion.service';
 import { PantryService } from './pantry.service';
 import { PreferenceLearningService } from './preference-learning.service';
 import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.service';
+import { TasteEventService } from './taste-event.service';
 import { TasteMemoryService } from './taste-memory.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
@@ -78,6 +79,7 @@ export function buildServices(redis: Redis | null): {
   feedback: FeedbackService;
   preferenceLearning: PreferenceLearningService;
   tasteMemory: TasteMemoryService;
+  tasteEvents: TasteEventService;
   pantry: PantryService;
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
@@ -88,6 +90,7 @@ export function buildServices(redis: Redis | null): {
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
+  const tasteEvents = new TasteEventService(models);
   const mealCompletion = new MealCompletionService(models);
   const decisionEvents = new DecisionEventService(models);
   return {
@@ -102,6 +105,7 @@ export function buildServices(redis: Redis | null): {
     feedback: new FeedbackService(models),
     preferenceLearning: new PreferenceLearningService(models),
     tasteMemory,
+    tasteEvents,
     mealCompletion,
     satisfaction: new SatisfactionService(models),
     aftercare: new AftercareService(models),
