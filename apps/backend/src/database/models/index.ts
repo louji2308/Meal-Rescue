@@ -14,6 +14,7 @@ import {
   defineSatisfactionRecordModel,
 } from './satisfaction-record.model';
 import { TasteEvent, defineTasteEventModel } from './taste-event.model';
+import { TasteExposure, defineTasteExposureModel } from './taste-exposure.model';
 import { TasteMemory, defineTasteMemoryModel } from './taste-memory.model';
 import { User, defineUserModel } from './user.model';
 
@@ -28,6 +29,7 @@ export interface DbModels {
   NotificationLog: typeof NotificationLog;
   TasteMemory: typeof TasteMemory;
   TasteEvent: typeof TasteEvent;
+  TasteExposure: typeof TasteExposure;
   AdditionEvent: typeof AdditionEvent;
   SatisfactionRecord: typeof SatisfactionRecordModel;
   DecisionEvent: typeof DecisionEvent;
@@ -54,6 +56,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     NotificationLog: defineNotificationLogModel(sequelize),
     TasteMemory: defineTasteMemoryModel(sequelize),
     TasteEvent: defineTasteEventModel(sequelize),
+    TasteExposure: defineTasteExposureModel(sequelize),
     AdditionEvent: defineAdditionEventModel(sequelize),
     SatisfactionRecord: defineSatisfactionRecordModel(sequelize),
     DecisionEvent: defineDecisionEventModel(sequelize),
@@ -112,6 +115,13 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
+  models.User.hasMany(models.TasteExposure, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.TasteExposure.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
   models.User.hasMany(models.AdditionEvent, {
     foreignKey: { name: 'userId', allowNull: false },
   });
@@ -153,6 +163,7 @@ export const dbModels = {
   NotificationLog,
   TasteMemory,
   TasteEvent,
+  TasteExposure,
   AdditionEvent,
   SatisfactionRecord: SatisfactionRecordModel,
   DecisionEvent,
