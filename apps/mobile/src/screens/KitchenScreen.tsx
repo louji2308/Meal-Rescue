@@ -513,7 +513,12 @@ export function KitchenScreen() {
     const activeItems = items.filter((i) => i.state !== 'gone');
 
     return (
-      <View style={styles.manageContent}>
+      <ScrollView
+        style={styles.manageContent}
+        contentContainerStyle={styles.manageScrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <ErrorBanner error={error} />
 
         {/* Add item form */}
@@ -568,7 +573,7 @@ export function KitchenScreen() {
         )}
 
         {/* Items list */}
-        {activeItems.length === 0 ? (
+        {activeItems.length === 0 && !showAdd ? (
           <View style={styles.emptyState}>
             <Ionicons name="file-tray-outline" size={48} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>Nothing here yet</Text>
@@ -577,15 +582,9 @@ export function KitchenScreen() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={activeItems}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          />
+          activeItems.map((item) => renderItem({ item }))
         )}
-      </View>
+      </ScrollView>
     );
   }
 
@@ -740,7 +739,10 @@ const styles = StyleSheet.create({
   },
   manageContent: {
     flex: 1,
+  },
+  manageScrollContent: {
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   loadingCenter: {
     flex: 1,
