@@ -36,6 +36,8 @@ import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.se
 import { TasteEventService } from './taste-event.service';
 import { TasteExposureService } from './taste-exposure.service';
 import { TasteMemoryService } from './taste-memory.service';
+import { TasteSensoryService } from './taste-sensory.service';
+import { TasteTreatmentService } from './taste-treatment.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
 import { DecisionService } from './v2/decision.service';
@@ -86,6 +88,8 @@ export function buildServices(redis: Redis | null): {
   tasteMemory: TasteMemoryService;
   tasteEvents: TasteEventService;
   tasteExposure: TasteExposureService;
+  tasteSensory: TasteSensoryService;
+  tasteTreatment: TasteTreatmentService;
   pantry: PantryService;
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
@@ -98,6 +102,8 @@ export function buildServices(redis: Redis | null): {
   const tasteMemory = new TasteMemoryService(models);
   const tasteEvents = new TasteEventService(models);
   const tasteExposure = new TasteExposureService(models);
+  const tasteSensory = new TasteSensoryService(models);
+  const tasteTreatment = new TasteTreatmentService(models);
   const mealCompletion = new MealCompletionService(models);
   const decisionEvents = new DecisionEventService(models);
   return {
@@ -114,6 +120,8 @@ export function buildServices(redis: Redis | null): {
     tasteMemory,
     tasteEvents,
     tasteExposure,
+    tasteSensory,
+    tasteTreatment,
     mealCompletion,
     satisfaction: new SatisfactionService(models),
     aftercare: new AftercareService(models),
