@@ -13,6 +13,7 @@ import {
   SatisfactionRecordModel,
   defineSatisfactionRecordModel,
 } from './satisfaction-record.model';
+import { TasteEvent, defineTasteEventModel } from './taste-event.model';
 import { TasteMemory, defineTasteMemoryModel } from './taste-memory.model';
 import { User, defineUserModel } from './user.model';
 
@@ -26,6 +27,7 @@ export interface DbModels {
   RescueCreditGrant: typeof RescueCreditGrant;
   NotificationLog: typeof NotificationLog;
   TasteMemory: typeof TasteMemory;
+  TasteEvent: typeof TasteEvent;
   AdditionEvent: typeof AdditionEvent;
   SatisfactionRecord: typeof SatisfactionRecordModel;
   DecisionEvent: typeof DecisionEvent;
@@ -51,6 +53,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     RescueCreditGrant: defineRescueCreditGrantModel(sequelize),
     NotificationLog: defineNotificationLogModel(sequelize),
     TasteMemory: defineTasteMemoryModel(sequelize),
+    TasteEvent: defineTasteEventModel(sequelize),
     AdditionEvent: defineAdditionEventModel(sequelize),
     SatisfactionRecord: defineSatisfactionRecordModel(sequelize),
     DecisionEvent: defineDecisionEventModel(sequelize),
@@ -102,6 +105,13 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
+  models.User.hasMany(models.TasteEvent, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.TasteEvent.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
   models.User.hasMany(models.AdditionEvent, {
     foreignKey: { name: 'userId', allowNull: false },
   });
@@ -142,6 +152,7 @@ export const dbModels = {
   RescueCreditGrant,
   NotificationLog,
   TasteMemory,
+  TasteEvent,
   AdditionEvent,
   SatisfactionRecord: SatisfactionRecordModel,
   DecisionEvent,

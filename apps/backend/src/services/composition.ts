@@ -17,6 +17,7 @@ import { Preference } from '../database/models/preference.model';
 import { RescueCreditGrant } from '../database/models/rescue-credit-grant.model';
 import { Rescue } from '../database/models/rescue.model';
 import { SatisfactionRecordModel } from '../database/models/satisfaction-record.model';
+import { TasteEvent } from '../database/models/taste-event.model';
 import { TasteMemory } from '../database/models/taste-memory.model';
 import { User } from '../database/models/user.model';
 import { createLlmClient } from './ai/llm-factory';
@@ -61,6 +62,7 @@ const models = {
   RescueCreditGrant,
   NotificationLog,
   TasteMemory,
+  TasteEvent,
   AdditionEvent,
   SatisfactionRecord: SatisfactionRecordModel,
   DecisionEvent,
