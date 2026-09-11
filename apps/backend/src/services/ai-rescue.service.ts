@@ -11,7 +11,7 @@
 import { env } from '../config/env';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_KEY = env.OPENROUTER_API_KEY ?? '';
+const OPENROUTER_KEY = env.OPENAI_API_KEY ?? '';
 const MODEL = 'openrouter/free';
 
 export interface AiRescueRequest {
