@@ -65,6 +65,8 @@ const envSchema = z.object({
   LLM_MODEL_VERSION: z.string().optional(),
   OPENAI_VISION_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_TEXT_MODEL: z.string().default('gpt-4o-mini'),
+  // OpenRouter for Kitchen intelligence (DeepSeek V4 Flash + free vision)
+  OPENROUTER_API_KEY: z.string().optional(),
   // Explicit output cap: keeps cost predictable and satisfies providers that
   // reserve the full max_tokens against account credit at request time.
   LLM_MAX_TOKENS: z.coerce.number().int().positive().default(1500),

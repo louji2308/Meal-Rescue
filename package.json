@@ -49,5 +49,8 @@
     "*.{md,json,yml,yaml}": [
       "prettier --write"
     ]
+  },
+  "dependencies": {
+    "expo-file-system": "~57.0.6"
   }
 }

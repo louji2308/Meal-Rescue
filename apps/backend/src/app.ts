@@ -18,6 +18,7 @@ import { decisionRoutes } from './routes/decision.routes';
 import { feedbackRoutes } from './routes/feedback.routes';
 import { fridgeRoutes } from './routes/fridge.routes';
 import { leftoverRoutes } from './routes/leftover.routes';
+import { kitchenRoutes } from './routes/kitchen.routes';
 import { mealRoutes } from './routes/meal.routes';
 import { notificationRoutes } from './routes/notification.routes';
 import { pantryRoutes } from './routes/pantry.routes';
@@ -137,6 +138,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(userRoutes, { prefix: '/api/v1/user' });
   await app.register(fridgeRoutes, { prefix: '/api/v1/fridge' });
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
+  await app.register(kitchenRoutes, { prefix: '/api/v1/kitchen' });
   await app.register(adsRoutes, { prefix: '/api/v1/ads' });
   await app.register(subscriptionRoutes, { prefix: '/api/v1' });
   await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
