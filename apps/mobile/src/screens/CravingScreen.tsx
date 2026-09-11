@@ -8,7 +8,8 @@ import type { CravingProfile } from '@meal-rescue/shared-types';
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { StepShell } from '../components/decision/StepShell';
-import { CRAVING_CHIPS, cravingEmpowermentLine } from '../components/decision/copy';
+import { cravingEmpowermentLine, generateCravingChips } from '../components/decision/copy';
+import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import { useDecisionStore } from '../stores/decision.store';
@@ -25,8 +26,12 @@ export function CravingScreen() {
   const { mealId, foods } = route.params;
   const setCraving = useDecisionStore((state) => state.setCraving);
   const clearCraving = useDecisionStore((state) => state.clearCraving);
+  const { phase } = useDayPhase();
   const [text, setText] = useState('');
   const [chips, setChips] = useState<string[]>([]);
+
+  // Generate dynamic chips based on detected food and time of day.
+  const cravingChips = React.useMemo(() => generateCravingChips(foods, phase), [foods, phase]);
 
   const hasAnything = text.trim().length > 0 || chips.length > 0;
 
@@ -54,7 +59,7 @@ export function CravingScreen() {
   return (
     <StepShell step="3" title="What are you craving?" subtitle={cravingEmpowermentLine()}>
       <View style={styles.chipWrap}>
-        {CRAVING_CHIPS.map((chip) => {
+        {cravingChips.map((chip) => {
           const selected = chips.includes(chip);
           return (
             <TouchableOpacity
@@ -77,7 +82,11 @@ export function CravingScreen() {
       <TextInput
         accessibilityLabel="What are you craving"
         style={styles.input}
-        placeholder="Or type it — e.g. “keep the noodles”"
+        placeholder={
+          foods[0]
+            ? `Or type it — e.g. "keep the ${foods[0].split(' ')[0]}"`
+            : "Or type what you're after"
+        }
         placeholderTextColor={colors.textSecondary}
         value={text}
         onChangeText={setText}

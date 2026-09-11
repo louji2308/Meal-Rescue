@@ -24,6 +24,12 @@ export function IntentScreen() {
 
   const mealId = analysis.mealId;
   const foods = analysis.detectedFoods.map((food) => food.name);
+  const foodSummary =
+    foods.length > 0
+      ? foods.length === 1
+        ? foods[0]
+        : foods.slice(0, -1).join(', ') + ' and ' + foods[foods.length - 1]
+      : 'your meal';
 
   return (
     <StepShell
@@ -31,6 +37,10 @@ export function IntentScreen() {
       title="What do you want right now?"
       subtitle="No wrong answers — we build from here."
     >
+      <View style={styles.foodBadge}>
+        <Text style={styles.foodBadgeText}>{foodSummary}</Text>
+      </View>
+
       <View style={styles.list}>
         {INTENT_OPTIONS.map((option) => (
           <TouchableOpacity
@@ -71,6 +81,19 @@ export function IntentScreen() {
 }
 
 const styles = StyleSheet.create({
+  foodBadge: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 20,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
+  foodBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
   list: {
     gap: spacing.sm,
   },

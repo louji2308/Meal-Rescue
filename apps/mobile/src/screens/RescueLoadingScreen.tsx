@@ -9,6 +9,7 @@ import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
+import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { generateRescueV2 } from '../services/rescue.api';
@@ -29,6 +30,7 @@ export function RescueLoadingScreen({
     params: { mealId: string; foods: string[] };
   };
 }) {
+  const { phase } = useDayPhase();
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { mealId } = route.params;
@@ -81,7 +83,17 @@ export function RescueLoadingScreen({
         {error ? (
           <PrimaryButton label="Try again" onPress={() => void runGenerate()} busy={busy} />
         ) : null}
-        <Text style={styles.foot}>{userId ? 'Made just for how you’re feeling tonight.' : ''}</Text>
+        <Text style={styles.foot}>
+          {userId
+            ? phase === 'morning'
+              ? 'Made just for how you’re starting your day.'
+              : phase === 'afternoon'
+                ? 'Made just for how your day is going.'
+                : phase === 'evening'
+                  ? 'Made just for how you’re feeling tonight.'
+                  : 'Made just for how you’re winding down.'
+            : ''}
+        </Text>
       </View>
       <RescueFuelSheet
         visible={fuelVisible}

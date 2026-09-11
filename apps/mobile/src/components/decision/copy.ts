@@ -155,16 +155,93 @@ export function whyLine(
 }
 
 /** ------------------------------------------------------------------ */
-/** Craving lock                                                         */
+/** Craving lock — dynamic chips based on detected food + time of day    */
 /** ------------------------------------------------------------------ */
 
-export const CRAVING_CHIPS = [
-  'Keep the noodles',
-  'Keep it cozy',
-  'Keep the crunch',
-  'Something warm',
-] as const;
+/**
+ * Food-category patterns for generating relevant craving chips.
+ * Each entry: [regex to match food name, chip options].
+ */
+const FOOD_CHIP_RULES: Array<{ match: RegExp; chips: string[] }> = [
+  {
+    match: /noodle|ramen|pasta|spaghetti/i,
+    chips: ['Keep the noodles', 'Add protein', 'Make it spicy', 'Add veggies'],
+  },
+  {
+    match: /toast|bread|sandwich|bagel/i,
+    chips: ['Keep the crunch', 'Add protein', 'Something fresh', 'Keep it simple'],
+  },
+  {
+    match: /rice|burrito|wrap|taco/i,
+    chips: ['Keep it warm', 'Add salsa', 'Make it fresh', 'Keep it hearty'],
+  },
+  {
+    match: /salad|greens|lettuce/i,
+    chips: ['Keep it fresh', 'Add avocado', 'Make it heartier', 'Keep it light'],
+  },
+  {
+    match: /soup|stew|broth/i,
+    chips: ['Keep it cozy', 'Add something crunchy', 'Make it richer', 'Keep it warm'],
+  },
+  {
+    match: /egg|omelette|scramble/i,
+    chips: ['Keep it simple', 'Add cheese', 'Add veggies', 'Make it heartier'],
+  },
+  {
+    match: /chicken|beef|fish|meat|steak/i,
+    chips: ['Keep it juicy', 'Add a sauce', 'Make it lighter', 'Keep it hearty'],
+  },
+  {
+    match: /pizza|pie|flatbread/i,
+    chips: ['Keep the crunch', 'Add toppings', 'Make it fresh', 'Keep it simple'],
+  },
+  {
+    match: /fruit|banana|apple|berry/i,
+    chips: ['Keep it sweet', 'Add something creamy', 'Keep it fresh', 'Make it filling'],
+  },
+  {
+    match: /cereal|oat|porridge|granola/i,
+    chips: ['Keep it warm', 'Add fruit', 'Make it crunchy', 'Keep it simple'],
+  },
+];
+
+/** Default chips when no food pattern matches. */
+const DEFAULT_CHIPS = ['Keep it as is', 'Add protein', 'Something fresh', 'Keep it simple'];
+
+/** Time-of-day extra chip (appended when relevant). */
+const TIME_CHIPS: Record<string, string> = {
+  morning: 'Quick & easy',
+  afternoon: 'Something light',
+  evening: 'Make it cozy',
+  night: 'Keep it warm',
+};
+
+/**
+ * Generate 4 dynamic craving chips based on what the user actually showed us.
+ * Replaces the old static "Keep the noodles" list.
+ */
+export function generateCravingChips(detectedFoods: string[], phase?: string): string[] {
+  const foodText = detectedFoods.join(' ').toLowerCase();
+  let chips = DEFAULT_CHIPS;
+
+  for (const rule of FOOD_CHIP_RULES) {
+    if (rule.match.test(foodText)) {
+      chips = rule.chips;
+      break;
+    }
+  }
+
+  // Add a time-relevant chip if it's not already covered.
+  if (phase && TIME_CHIPS[phase]) {
+    const timeChip = TIME_CHIPS[phase];
+    if (!chips.includes(timeChip)) {
+      chips = [chips[0], chips[1], timeChip, chips[3]];
+    }
+  }
+
+  return chips;
+}
 
 export function cravingEmpowermentLine(): string {
-  return 'Tell us what you’re craving — we’ll keep it safe, not swap it away.';
+  return "Tell us what you're craving — we'll keep it safe, not swap it away.";
 }

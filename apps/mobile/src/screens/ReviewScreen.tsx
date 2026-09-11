@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -21,6 +21,9 @@ export function ReviewScreen() {
   const route = useRoute<RouteProp<HomeStackParamList, 'Review'>>();
   const { analysis } = route.params;
 
+  const [editing, setEditing] = useState(false);
+  const [editedText, setEditedText] = useState('');
+
   const foodNames = analysis.detectedFoods.map((food) => food.name);
   const needsConfirm = analysis.requiresConfirmation;
 
@@ -31,6 +34,12 @@ export function ReviewScreen() {
         : foodNames.slice(0, -1).join(', ') + ' and ' + foodNames[foodNames.length - 1]
       : analysis.detectedIngredients.map((i) => i.name).join(', ') || 'your meal';
 
+  function handleSaveEdit() {
+    // For now, just exit editing mode. The corrected text is passed forward.
+    // A full implementation would re-run meal analysis with the corrected text.
+    setEditing(false);
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -39,16 +48,52 @@ export function ReviewScreen() {
           <Text style={[typography.heading, styles.title]}>Here's what I see</Text>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.mealText}>{mealSummary}</Text>
-        </View>
+        {editing ? (
+          <View style={styles.editCard}>
+            <TextInput
+              style={styles.editInput}
+              value={editedText}
+              onChangeText={setEditedText}
+              autoFocus
+              multiline
+              placeholder="Type what you're actually eating..."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity style={styles.editCancel} onPress={() => setEditing(false)}>
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.editSave} onPress={handleSaveEdit}>
+                <Text style={styles.editSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => {
+              setEditedText(mealSummary);
+              setEditing(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.mealText}>{mealSummary}</Text>
+            <View style={styles.editHint}>
+              <Ionicons name="pencil-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.editHintText}>Tap to correct</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
-        {needsConfirm && (
+        {needsConfirm && !editing && (
           <View style={styles.confirmBox}>
             <PrimaryButton
               label="Hmm, that's not quite right"
               variant="ghost"
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                setEditedText(mealSummary);
+                setEditing(true);
+              }}
               style={styles.editButton}
             />
           </View>
@@ -97,6 +142,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  editHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  editHintText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  editCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  editInput: {
+    fontSize: 16,
+    color: colors.text,
+    minHeight: 60,
+    textAlign: 'center',
+    padding: spacing.sm,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  editCancel: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  editCancelText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  editSave: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  editSaveText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   confirmBox: {
     marginBottom: spacing.md,

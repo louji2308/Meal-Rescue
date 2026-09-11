@@ -54,7 +54,7 @@ import { resolveIntent } from './v2/intent-resolver';
 import { deriveReality } from './v2/reality-context';
 import { ValidationService } from './validation.service';
 
-const MAX_ALTERNATIVES = 2; // 1 recommendation + 2 alternatives = 3 choices
+const MAX_ALTERNATIVES = 4; // 1 recommendation + 4 alternatives = 5 choices total
 const RECENT_RESCUES_LIMIT = 10; // anti-fatigue window (spec §8, soft/decaying)
 const EXPIRY_WINDOW_MS = 48 * 3_600_000;
 
@@ -406,10 +406,33 @@ export function classifyAction(
 }
 
 function expiringMatchesMeal(ingredient: string, detectedFoods: DetectedFood[]): boolean {
+  const ing = ingredient.toLowerCase();
   const names = detectedFoods.map((food) => food.name.toLowerCase());
-  // Expiring produce/protein typically pairs with any noodle/rice/bowl base.
-  const base = names.find((name) => /noodle|rice|pasta|wrap|bread|bowl|potato/.test(name));
-  return Boolean(base) || names.length > 0;
+
+  // Direct match: the ingredient is already in the meal.
+  if (names.some((name) => name.includes(ing) || ing.includes(name))) return true;
+
+  // Base foods that pair well with almost any expiring ingredient.
+  const basePattern = /noodle|rice|pasta|wrap|bread|bowl|potato|toast|oat|cereal|porridge/;
+  const isBase = names.some((name) => basePattern.test(name));
+
+  // Expiring ingredients that are universally useful (pair with anything).
+  const universalPattern =
+    /cheese|milk|butter|cream|yogurt|egg|herb|sauce|dressing|lemon|lime|garlic|onion|tomato|pepper/;
+  const isUniversal = universalPattern.test(ing);
+
+  // Vegetables and proteins pair well with base foods.
+  const pairingPattern =
+    /spinach|lettuce|kale|broccoli|carrot|pea|mushroom|zucchini|pepper|bean|corn|avocado|cucumber|cabbage/;
+  const isPairing = pairingPattern.test(ing);
+
+  // If it's a base food and the ingredient pairs well, it's a match.
+  if (isBase && (isUniversal || isPairing)) return true;
+
+  // If the ingredient is universal, it's likely useful.
+  if (isUniversal) return true;
+
+  return false;
 }
 
 // Re-exported for route wiring convenience.
