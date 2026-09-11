@@ -8,7 +8,7 @@ import {
   Sequelize,
 } from 'sequelize';
 
-import { UUID } from '@meal-rescue/shared-types';
+import { PantryItemKind, UUID } from '@meal-rescue/shared-types';
 
 /**
  * Pantry table - what the user currently has at home.
@@ -24,6 +24,11 @@ export class Pantry extends Model<InferAttributes<Pantry>, InferCreationAttribut
   declare expiresAt: Date | null;
   declare lastUsedAt: Date | null;
   declare usePriority: number;
+  declare kind: CreationOptional<PantryItemKind>;
+  declare dishName: string | null;
+  declare servings: number | null;
+  declare notes: string | null;
+  declare madeAt: Date | null;
 }
 
 export function definePantryModel(sequelize: Sequelize): typeof Pantry {
@@ -69,6 +74,27 @@ export function definePantryModel(sequelize: Sequelize): typeof Pantry {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
+      },
+      kind: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'pantry',
+      },
+      dishName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      servings: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      madeAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
       },
     },
     {

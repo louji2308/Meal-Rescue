@@ -1,11 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { ErrorCategory, type PersonalizationInsight } from '@meal-rescue/shared-types';
+import {
+  CULINARY_FAMILIES,
+  CULINARY_FAMILY_OPTIONS,
+  ErrorCategory,
+  type PersonalizationInsight,
+} from '@meal-rescue/shared-types';
 
 import { User } from '../database/models/user.model';
 import { AppError } from '../lib/errors';
-import { buildServices } from '../services/composition';
+import { buildServices, dbModels } from '../services/composition';
 
 /**
  * GET /api/v1/user/preferences - learned preferences with confidence
@@ -74,7 +79,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.get('/me', async (request, reply) => {
     const userId = request.user.sub;
     const user = await User.findByPk(userId, {
-      attributes: ['id', 'email', 'subscriptionTier'],
+      attributes: ['id', 'email', 'subscriptionTier', 'onboardingCompleted'],
     });
     if (!user) {
       throw new AppError({
@@ -84,7 +89,12 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         statusCode: 404,
       });
     }
-    return reply.send({ id: user.id, email: user.email, subscriptionTier: user.subscriptionTier });
+    return reply.send({
+      id: user.id,
+      email: user.email,
+      subscriptionTier: user.subscriptionTier,
+      onboardingCompleted: user.onboardingCompleted,
+    });
   });
 
   app.get('/taste/profile', async (request, reply) => {
@@ -128,7 +138,42 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.get('/taste/onboarding', async (request, reply) => {
     const { mealCompletion } = buildServices(app.redis);
     const userId = request.user.sub;
-    const state = await mealCompletion.startOnboarding(userId);
+    const user = await User.findByPk(userId, {
+      attributes: ['onboardingCompleted'],
+    });
+    const state = await mealCompletion.startOnboarding(
+      userId,
+      user?.onboardingCompleted ?? false,
+    );
+    return reply.send(state);
+  });
+
+  app.post('/taste/onboarding/cuisines', async (request, reply) => {
+    const { mealCompletion, tasteMemory } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const parsed = z
+      .object({
+        cuisines: z.array(z.enum(CULINARY_FAMILY_OPTIONS)).min(1),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'INVALID_CUISINE_INPUT',
+        message: 'Body must be { cuisines: CulinaryFamily[] }',
+        statusCode: 400,
+      });
+    }
+    for (const family of parsed.data.cuisines) {
+      await tasteMemory.seedCompass(userId, { family, traditionVsModern: 0 });
+    }
+    const user = await User.findByPk(userId, {
+      attributes: ['onboardingCompleted'],
+    });
+    const state = await mealCompletion.startOnboarding(
+      userId,
+      user?.onboardingCompleted ?? false,
+    );
     return reply.send(state);
   });
 
@@ -176,6 +221,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     const result = await mealCompletion.answerOnboarding(userId, parsed.data.answer);
+    if (result.summary) {
+      await User.update({ onboardingCompleted: true }, { where: { id: userId } });
+    }
     return reply.send(result);
   });
 
@@ -184,16 +232,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.user.sub;
     const parsed = z
       .object({
-        family: z.enum([
-          'indian',
-          'east_asian',
-          'mediterranean',
-          'mexican',
-          'american',
-          'middle_eastern',
-          'italian',
-          'none',
-        ]),
+        family: z.enum(CULINARY_FAMILIES),
         traditionVsModern: z.number().min(-1).max(1).default(0),
       })
       .safeParse(request.body);
@@ -210,5 +249,70 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       traditionVsModern: parsed.data.traditionVsModern,
     });
     return reply.send({ ok: true });
+  });
+
+  app.get('/taste/v2', async (request, reply) => {
+    const userId = request.user.sub;
+    const {
+      tasteSensory,
+      tasteTreatment,
+      tasteExposure,
+      tasteEvents,
+      tasteMemory,
+    } = buildServices(app.redis);
+
+    const [sensoryBeliefs, treatmentBeliefs, overexposed, recentEvents, journal] =
+      await Promise.all([
+        tasteSensory.getAllBeliefs(userId),
+        tasteTreatment.getAllBeliefs(userId),
+        tasteExposure.getOverexposed(userId, 7),
+        tasteEvents.getRecentByUser(userId, { limit: 20 }),
+        tasteMemory.getJournal(userId),
+      ]);
+
+    const combinations = await dbModels.TasteCombination.findAll({
+      where: { userId },
+      order: [['confidence', 'DESC']],
+      limit: 10,
+    });
+
+    const sensory = Object.fromEntries(
+      [...sensoryBeliefs.entries()].map(([ingredient, beliefs]) => [
+        ingredient,
+        beliefs.map((b) => ({
+          dimension: b.dimension,
+          preference: b.preference,
+          strength: b.strength,
+          sampleCount: b.sampleCount,
+        })),
+      ]),
+    );
+
+    const treatment = Object.fromEntries(
+      [...treatmentBeliefs.entries()].map(([ingredient, beliefs]) => [
+        ingredient,
+        beliefs.map((b) => ({
+          treatment: b.treatment,
+          preference: b.preference,
+          strength: b.strength,
+          sampleCount: b.sampleCount,
+        })),
+      ]),
+    );
+
+    return reply.send({
+      sensory,
+      treatment,
+      overexposed,
+      recentEvents,
+      combinations: combinations.map((c) => ({
+        members: c.members,
+        affinity: c.affinity,
+        confidence: c.confidence,
+        observationCount: c.observationCount,
+        cuisineContext: c.cuisineContext,
+      })),
+      journal,
+    });
   });
 }

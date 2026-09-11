@@ -192,6 +192,8 @@ export interface FeedbackRequest {
 // Phase 4: Personalization & Pantry
 // ---------------------------------------------------------------------------
 
+export type PantryItemKind = 'pantry' | 'leftover';
+
 export interface PantryItem {
   id: UUID;
   ingredientName: string;
@@ -204,6 +206,11 @@ export interface PantryItem {
   daysUntilExpiry: number | null;
   isExpiringSoon: boolean;
   isLowStock: boolean;
+  kind: PantryItemKind;
+  dishName: string | null;
+  servings: number | null;
+  notes: string | null;
+  madeAt: ISO8601 | null;
 }
 
 export interface SuggestedUse {
@@ -252,6 +259,11 @@ export interface PantryUpsertRequest {
   unit?: string | null;
   expiresAt?: ISO8601 | null;
   usePriority?: number;
+  kind?: PantryItemKind;
+  dishName?: string | null;
+  servings?: number | null;
+  notes?: string | null;
+  madeAt?: ISO8601 | null;
 }
 
 export interface PantryDeleteResponse {

@@ -25,6 +25,8 @@ export class User extends Model<
   declare passwordHash: string | null;
   declare subscriptionTier: SubscriptionTier;
   declare subscriptionExpiresAt: Date | null;
+  /** First-login onboarding (cuisine step + A/B pairs) finished. */
+  declare onboardingCompleted: CreationOptional<boolean>;
   declare timezone: string | null;
   declare locale: string;
   /** Ad-earned extra rescues for today (Rescue Fuel). */
@@ -68,6 +70,11 @@ export function defineUserModel(sequelize: Sequelize): typeof User {
       subscriptionExpiresAt: {
         type: DataTypes.DATE,
         allowNull: true,
+      },
+      onboardingCompleted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
       timezone: {
         type: DataTypes.STRING(50),

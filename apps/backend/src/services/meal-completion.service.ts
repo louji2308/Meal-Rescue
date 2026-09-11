@@ -6,6 +6,7 @@ import type {
   OnboardingAnswerResponse,
   OnboardingFactorSummary,
   OnboardingPair,
+  OnboardingStartResponse,
   OnboardingSummaryResponse,
 } from '@meal-rescue/shared-types';
 import { TasteMemoryEntry } from '@meal-rescue/shared-types';
@@ -81,10 +82,36 @@ export class MealCompletionService {
     this.models = models;
   }
 
-  async startOnboarding(userId: string): Promise<{ pair: OnboardingPair | null; seeded: boolean }> {
-    const seeded = await this.isSeeded(userId);
-    if (seeded) return { pair: null, seeded: true };
-    return { pair: this.pickNextPair(userId, new Set()), seeded: false };
+  async startOnboarding(
+    userId: string,
+    onboardingCompleted = false,
+  ): Promise<OnboardingStartResponse> {
+    if (onboardingCompleted) {
+      return { completed: true, kind: null, pair: null, totalSteps: 0, currentStep: 0 };
+    }
+    const answered = await this.answeredPairIds(userId);
+    const totalSteps = 1 + PAIRS.length;
+
+    if (answered.size === 0 && !(await this.hasCuisineSelections(userId))) {
+      return { completed: false, kind: 'cuisine', pair: null, totalSteps, currentStep: 1 };
+    }
+
+    const profile = await this.getTasteProfile(userId);
+    const next =
+      answered.size === 0
+        ? this.pickNextPairFromProfile([], new Set(), userId)
+        : this.pickNextPairFromProfile(profile, answered, userId);
+
+    if (!next) {
+      return { completed: true, kind: null, pair: null, totalSteps: 0, currentStep: 0 };
+    }
+    return {
+      completed: false,
+      kind: 'pair',
+      pair: next,
+      totalSteps,
+      currentStep: answered.size + 2,
+    };
   }
 
   async answerOnboarding(
@@ -247,8 +274,10 @@ export class MealCompletionService {
     await existing.save();
   }
 
-  private async isSeeded(userId: string): Promise<boolean> {
-    const count = await this.models.AdditionEvent.count({ where: { userId } });
+  private async hasCuisineSelections(userId: string): Promise<boolean> {
+    const count = await this.models.TasteMemory.count({
+      where: { userId, contextType: 'cuisine_family' },
+    });
     return count > 0;
   }
 
@@ -269,10 +298,6 @@ export class MealCompletionService {
   }
 
   /** Adaptive selection: highest-value uncertainty among unanswered pairs. */
-  private pickNextPair(userId: string, answered: Set<string>): OnboardingPair | null {
-    return this.pickNextPairFromProfile([], answered, userId);
-  }
-
   private pickNextPairFromProfile(
     profile: TasteMemoryEntry[],
     answered: Set<string>,

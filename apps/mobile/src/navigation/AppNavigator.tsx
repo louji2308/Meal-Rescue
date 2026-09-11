@@ -23,6 +23,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { IntentScreen } from '../screens/IntentScreen';
 import { KitchenScreen } from '../screens/KitchenScreen';
 import { LoginScreen } from '../screens/LoginScreen';
+import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RealityScreen } from '../screens/RealityScreen';
@@ -30,7 +31,6 @@ import { RescueLoadingScreen } from '../screens/RescueLoadingScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
 import { TasteJournalScreen } from '../screens/TasteJournalScreen';
-import { TasteOnboardingScreen } from '../screens/TasteOnboardingScreen';
 import { syncSubscription } from '../services/ads.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useMonetization } from '../stores/monetization.store';
@@ -63,9 +63,9 @@ const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 export type RootStackParamList = {
   Tabs: undefined;
+  Onboarding: undefined;
   Paywall: undefined;
   TasteJournal: undefined;
-  TasteOnboarding: undefined;
 };
 
 function HomeStack() {
@@ -153,28 +153,30 @@ function AuthenticatedTabs() {
 
 export function AppNavigator() {
   const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
   const hydrated = useAuthStore((state) => state.hydrated);
 
   if (!hydrated) {
     return null;
   }
 
+  const needsOnboarding = Boolean(token && user && !user.onboardingCompleted);
+
   return (
     <NavigationContainer ref={navigationRef}>
       {token ? (
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Navigator
+          screenOptions={{ headerShown: false }}
+          initialRouteName={needsOnboarding ? 'Onboarding' : 'Tabs'}
+        >
           <RootStack.Screen name="Tabs">{() => <AuthenticatedTabs />}</RootStack.Screen>
+          <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
           <RootStack.Screen
             name="Paywall"
             component={PaywallScreen}
             options={{ presentation: 'modal' }}
           />
           <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
-          <RootStack.Screen
-            name="TasteOnboarding"
-            component={TasteOnboardingScreen}
-            options={{ presentation: 'modal' }}
-          />
         </RootStack.Navigator>
       ) : (
         <LoginScreen />

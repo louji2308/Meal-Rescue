@@ -152,3 +152,35 @@ export type ExpandedTasteContextType =
   | 'sensory_flavor' | 'sensory_texture' | 'sensory_temperature' | 'sensory_intensity'
   | 'treatment' | 'role' | 'modification_magnitude'
   | 'preservation_preference' | 'novelty_tolerance';
+
+// --- V2 Response (aggregated for TasteJournal) ---
+export interface TasteV2SensoryBelief {
+  dimension: string;
+  preference: string;
+  strength: number;
+  sampleCount: number;
+}
+
+export interface TasteV2TreatmentBelief {
+  treatment: string;
+  preference: string;
+  strength: number;
+  sampleCount: number;
+}
+
+export interface TasteV2CombinationSummary {
+  members: string[];
+  affinity: Confidence;
+  confidence: Confidence;
+  observationCount: number;
+  cuisineContext?: string | null;
+}
+
+export interface TasteV2Response {
+  sensory: Record<string, TasteV2SensoryBelief[]>;
+  treatment: Record<string, TasteV2TreatmentBelief[]>;
+  overexposed: string[];
+  recentEvents: TasteEvent[];
+  combinations: TasteV2CombinationSummary[];
+  journal: unknown[];
+}

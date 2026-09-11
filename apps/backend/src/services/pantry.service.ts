@@ -4,6 +4,7 @@ import type {
   PantryDeleteResponse,
   PantryGetResponse,
   PantryItem,
+  PantryItemKind,
   PantryUpsertRequest,
   SuggestedUse,
   UUID,
@@ -14,7 +15,6 @@ import { AppError, ErrorCategory } from '../lib/errors';
 import { CandidateGeneratorService } from './candidate-generator.service';
 
 const EXPIRY_SOON_DAYS = 3;
-const LOW_STOCK_THRESHOLD = 0.5;
 
 export class PantryService {
   private readonly models: Db['models'];
@@ -49,7 +49,12 @@ export class PantryService {
         daysUntilExpiry,
         isExpiringSoon:
           daysUntilExpiry !== null && daysUntilExpiry <= EXPIRY_SOON_DAYS && daysUntilExpiry >= 0,
-        isLowStock: plain.quantity !== null && plain.quantity <= LOW_STOCK_THRESHOLD,
+        isLowStock: false,
+        kind: plain.kind === 'leftover' ? 'leftover' : 'pantry',
+        dishName: plain.dishName ?? null,
+        servings: plain.servings ?? null,
+        notes: plain.notes ?? null,
+        madeAt: plain.madeAt?.toISOString() ?? null,
       };
     });
 
@@ -66,8 +71,16 @@ export class PantryService {
   }
 
   async upsertItem(userId: UUID, payload: PantryUpsertRequest): Promise<PantryItem> {
+    const kind: PantryItemKind = payload.kind ?? 'pantry';
+    const isLeftover = kind === 'leftover';
+    // Leftover rows are addressed by dish name; ingredient_name is mirrored so the
+    // unique index, dedup, and intelligence signals still work over a single name.
+    const rowName = (
+      isLeftover && payload.dishName ? payload.dishName : payload.ingredientName
+    ).trim();
+
     const existing = await this.models.Pantry.findOne({
-      where: { userId, ingredientName: payload.ingredientName },
+      where: { userId, ingredientName: rowName },
     });
 
     let row;
@@ -78,6 +91,12 @@ export class PantryService {
       if (payload.expiresAt !== undefined)
         updates.expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : null;
       if (payload.usePriority !== undefined) updates.usePriority = payload.usePriority;
+      if (payload.kind !== undefined) updates.kind = kind;
+      if (payload.dishName !== undefined) updates.dishName = payload.dishName?.trim() ?? null;
+      if (payload.servings !== undefined) updates.servings = payload.servings;
+      if (payload.notes !== undefined) updates.notes = payload.notes;
+      if (payload.madeAt !== undefined)
+        updates.madeAt = payload.madeAt ? new Date(payload.madeAt) : null;
       updates.lastUsedAt = new Date();
       await existing.update(updates);
       row = existing;
@@ -85,9 +104,14 @@ export class PantryService {
       row = await this.models.Pantry.create({
         id: randomUUID(),
         userId,
-        ingredientName: payload.ingredientName,
+        ingredientName: rowName,
+        kind,
+        dishName: isLeftover ? rowName : (payload.dishName?.trim() ?? null),
         quantity: payload.quantity ?? null,
         unit: payload.unit ?? null,
+        servings: payload.servings ?? null,
+        notes: payload.notes ?? null,
+        madeAt: payload.madeAt ? new Date(payload.madeAt) : null,
         expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
         usePriority: payload.usePriority ?? 0,
         lastUsedAt: new Date(),
@@ -118,6 +142,15 @@ export class PantryService {
   async markUsed(userId: UUID, ingredientName: string): Promise<void> {
     const row = await this.models.Pantry.findOne({ where: { userId, ingredientName } });
     if (row) {
+      if (row.kind === 'leftover') {
+        const servingsLeft = (row.servings as number | null) ?? 1;
+        if (servingsLeft <= 1) {
+          await row.destroy();
+        } else {
+          await row.update({ servings: servingsLeft - 1, lastUsedAt: new Date() });
+        }
+        return;
+      }
       const qty = (row.quantity as number | null) ?? 1;
       await row.update({
         lastUsedAt: new Date(),
@@ -136,12 +169,6 @@ export class PantryService {
           ingredientName: item.ingredientName,
           reason: `Expires in ${item.daysUntilExpiry} day${item.daysUntilExpiry === 1 ? '' : 's'}`,
           rescuePreview: recipe ? `Try: ${recipe}` : undefined,
-        });
-      }
-      if (item.isLowStock) {
-        suggestions.push({
-          ingredientName: item.ingredientName,
-          reason: 'Running low — consider restocking',
         });
       }
       if (item.usePriority > 0) {
@@ -195,9 +222,12 @@ export class PantryService {
       daysUntilExpiry,
       isExpiringSoon:
         daysUntilExpiry !== null && daysUntilExpiry <= EXPIRY_SOON_DAYS && daysUntilExpiry >= 0,
-      isLowStock:
-        (plain.quantity as number | null) !== null &&
-        (plain.quantity as number) <= LOW_STOCK_THRESHOLD,
+      isLowStock: false,
+      kind: plain.kind === 'leftover' ? 'leftover' : 'pantry',
+      dishName: (plain.dishName as string | null) ?? null,
+      servings: (plain.servings as number | null) ?? null,
+      notes: (plain.notes as string | null) ?? null,
+      madeAt: plain.madeAt ? (plain.madeAt as Date).toISOString() : null,
     };
   }
 }

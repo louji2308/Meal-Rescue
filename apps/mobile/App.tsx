@@ -1,7 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
+import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+// The RevenueCat SDK logs every network failure (offline/emulator without
+// internet) via console.error, which LogBox surfaces as red banners that also
+// intercept touches. These are expected in local dev - the wrapper already
+// degrades to safe no-ops - so silence the SDK's own noise here.
+LogBox.ignoreLogs(['[RevenueCat]']);
 
 import { navigationRef } from './src/components/aftercare/navigation';
 import { AppNavigator } from './src/navigation/AppNavigator';

@@ -30,8 +30,13 @@ const VALUE_PROPS = [
 const STATIC_PRICING = [
   { id: 'monthly', title: 'Monthly', price: '$4.99 / month' },
   { id: 'annual', title: 'Annual', price: '$39.99 / year' },
-  { id: 'lifetime', title: 'Lifetime', price: '$79.99' },
+  { id: 'lifetime', title: 'Lifelong', price: '$79.99' },
 ];
+
+const TITLE_OVERRIDES: Record<string, string> = {
+  lifetime: 'Lifelong',
+  pro_lifetime: 'Lifelong',
+};
 
 /**
  * Paywall - honest pricing, no fake timers, no dismiss-blocking.
@@ -167,7 +172,8 @@ export function PaywallScreen() {
         {(packages.length > 0 ? packages : STATIC_PRICING).map((item) => {
           const pkg = item as PurchasesPackage;
           const id = pkg.identifier ?? (item as { id: string }).id;
-          const title = pkg.product?.title ?? (item as { title: string }).title;
+          const rawTitle = pkg.product?.title ?? (item as { title: string }).title;
+          const title = TITLE_OVERRIDES[id] ?? rawTitle;
           const price = pkg.product?.priceString ?? (item as { price: string }).price;
           return (
             <TouchableOpacity

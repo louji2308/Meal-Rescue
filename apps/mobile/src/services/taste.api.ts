@@ -1,10 +1,12 @@
 import type {
+  CulinaryFamily,
   FoodPersonality,
   OnboardingAnswer,
   OnboardingAnswerResponse,
-  OnboardingPair,
+  OnboardingStartResponse,
   TasteJournalEntry,
   TasteMemoryEntry,
+  TasteV2Response,
 } from '@meal-rescue/shared-types';
 
 import { api } from './api';
@@ -37,13 +39,17 @@ export async function getTasteBundle(): Promise<{
   return res.data;
 }
 
-export async function startOnboarding(): Promise<{
-  pair: OnboardingPair | null;
-  seeded: boolean;
-}> {
-  const res = await api.get<{ pair: OnboardingPair | null; seeded: boolean }>(
-    '/api/v1/user/taste/onboarding',
-  );
+export async function startOnboarding(): Promise<OnboardingStartResponse> {
+  const res = await api.get<OnboardingStartResponse>('/api/v1/user/taste/onboarding');
+  return res.data;
+}
+
+export async function submitCuisinePreferences(
+  cuisines: CulinaryFamily[],
+): Promise<OnboardingStartResponse> {
+  const res = await api.post<OnboardingStartResponse>('/api/v1/user/taste/onboarding/cuisines', {
+    cuisines,
+  });
   return res.data;
 }
 
@@ -53,5 +59,10 @@ export async function answerOnboarding(
   const res = await api.post<OnboardingAnswerResponse>('/api/v1/user/taste/onboarding/answers', {
     answer,
   });
+  return res.data;
+}
+
+export async function getTasteV2(): Promise<TasteV2Response> {
+  const res = await api.get<TasteV2Response>('/api/v1/user/taste/v2');
   return res.data;
 }

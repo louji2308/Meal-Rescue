@@ -8,10 +8,15 @@ import { buildServices } from '../services/composition';
 
 const upsertSchema = z.object({
   ingredientName: z.string().min(1).max(100),
-  quantity: z.number().positive().max(1000).optional(),
-  unit: z.string().max(20).optional(),
+  quantity: z.number().positive().max(1000).optional().nullable(),
+  unit: z.string().max(20).optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
   usePriority: z.number().int().min(0).max(10).optional(),
+  kind: z.enum(['pantry', 'leftover']).optional(),
+  dishName: z.string().min(1).max(255).optional().nullable(),
+  servings: z.number().int().min(1).max(1000).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+  madeAt: z.string().datetime().optional().nullable(),
 });
 
 interface PantryParams {
@@ -40,7 +45,7 @@ export async function pantryRoutes(app: FastifyInstance): Promise<void> {
       throw new AppError({
         category: ErrorCategory.INPUT_VALIDATION,
         code: 'INVALID_PANTRY_INPUT',
-        message: 'Body must be { ingredientName, quantity?, unit?, expiresAt?, usePriority? }',
+        message: 'Body must be { ingredientName, quantity?, unit?, expiresAt?, usePriority?, kind?, dishName?, servings?, notes?, madeAt? }',
         statusCode: 400,
       });
     }

@@ -12,6 +12,11 @@ export interface KitchenItem {
   daysUntilExpiry: number | null;
   isExpiringSoon: boolean;
   isLowStock: boolean;
+  kind: 'pantry' | 'leftover';
+  dishName: string | null;
+  servings: number | null;
+  notes: string | null;
+  madeAt: string | null;
   state: 'fresh' | 'opened' | 'leftover' | 'use_soon' | 'gone';
   stateReason: string;
   daysActive: number;
@@ -114,6 +119,11 @@ export async function upsertKitchenItem(payload: {
   unit?: string;
   expiresAt?: string;
   usePriority?: number;
+  kind?: 'pantry' | 'leftover';
+  dishName?: string | null;
+  servings?: number | null;
+  notes?: string | null;
+  madeAt?: string | null;
 }): Promise<KitchenItem> {
   const res = await api.post<KitchenItem>('/api/v1/pantry', payload);
   return res.data as any;

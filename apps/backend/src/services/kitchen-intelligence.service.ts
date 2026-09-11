@@ -1,5 +1,4 @@
 import type {
-  PantryGetResponse,
   PantryItem,
   UUID,
 } from '@meal-rescue/shared-types';
@@ -245,7 +244,17 @@ Return ONLY valid JSON, no markdown fences.`;
     let state: FoodState = 'fresh';
     let stateReason = 'Recently added';
 
-    if (item.isExpiringSoon) {
+    if (item.kind === 'leftover') {
+      state = 'leftover';
+      const origin = item.madeAt ? new Date(item.madeAt) : addedAt;
+      const daysSinceMade = Math.floor(
+        (now.getTime() - origin.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      stateReason =
+        daysSinceMade <= 0
+          ? 'Made today'
+          : `Made ${daysSinceMade} day${daysSinceMade === 1 ? '' : 's'} ago`;
+    } else if (item.isExpiringSoon) {
       state = 'use_soon';
       stateReason = `Expires in ${item.daysUntilExpiry} day${item.daysUntilExpiry === 1 ? '' : 's'}`;
     } else if (daysActive > 5) {
@@ -318,19 +327,6 @@ Return ONLY valid JSON, no markdown fences.`;
         priority: 'high',
         actionLabel: 'See ideas',
         actionPayload: 'what-can-i-make',
-      });
-    }
-
-    // Low Stock signals
-    const lowStock = items.filter((i) => i.isLowStock);
-    if (lowStock.length > 0) {
-      signals.push({
-        id: 'low-stock',
-        type: 'low_stock',
-        title: 'Running low',
-        description: `${lowStock.length} item${lowStock.length > 1 ? 's' : ''} need restocking`,
-        items: lowStock.map((i) => i.ingredientName),
-        priority: 'medium',
       });
     }
 
@@ -425,7 +421,7 @@ Return ONLY valid JSON, no markdown fences.`;
       expiringCount: items.filter((i) => i.state === 'use_soon').length,
       useSoonCount: items.filter((i) => i.state === 'use_soon').length,
       freshCount: items.filter((i) => i.state === 'fresh').length,
-      leftoverCount: items.filter((i) => i.state === 'leftover').length,
+      leftoverCount: items.filter((i) => i.kind === 'leftover').length,
     };
   }
 

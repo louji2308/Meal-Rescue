@@ -80,6 +80,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         subscriptionTier: user.subscriptionTier as SubscriptionTier,
+        onboardingCompleted: user.onboardingCompleted as boolean,
       },
     };
   }

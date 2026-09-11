@@ -11,6 +11,7 @@ export interface SessionUser {
   id: string;
   email: string;
   subscriptionTier: 'free' | 'pro';
+  onboardingCompleted?: boolean;
 }
 
 interface AuthState {
@@ -18,6 +19,7 @@ interface AuthState {
   user: SessionUser | null;
   hydrated: boolean;
   setSession: (token: string, user: SessionUser) => void;
+  setOnboardingCompleted: (completed: boolean) => void;
   clearSession: () => void;
   hydrate: () => Promise<void>;
 }
@@ -32,6 +34,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     setAuthToken(token);
     void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user }));
     set({ token, user });
+  },
+  setOnboardingCompleted: (completed) => {
+    set((state) => {
+      if (!state.user) return state;
+      const user = { ...state.user, onboardingCompleted: completed };
+      void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ token: state.token, user }));
+      return { user };
+    });
   },
   clearSession: () => {
     setAuthToken(null);
