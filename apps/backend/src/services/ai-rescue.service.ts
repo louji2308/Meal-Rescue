@@ -20,6 +20,7 @@ export interface AiRescueRequest {
   timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
   userMood?: string;
   kitchenItems?: Array<{ name: string; state: string; expiresSoon: boolean }>;
+  tasteContext?: string;
 }
 
 export interface AiRescueResponse {
@@ -36,6 +37,7 @@ export interface AiNegotiateRequest {
   conversation: Array<{ role: 'user' | 'ai'; content: string }>;
   originalFoods: string[];
   pushback: string;
+  tasteContext?: string;
 }
 
 export class AiRescueService {
@@ -46,6 +48,10 @@ export class AiRescueService {
   async generateRescue(req: AiRescueRequest): Promise<AiRescueResponse> {
     const kitchenContext = req.kitchenItems?.length
       ? `\nUser's kitchen: ${req.kitchenItems.map((k) => `${k.name} (${k.state}${k.expiresSoon ? ', expiring soon' : ''})`).join(', ')}`
+      : '';
+
+    const tasteContextSection = req.tasteContext
+      ? `\n\nUSER'S TASTE PROFILE:\n${req.tasteContext}\nUse this to personalize your suggestion. Respect strong dislikes. Don't suggest overexposed items. Match their modification tolerance.`
       : '';
 
     const systemPrompt = `You are a warm, practical meal rescue AI. Given a user's food and context, suggest the best next move.
@@ -60,6 +66,7 @@ RULES:
 - Respect the user's mood: if tired, keep it minimal. If energetic, suggest more.
 - If kitchen items are provided, prefer using those ingredients
 - Never suggest something the user explicitly rejected
+- If a taste profile is provided, personalize heavily — suggest based on their preferences, not generic advice${tasteContextSection}
 
 Return ONLY valid JSON:
 {
@@ -85,13 +92,17 @@ Suggest the best move.`;
    * Handle negotiation — user pushes back, AI adapts.
    */
   async negotiate(req: AiNegotiateRequest): Promise<AiRescueResponse> {
+    const tasteContextSection = req.tasteContext
+      ? `\n\nUSER'S TASTE PROFILE:\n${req.tasteContext}\nUse this to personalize your suggestion.`
+      : '';
+
     const systemPrompt = `You are a meal rescue AI in a conversation. The user pushed back on your suggestion. Adapt.
 
 RULES:
 - Acknowledge their pushback naturally
 - Give a new suggestion that respects their constraint
 - Keep the tone warm and casual
-- Return ONLY valid JSON with the same structure as before
+- Return ONLY valid JSON with the same structure as before${tasteContextSection}
 
 {
   "bestMove": "string",

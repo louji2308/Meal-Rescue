@@ -4,18 +4,22 @@
  * POST /api/v1/ai-rescue/generate  — single call, structured response
  * POST /api/v1/ai-rescue/negotiate — conversation loop
  *
- * v2: redeploy trigger
+ * v2: personalized with taste context
  */
 import type { FastifyInstance } from 'fastify';
 
 import { AiRescueService } from '../services/ai-rescue.service';
+import { buildServices, dbModels } from '../services/composition';
 
 const aiRescue = new AiRescueService();
 
 export async function aiRescueRoutes(app: FastifyInstance) {
+  const services = buildServices(null);
+
   /**
    * POST /api/v1/ai-rescue/generate
    * Body: { foods, ingredients?, timeOfDay, userMood?, kitchenItems? }
+   * Auth: Bearer token (optional — user ID extracted from token)
    */
   app.post('/api/v1/ai-rescue/generate', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
@@ -30,6 +34,29 @@ export async function aiRescueRoutes(app: FastifyInstance) {
 
     const timeOfDay = (body.timeOfDay as string) ?? 'afternoon';
 
+    // Build taste context if user is authenticated
+    let tasteContext: string | undefined;
+    const userId = (request as unknown as Record<string, unknown>).userId as string | undefined;
+    if (userId) {
+      try {
+        const ctxBuilder = new (
+          await import('../services/rescue-taste-context.service')
+        ).RescueTasteContextBuilder(
+          dbModels,
+          services.tasteSensory,
+          services.tasteTreatment,
+          services.cuisineCompatibility,
+          services.modificationMagnitude,
+          services.tasteExposure,
+          services.tasteEvents,
+        );
+        const ctx = await ctxBuilder.buildContext(userId);
+        tasteContext = ctxBuilder.formatForPrompt(ctx);
+      } catch {
+        // Taste context is optional — proceed without it
+      }
+    }
+
     try {
       const result = await aiRescue.generateRescue({
         foods,
@@ -39,6 +66,7 @@ export async function aiRescueRoutes(app: FastifyInstance) {
         kitchenItems: body.kitchenItems as
           | Array<{ name: string; state: string; expiresSoon: boolean }>
           | undefined,
+        tasteContext,
       });
 
       return reply.send({ success: true, data: result });
@@ -76,11 +104,35 @@ export async function aiRescueRoutes(app: FastifyInstance) {
       });
     }
 
+    // Build taste context if user is authenticated
+    let tasteContext: string | undefined;
+    const userId = (request as unknown as Record<string, unknown>).userId as string | undefined;
+    if (userId) {
+      try {
+        const ctxBuilder = new (
+          await import('../services/rescue-taste-context.service')
+        ).RescueTasteContextBuilder(
+          dbModels,
+          services.tasteSensory,
+          services.tasteTreatment,
+          services.cuisineCompatibility,
+          services.modificationMagnitude,
+          services.tasteExposure,
+          services.tasteEvents,
+        );
+        const ctx = await ctxBuilder.buildContext(userId);
+        tasteContext = ctxBuilder.formatForPrompt(ctx);
+      } catch {
+        // Taste context is optional
+      }
+    }
+
     try {
       const result = await aiRescue.negotiate({
         conversation,
         originalFoods,
         pushback,
+        tasteContext,
       });
 
       return reply.send({ success: true, data: result });

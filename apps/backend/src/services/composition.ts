@@ -41,6 +41,7 @@ import { TasteTreatmentService } from './taste-treatment.service';
 import { CuisineCompatibilityService } from './cuisine-compatibility.service';
 import { ModificationMagnitudeService } from './modification-magnitude.service';
 import { ContextSignalService } from './context-signal.service';
+import { RescueTasteContextBuilder } from './rescue-taste-context.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
 import { DecisionService } from './v2/decision.service';
@@ -83,6 +84,8 @@ const models = {
   DecisionEvent,
 };
 
+export { models as dbModels };
+
 export function buildServices(redis: Redis | null): {
   mealAnalyzer: MealAnalyzerService;
   rescuePipeline: RescuePipelineService;
@@ -96,6 +99,7 @@ export function buildServices(redis: Redis | null): {
   cuisineCompatibility: CuisineCompatibilityService;
   modificationMagnitude: ModificationMagnitudeService;
   contextSignal: typeof ContextSignalService;
+  rescueTasteContext: RescueTasteContextBuilder;
   pantry: PantryService;
   fridgeNegotiator: FridgeNegotiatorService;
   leftoverAlchemist: LeftoverAlchemistService;
@@ -112,6 +116,10 @@ export function buildServices(redis: Redis | null): {
   const tasteTreatment = new TasteTreatmentService(models);
   const cuisineCompatibility = new CuisineCompatibilityService(models);
   const modificationMagnitude = new ModificationMagnitudeService(models);
+  const rescueTasteContext = new RescueTasteContextBuilder(
+    models, tasteSensory, tasteTreatment, cuisineCompatibility,
+    modificationMagnitude, tasteExposure, tasteEvents,
+  );
   const mealCompletion = new MealCompletionService(models);
   const decisionEvents = new DecisionEventService(models);
   return {
@@ -133,6 +141,7 @@ export function buildServices(redis: Redis | null): {
     cuisineCompatibility,
     modificationMagnitude,
     contextSignal: ContextSignalService,
+    rescueTasteContext,
     mealCompletion,
     satisfaction: new SatisfactionService(models),
     aftercare: new AftercareService(models),
