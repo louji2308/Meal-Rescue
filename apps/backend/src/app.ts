@@ -13,6 +13,7 @@ import { registerErrorHandler } from './middleware/error-handler';
 import { authRoutes } from './modules/auth/auth.routes';
 import redisPlugin from './plugins/redis';
 import { adsRoutes } from './routes/ads.routes';
+import { aiRescueRoutes } from './routes/ai-rescue.routes';
 import { aftercareRoutes } from './routes/aftercare.routes';
 import { decisionRoutes } from './routes/decision.routes';
 import { feedbackRoutes } from './routes/feedback.routes';
@@ -140,6 +141,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
   await app.register(kitchenRoutes, { prefix: '/api/v1/kitchen' });
   await app.register(adsRoutes, { prefix: '/api/v1/ads' });
+  await app.register(aiRescueRoutes);
   await app.register(subscriptionRoutes, { prefix: '/api/v1' });
   await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
   await app.register(webhookRoutes, { prefix: '/api/v1' });

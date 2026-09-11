@@ -182,7 +182,13 @@ export function CaptureScreen() {
       } else {
         analysis = await analyzeMeal({ text: text.trim() });
       }
-      navigation.navigate('Review', { analysis });
+      // Extract foods and ingredients from the analysis
+      const foods = analysis.detectedFoods.map((f) => f.name);
+      const ingredients = analysis.detectedIngredients.map((i) => i.name);
+      navigation.navigate('AiRescue', {
+        foods: foods.length > 0 ? foods : [text.trim() || 'meal'],
+        ingredients,
+      });
     } catch (err) {
       setError(toApiError(err));
     } finally {

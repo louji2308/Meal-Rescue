@@ -15,6 +15,7 @@ import { navigationRef } from '../components/aftercare/navigation';
 import { SATISFACTION_ROUTE } from '../components/aftercare/slots';
 import { PawStamp } from '../components/mascot/PawStamp';
 import { CaptureScreen } from '../screens/CaptureScreen';
+import { AiRescueScreen } from '../screens/AiRescueScreen';
 import { CravingScreen } from '../screens/CravingScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
 import { FridgeNegotiatorScreen } from '../screens/FridgeNegotiatorScreen';
@@ -38,6 +39,7 @@ import { colors } from '../theme';
 export type HomeStackParamList = {
   HomeMain: undefined;
   Capture: undefined;
+  AiRescue: { foods: string[]; ingredients?: string[] };
   Review: { analysis: MealAnalysisResponse };
   Intent: { analysis: MealAnalysisResponse };
   Reality: { intentLabel: string; mealId: string; foods: string[] };
@@ -71,6 +73,7 @@ function HomeStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen name="Capture" component={CaptureScreen} />
+      <Stack.Screen name="AiRescue" component={AiRescueScreen} />
       <Stack.Screen name="Review" component={ReviewScreen} />
       <Stack.Screen name="Intent" component={IntentScreen} />
       <Stack.Screen name="Reality" component={RealityScreen} />
