@@ -291,15 +291,22 @@ export interface TasteMemoryEntry {
   lastUpdated: ISO8601;
 }
 
-export type CulinaryFamily =
-  | 'indian'
-  | 'east_asian'
-  | 'mediterranean'
-  | 'mexican'
-  | 'american'
-  | 'middle_eastern'
-  | 'italian'
-  | 'none';
+export const CULINARY_FAMILY_OPTIONS = [
+  'italian',
+  'indian',
+  'mexican',
+  'east_asian',
+  'mediterranean',
+  'american',
+  'middle_eastern',
+  'african',
+  'caribbean',
+  'thai',
+] as const;
+
+export const CULINARY_FAMILIES = [...CULINARY_FAMILY_OPTIONS, 'none'] as const;
+
+export type CulinaryFamily = (typeof CULINARY_FAMILIES)[number];
 
 export interface CulinaryCompassSeed {
   family: CulinaryFamily;
@@ -477,9 +484,18 @@ export interface OnboardingSummaryResponse {
   seeded: boolean;
 }
 
+export type OnboardingStepKind = 'cuisine' | 'pair';
+
 export interface OnboardingStartResponse {
+  completed: boolean;
+  kind: OnboardingStepKind | null;
   pair: OnboardingPair | null;
-  seeded: boolean;
+  totalSteps: number;
+  currentStep: number;
+}
+
+export interface CuisinePreferences {
+  cuisines: CulinaryFamily[];
 }
 
 export interface OnboardingAnswerResponse {
@@ -531,6 +547,7 @@ export interface AuthUser {
   id: UUID;
   email: string;
   subscriptionTier: SubscriptionTier;
+  onboardingCompleted: boolean;
 }
 
 export interface AuthTokens {
@@ -690,3 +707,6 @@ export interface AftercareEligibility {
   eligible: boolean;
   reason?: 'COOLDOWN' | 'NO_RESCUE' | 'ALREADY_SENT' | 'FEEDBACK_DISABLED' | 'OK';
 }
+
+// Taste Memory V2 — event-sourced taste system
+export * from './taste-v2';
