@@ -55,7 +55,7 @@ export function LoginScreen() {
       >
         <View style={styles.logoWrap}>
           <Image
-            source={require('../../assets/home-cat.png')}
+            source={require('../../assets/mascot.png')}
             style={styles.cat}
             resizeMode="contain"
             accessible
@@ -136,8 +136,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   cat: {
-    width: 120,
-    height: 105,
+    width: 160,
+    height: 160,
   },
   title: {
     textAlign: 'center',
