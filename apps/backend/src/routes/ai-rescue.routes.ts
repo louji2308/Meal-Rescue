@@ -3,6 +3,8 @@
  *
  * POST /api/v1/ai-rescue/generate  — single call, structured response
  * POST /api/v1/ai-rescue/negotiate — conversation loop
+ *
+ * v2: redeploy trigger
  */
 import type { FastifyInstance } from 'fastify';
 
