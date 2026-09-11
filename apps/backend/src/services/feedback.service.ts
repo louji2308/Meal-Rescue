@@ -7,6 +7,8 @@ import { AppError, ErrorCategory } from '../lib/errors';
 import { PreferenceLearningService } from './preference-learning.service';
 import { TasteEventService } from './taste-event.service';
 import { TasteMemoryService } from './taste-memory.service';
+import { TasteSensoryService } from './taste-sensory.service';
+import { TasteTreatmentService } from './taste-treatment.service';
 import { DecisionEventService } from './v2/decision-events.service';
 
 /**
@@ -22,12 +24,21 @@ export class FeedbackService {
   private readonly preferenceLearning: PreferenceLearningService;
   private readonly decisionEvents: DecisionEventService;
   private readonly tasteEvents: TasteEventService;
+  private readonly tasteSensory: TasteSensoryService;
+  private readonly tasteTreatment: TasteTreatmentService;
 
-  constructor(models: Db['models'], tasteEvents: TasteEventService) {
+  constructor(
+    models: Db['models'],
+    tasteEvents: TasteEventService,
+    tasteSensory: TasteSensoryService,
+    tasteTreatment: TasteTreatmentService,
+  ) {
     this.models = models;
     this.preferenceLearning = new PreferenceLearningService(models);
     this.decisionEvents = new DecisionEventService(models);
     this.tasteEvents = tasteEvents;
+    this.tasteSensory = tasteSensory;
+    this.tasteTreatment = tasteTreatment;
   }
 
   async submitFeedback(
@@ -177,6 +188,14 @@ export class FeedbackService {
         attributionConfidence: 0.6,
         rescueId,
       });
+    }
+
+    // --- V2 Sensory + Treatment Beliefs ---
+    const modifications = outcome?.modifications ?? [];
+    for (const name of ingredientNames) {
+      const eventId = `evt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      await this.tasteSensory.recordFromFeedback(userId, name, eventId, satisfaction, modifications);
+      await this.tasteTreatment.recordFromFeedback(userId, name, eventId, satisfaction, modifications);
     }
 
     return {

@@ -115,7 +115,7 @@ export function buildServices(redis: Redis | null): {
       mealCompletion,
       decisionEvents,
     ),
-    feedback: new FeedbackService(models, tasteEvents),
+    feedback: new FeedbackService(models, tasteEvents, tasteSensory, tasteTreatment),
     preferenceLearning: new PreferenceLearningService(models),
     tasteMemory,
     tasteEvents,
