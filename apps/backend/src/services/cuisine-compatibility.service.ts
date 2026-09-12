@@ -11,7 +11,16 @@ interface CuisineCompatibility {
 
 // Pre-defined compatibility graph (will learn from user data over time)
 const BASE_COMPATIBILITY: Record<string, Record<string, number>> = {
-  italian: { japanese: 0.3, mexican: 0.4, indian: 0.2, thai: 0.3, korean: 0.2, chinese: 0.3, french: 0.5, mediterranean: 0.7 },
+  italian: {
+    japanese: 0.3,
+    mexican: 0.4,
+    indian: 0.2,
+    thai: 0.3,
+    korean: 0.2,
+    chinese: 0.3,
+    french: 0.5,
+    mediterranean: 0.7,
+  },
   japanese: { italian: 0.3, korean: 0.6, chinese: 0.5, thai: 0.4, vietnamese: 0.5, french: 0.2 },
   mexican: { italian: 0.4, indian: 0.3, thai: 0.4, korean: 0.2, chinese: 0.2, spanish: 0.7 },
   indian: { thai: 0.5, korean: 0.3, chinese: 0.3, japanese: 0.3, mexican: 0.3, pakistani: 0.8 },
@@ -51,7 +60,11 @@ export class CuisineCompatibilityService {
   /**
    * Get user-specific compatibility override from acceptance history.
    */
-  async getUserCompatibility(userId: UUID, cuisineA: string, cuisineB: string): Promise<CuisineCompatibility | null> {
+  async getUserCompatibility(
+    userId: UUID,
+    cuisineA: string,
+    cuisineB: string,
+  ): Promise<CuisineCompatibility | null> {
     const rows = await this.models.TasteEvent.findAll({
       where: { userId },
       order: [['createdAt', 'DESC']],
@@ -61,7 +74,8 @@ export class CuisineCompatibilityService {
     const crossCuisineAccepts = rows.filter((r) => {
       const data = r.get();
       const meta = data.metadata as Record<string, unknown> | null;
-      const isAccepted = data.eventType === 'RESCUE_ACCEPTED' || data.eventType === 'SATISFACTION_NAILED';
+      const isAccepted =
+        data.eventType === 'RESCUE_ACCEPTED' || data.eventType === 'SATISFACTION_NAILED';
       const baseCompat = this.getBaseCompatibility(cuisineA, cuisineB);
       const usesCrossCuisine = baseCompat > 0 && baseCompat < 0.8;
       return isAccepted && usesCrossCuisine && meta?.['cuisine'] === cuisineA;
@@ -98,14 +112,10 @@ export class CuisineCompatibilityService {
   /**
    * Suggest compatible cuisines for a given base cuisine.
    */
-  async suggestCompatibleCuisines(
-    userId: UUID,
-    baseCuisine: string,
-    limit = 3,
-  ): Promise<string[]> {
+  async suggestCompatibleCuisines(userId: UUID, baseCuisine: string, limit = 3): Promise<string[]> {
     const scores: Array<{ cuisine: string; score: number }> = [];
 
-    for (const [cuisine, compat] of Object.entries(BASE_COMPATIBILITY[baseCuisine] ?? {})) {
+    for (const [cuisine] of Object.entries(BASE_COMPATIBILITY[baseCuisine] ?? {})) {
       const blended = await this.getBlendedCompatibility(userId, baseCuisine, cuisine);
       scores.push({ cuisine, score: blended });
     }

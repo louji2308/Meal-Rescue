@@ -374,26 +374,13 @@ export interface MemoryReason {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 5: Advanced Features (Fridge Negotiator, Leftover Alchemist)
+// Phase 5: Advanced Features (Leftover Alchemist)
 // ---------------------------------------------------------------------------
-
-export type HungerLevel = 'snack' | 'meal';
 
 export interface FoodComponent {
   name: string;
   quantity?: string;
   state?: 'raw' | 'cooked' | 'prepped';
-}
-
-export interface MealRecommendation {
-  name: string;
-  ingredients: string[];
-  instructions: string[];
-  estimatedTimeMinutes: number;
-  effort: EffortLevel;
-  missingIngredients: string[];
-  usesPantryItems: string[];
-  nutritionNote?: string;
 }
 
 export interface Transformation {
@@ -404,19 +391,6 @@ export interface Transformation {
   estimatedTimeMinutes: number;
   effort: EffortLevel;
   description: string;
-}
-
-export interface FridgeNegotiateRequest {
-  availableIngredients: string[];
-  timeMinutes: number;
-  hungerLevel?: HungerLevel;
-  userId: UUID;
-}
-
-export interface FridgeNegotiateResponse {
-  recommendations: MealRecommendation[];
-  reasoning: string;
-  missingIngredients: string[];
 }
 
 export interface LeftoverAlchemistRequest {
@@ -731,3 +705,9 @@ export interface AftercareEligibility {
 
 // Taste Memory V2 — event-sourced taste system
 export * from './taste-v2';
+
+// Common Table — household meal convergence
+export * from './common-table';
+
+// Meal Memory — intent-aware household food agent (weekly planning)
+export * from './meal-memory';

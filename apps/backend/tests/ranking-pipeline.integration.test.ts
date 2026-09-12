@@ -3,17 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 
 import { closeDatabase, initializeDatabase, sequelize } from '../src/database';
-import { AdditionEvent } from '../src/database/models/addition-event.model';
-import { DecisionEvent } from '../src/database/models/decision-event.model';
-import { Feedback } from '../src/database/models/feedback.model';
+import { dbModels } from '../src/database/models';
 import { Meal } from '../src/database/models/meal.model';
-import { NotificationLog } from '../src/database/models/notification-log.model';
-import { Pantry } from '../src/database/models/pantry.model';
-import { Preference } from '../src/database/models/preference.model';
-import { RescueCreditGrant } from '../src/database/models/rescue-credit-grant.model';
 import { Rescue } from '../src/database/models/rescue.model';
-import { SatisfactionRecordModel } from '../src/database/models/satisfaction-record.model';
-import { TasteMemory } from '../src/database/models/taste-memory.model';
 import { User } from '../src/database/models/user.model';
 import { HeuristicLlmClient } from '../src/services/ai/heuristic-llm-client';
 import { MealCompletionService } from '../src/services/meal-completion.service';
@@ -22,20 +14,7 @@ import { TasteMemoryService } from '../src/services/taste-memory.service';
 
 const hasDb = Boolean(process.env.TEST_DATABASE_URL);
 
-const integrationModels = {
-  Pantry,
-  Preference,
-  Feedback,
-  Rescue,
-  Meal,
-  User,
-  RescueCreditGrant,
-  NotificationLog,
-  TasteMemory,
-  AdditionEvent,
-  SatisfactionRecord: SatisfactionRecordModel,
-  DecisionEvent,
-} as const;
+const integrationModels = dbModels;
 
 const describeDb = hasDb ? describe : describe.skip;
 

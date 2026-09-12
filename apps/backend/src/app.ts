@@ -13,13 +13,15 @@ import { registerErrorHandler } from './middleware/error-handler';
 import { authRoutes } from './modules/auth/auth.routes';
 import redisPlugin from './plugins/redis';
 import { adsRoutes } from './routes/ads.routes';
-import { aiRescueRoutes } from './routes/ai-rescue.routes';
 import { aftercareRoutes } from './routes/aftercare.routes';
+import { aiRescueRoutes } from './routes/ai-rescue.routes';
+import { commonTableRoutes } from './routes/common-table.routes';
 import { decisionRoutes } from './routes/decision.routes';
 import { feedbackRoutes } from './routes/feedback.routes';
-import { fridgeRoutes } from './routes/fridge.routes';
-import { leftoverRoutes } from './routes/leftover.routes';
+import { householdRoutes } from './routes/household.routes';
 import { kitchenRoutes } from './routes/kitchen.routes';
+import { leftoverRoutes } from './routes/leftover.routes';
+import { mealMemoryRoutes } from './routes/meal-memory.routes';
 import { mealRoutes } from './routes/meal.routes';
 import { notificationRoutes } from './routes/notification.routes';
 import { pantryRoutes } from './routes/pantry.routes';
@@ -137,7 +139,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(aftercareRoutes, { prefix: '/api/v1/rescue' });
   await app.register(pantryRoutes, { prefix: '/api/v1/pantry' });
   await app.register(userRoutes, { prefix: '/api/v1/user' });
-  await app.register(fridgeRoutes, { prefix: '/api/v1/fridge' });
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
   await app.register(kitchenRoutes, { prefix: '/api/v1/kitchen' });
   await app.register(adsRoutes, { prefix: '/api/v1/ads' });
@@ -145,6 +146,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(subscriptionRoutes, { prefix: '/api/v1' });
   await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
   await app.register(webhookRoutes, { prefix: '/api/v1' });
+  await app.register(householdRoutes, { prefix: '/api/v1/households' });
+  await app.register(commonTableRoutes, { prefix: '/api/v1/common-table' });
+  await app.register(mealMemoryRoutes, { prefix: '/api/v1/meal-memory' });
 
   return app;
 }

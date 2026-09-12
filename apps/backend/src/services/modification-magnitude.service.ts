@@ -36,7 +36,10 @@ export class ModificationMagnitudeService {
   /**
    * Get the user's magnitude classification for a modification.
    */
-  async getMagnitude(userId: UUID, modification: string): Promise<ModificationMagnitudeRecord | null> {
+  async getMagnitude(
+    userId: UUID,
+    modification: string,
+  ): Promise<ModificationMagnitudeRecord | null> {
     const normalized = modification.toLowerCase().trim();
 
     const existing = await this.models.TasteMemory.findOne({
@@ -120,7 +123,10 @@ export class ModificationMagnitudeService {
   /**
    * Would this user accept a modification of this size?
    */
-  async wouldAccept(userId: UUID, modification: string): Promise<{ accept: boolean; confidence: number }> {
+  async wouldAccept(
+    userId: UUID,
+    modification: string,
+  ): Promise<{ accept: boolean; confidence: number }> {
     const mag = await this.getMagnitude(userId, modification);
     if (!mag) return { accept: true, confidence: 0.3 };
 
@@ -136,7 +142,7 @@ export class ModificationMagnitudeService {
   /**
    * Get user's adventurous threshold (0-1, higher = more adventurous).
    */
-  private getAdventurousThreshold(userId: UUID): number {
+  private getAdventurousThreshold(_userId: UUID): number {
     // Default to 0.5 (medium adventurousness)
     // Will learn from feedback over time
     return 0.5;

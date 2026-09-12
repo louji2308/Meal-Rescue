@@ -4,6 +4,10 @@ import { buildApp } from './app';
 import { env } from './config/env';
 import { closeDatabase, initializeDatabase } from './database';
 import {
+  startMealMemoryScheduler,
+  stopMealMemoryScheduler,
+} from './services/meal-memory/scheduler';
+import {
   startRescueWindowScheduler,
   stopRescueWindowScheduler,
 } from './services/notifications/rescue-window.scheduler';
@@ -33,6 +37,7 @@ async function main(): Promise<void> {
   if (env.ONESIGNAL_APP_ID && env.NODE_ENV !== 'test') {
     startRescueWindowScheduler();
     startSpoilerAlertScheduler();
+    startMealMemoryScheduler();
     app.log.info('Notification schedulers started');
   }
 
@@ -41,6 +46,7 @@ async function main(): Promise<void> {
     try {
       await stopRescueWindowScheduler();
       await stopSpoilerAlertScheduler();
+      await stopMealMemoryScheduler();
       await app.close();
       await closeDatabase();
       process.exit(0);

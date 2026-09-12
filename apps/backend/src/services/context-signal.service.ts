@@ -1,5 +1,3 @@
-import type { UUID } from '@meal-rescue/shared-types';
-
 type TimeOfDay = 'morning' | 'lunch' | 'afternoon' | 'dinner' | 'late_night';
 type Season = 'spring' | 'summer' | 'fall' | 'winter';
 
@@ -47,11 +45,7 @@ export class ContextSignalService {
   /**
    * Check if an ingredient fits the current context.
    */
-  fitsContext(
-    ingredient: string,
-    context: ContextSignals,
-    userPrefs: ContextPreference[],
-  ): number {
+  fitsContext(ingredient: string, context: ContextSignals, userPrefs: ContextPreference[]): number {
     const relevantPrefs = userPrefs.filter((p) => {
       if (p.contextType === 'meal_time') return p.contextValue === context.timeOfDay;
       if (p.contextType === 'season') return p.contextValue === context.season;
@@ -60,8 +54,12 @@ export class ContextSignalService {
 
     if (relevantPrefs.length === 0) return 0.5; // No data, neutral
 
-    const positive = relevantPrefs.filter((p) => p.preference === 'love' || p.preference === 'like');
-    const negative = relevantPrefs.filter((p) => p.preference === 'dislike' || p.preference === 'hate');
+    const positive = relevantPrefs.filter(
+      (p) => p.preference === 'love' || p.preference === 'like',
+    );
+    const negative = relevantPrefs.filter(
+      (p) => p.preference === 'dislike' || p.preference === 'hate',
+    );
 
     const positiveScore = positive.reduce((sum, p) => sum + p.strength, 0) / positive.length || 0;
     const negativeScore = negative.reduce((sum, p) => sum + p.strength, 0) / negative.length || 0;
