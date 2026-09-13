@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
 
 import { StepShell } from '../components/decision/StepShell';
 import { INTENT_OPTIONS, intentCopy } from '../components/decision/copy';
@@ -10,6 +11,14 @@ import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import { useDecisionStore } from '../stores/decision.store';
 import { colors, spacing } from '../theme';
+
+const INTENT_ICON_COLORS: Record<string, string> = {
+  'sparkles-outline': colors.softYellow,
+  'heart-outline': colors.softPink,
+  'leaf-outline': colors.softGreen,
+  'help-circle-outline': colors.softCyan,
+  'flash-outline': colors.softPeach,
+};
 
 /**
  * INTENT STEP (plan §4 / §34): "What do you want right now?"
@@ -65,14 +74,14 @@ export function IntentScreen() {
                 // @ts-expect-error Ionicons glyph map is string-typed at runtime
                 name={option.icon}
                 size={22}
-                color={colors.primary}
+                color={INTENT_ICON_COLORS[option.icon] ?? colors.softViolet}
               />
             </View>
             <View style={styles.textWrap}>
               <Text style={styles.label}>{option.label}</Text>
               <Text style={styles.caption}>{option.caption}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={20} color={colors.softViolet} />
           </TouchableOpacity>
         ))}
       </View>

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   CreateMemberRequest,
+  HouseholdAgeGroup,
   HouseholdMemberConstraints,
   HouseholdMemberProfile,
   HouseholdMemberSoftPreferences,
@@ -58,6 +59,7 @@ export class HouseholdMemberService {
       displayName: input.displayName.trim(),
       initials: initialsFor(input.displayName),
       relationship: (input.relationship ?? 'other') as HouseholdRelationship,
+      ageGroup: (input.ageGroup ?? 'adult') as HouseholdAgeGroup,
       isOwner: false,
       active: true,
       constraints: { ...EMPTY_CONSTRAINTS, ...input.constraints },
@@ -79,6 +81,7 @@ export class HouseholdMemberService {
       patch.initials = initialsFor(input.displayName);
     }
     if (input.relationship !== undefined) patch.relationship = input.relationship;
+    if (input.ageGroup !== undefined) patch.ageGroup = input.ageGroup;
     if (input.active !== undefined) patch.active = input.active;
     if (input.constraints !== undefined) {
       const merged = { ...EMPTY_CONSTRAINTS, ...member.get('constraints'), ...input.constraints };

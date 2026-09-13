@@ -1,8 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+} from '@expo-google-fonts/inter';
 
 // The RevenueCat SDK logs every network failure (offline/emulator without
 // internet) via console.error, which LogBox surfaces as red banners that also
@@ -57,6 +66,14 @@ export default function App() {
   const token = useAuthStore((state) => state.token);
   const userId = useAuthStore((state) => state.user?.id ?? null);
 
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+  });
+
   useEffect(() => {
     void hydrate();
     initializeOneSignalIfConfigured();
@@ -90,8 +107,12 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <AppNavigator />
-        <StatusBar style="auto" />
+        {fontsLoaded ? (
+          <>
+            <AppNavigator />
+            <StatusBar style="auto" />
+          </>
+        ) : null}
       </QueryClientProvider>
     </SafeAreaProvider>
   );

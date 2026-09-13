@@ -2,7 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 
 import type { CravingProfile } from '@meal-rescue/shared-types';
 
@@ -109,7 +111,7 @@ export function CravingScreen() {
           navigation.navigate('RescueLoading', { mealId, foods });
         }}
       >
-        <Ionicons name="arrow-forward" size={16} color={colors.textSecondary} />
+        <Ionicons name="arrow-forward" size={16} color={colors.softViolet} />
         <Text style={styles.skipText}>No craving — just show me the best move</Text>
       </TouchableOpacity>
     </StepShell>

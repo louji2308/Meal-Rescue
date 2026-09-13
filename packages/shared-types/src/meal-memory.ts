@@ -183,6 +183,7 @@ export type MealMemoryIntent =
   | 'BLOCK_TIME'
   | 'SET_PREFERENCE'
   | 'SET_RULE'
+  | 'REMOVE_RULE'
   | 'MODIFY_INVENTORY_INTENT'
   | 'PLAN_WEEK'
   | 'REPLAN'
@@ -201,6 +202,7 @@ export const MEAL_MEMORY_INTENTS: MealMemoryIntent[] = [
   'BLOCK_TIME',
   'SET_PREFERENCE',
   'SET_RULE',
+  'REMOVE_RULE',
   'MODIFY_INVENTORY_INTENT',
   'PLAN_WEEK',
   'REPLAN',

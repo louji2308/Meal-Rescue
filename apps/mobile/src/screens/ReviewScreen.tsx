@@ -3,7 +3,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -44,7 +46,7 @@ export function ReviewScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          <Ionicons name="restaurant-outline" size={32} color={colors.primary} />
+          <Ionicons name="restaurant-outline" size={32} color={colors.softGreen} />
           <Text style={[typography.heading, styles.title]}>Here's what I see</Text>
         </View>
 
@@ -79,7 +81,7 @@ export function ReviewScreen() {
           >
             <Text style={styles.mealText}>{mealSummary}</Text>
             <View style={styles.editHint}>
-              <Ionicons name="pencil-outline" size={14} color={colors.textSecondary} />
+              <Ionicons name="pencil-outline" size={14} color={colors.softPurple} />
               <Text style={styles.editHintText}>Tap to correct</Text>
             </View>
           </TouchableOpacity>

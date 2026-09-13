@@ -167,6 +167,14 @@ const RULES: Rule[] = [
     ],
     weight: 1.4,
   },
+  {
+    intent: 'REMOVE_RULE',
+    patterns: [
+      /\b(forget|forgot|drop|lift|cancel|remove|delete)\b.*\brule/i,
+      /\bno (?:more|longer)\b/i,
+    ],
+    weight: 1.5,
+  },
 ];
 
 const BACKUP_UNEXPECTED: Rule = {
@@ -239,12 +247,15 @@ function findMealConcept(text: string): string | null {
 function findIngredient(text: string): string | null {
   const patterns = [
     /(?:without|no|minus|avoid|skip|hold|reserve|save|don'?t use|stop using|not use|exclude)\s+(?:the\s+|any\s+)?([a-zA-Z][a-zA-Z -]{0,30})/i,
+    /(?:forget|forgot|drop|lift|cancel|remove|delete)\s+(?:about\s+|the\s+|that\s+|our\s+)?([a-zA-Z][a-zA-Z -]{0,30})(?:\s+rule)?/i,
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
-      const ingredient = (match[1] ?? '').trim();
-      if (ingredient.length < 30) return ingredient;
+      let ingredient = (match[1] ?? '').trim();
+      ingredient = ingredient.replace(/\s+rule$/i, '').trim();
+      ingredient = ingredient.replace(/^(?:the|that|our|any)\s+/i, '').trim();
+      if (ingredient.length < 30 && ingredient.length > 0) return ingredient;
     }
   }
   return null;
@@ -287,6 +298,7 @@ export const MUTATIONS_ALWAYS_CONFIRMED = new Set<MealMemoryIntent>([
   'REPLAN',
   'MOVE_MEAL',
   'MODIFY_SCHEDULE',
+  'REMOVE_RULE',
 ]);
 
 function requiredEntitiesFor(intent: MealMemoryIntent): string[] {
@@ -298,6 +310,8 @@ function requiredEntitiesFor(intent: MealMemoryIntent): string[] {
     case 'BLOCK_TIME':
       return ['targetHorizon'];
     case 'SET_RULE':
+      return ['ingredient'];
+    case 'REMOVE_RULE':
       return ['ingredient'];
     case 'RECORD_ACTUAL_MEAL':
       return ['mealSlot'];
@@ -335,7 +349,9 @@ export function classifyIntent(text: string, context: ClassifyContext): IntentRe
     mealSlot: slot,
     excludedDay: dateRef && !targetDate && !isWeekRef ? null : null,
     ingredient:
-      intent === 'SET_RULE' || intent === 'MODIFY_INVENTORY_INTENT'
+      intent === 'SET_RULE' ||
+      intent === 'REMOVE_RULE' ||
+      intent === 'MODIFY_INVENTORY_INTENT'
         ? findIngredient(trimmed)
         : null,
     memberId: findMember(trimmed, context.memberNames),
@@ -416,6 +432,26 @@ export function buildClarificationPrompt(resolution: IntentResolution): Clarific
 
 export function bandFor(confidence: number): ConfidenceBand {
   return confidence >= 0.75 ? 'HIGH' : confidence >= 0.5 ? 'MEDIUM' : 'LOW';
+}
+
+export function isBareConfirmation(text: string): boolean {
+  return /^(?:yes|y|yeah|yep|yup|sure|ok|okay|correct|confirmed|confirm|right|go ahead|please do|do it)$/i.test(
+    text.trim(),
+  );
+}
+
+export function isBareCancellation(text: string): boolean {
+  return /^(?:no|n|nope|cancel|never mind|no thanks|forget it|skip|skip it|don'?t|leave it)$/i.test(
+    text.trim(),
+  );
+}
+
+export function ingredientsMatch(a: string, b: string): boolean {
+  const singular = (s: string): string =>
+    s.length > 3 && s.endsWith('s') ? s.slice(0, -1) : s;
+  const x = singular(a.trim().toLowerCase());
+  const y = singular(b.trim().toLowerCase());
+  return x === y && a.trim().length > 0 && b.trim().length > 0;
 }
 
 export function isPlanWeek(intent: MealMemoryIntent): boolean {

@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useRef } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useDayPhase } from '../hooks/useDayPhase';
-import type { HomeStackParamList } from '../navigation/AppNavigator';
+import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
 import { hasAdMobAppId, showInterstitialAd } from '../services/ads.service';
 import { useAuthStore } from '../stores/auth.store';
+import { useCommonTableStore } from '../stores/common-table.store';
 import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
 
@@ -17,10 +19,17 @@ import { colors, spacing, typography } from '../theme';
  * One primary action. No feed, no dashboard, no noise.
  */
 export function HomeScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList & RootStackParamList>>();
   const user = useAuthStore((state) => state.user);
   const isPro = useMonetization((state) => state.isPro);
+  const members = useCommonTableStore((state) => state.members);
+  const loadHousehold = useCommonTableStore((state) => state.loadHousehold);
   const { phase, tint } = useDayPhase();
+
+  useEffect(() => {
+    // Preload the table so the Common Table entrance card can be context-aware.
+    void loadHousehold().catch(() => {});
+  }, [loadHousehold]);
 
   const greeting = (() => {
     const name = user?.email.split('@')[0] ?? '';
@@ -74,6 +83,27 @@ export function HomeScreen() {
           <Ionicons name="camera" size={28} color={colors.surface} />
           <Text style={styles.ctaText}>Tell us what’s on your plate</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.commonTableCard}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('CommonTableStack')}
+          accessibilityRole="button"
+          accessibilityLabel="Cook one meal for the whole table"
+        >
+          <View style={styles.commonTableIcon}>
+            <Ionicons name="people" size={24} color={colors.softViolet} />
+          </View>
+          <View style={styles.commonTableText}>
+            <Text style={styles.commonTableTitle}>Cook for the table</Text>
+            <Text style={styles.commonTableSubtitle}>
+              {members.length > 0
+                ? 'One meal that works for everyone you cook for'
+                : 'Add the people you cook for first'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.softViolet} />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -115,9 +145,43 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: 12,
   },
-  ctaText: {
+ctaText: {
     color: colors.surface,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  commonTableCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    alignSelf: 'stretch',
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  commonTableIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commonTableText: {
+    flex: 1,
+  },
+  commonTableTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  commonTableSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
   },
 });

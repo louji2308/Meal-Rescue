@@ -14,11 +14,11 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { MealAnalysisResponse } from '@meal-rescue/shared-types';
@@ -229,7 +229,7 @@ export function CaptureScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Take a photo of your meal"
               >
-                <Ionicons name="camera" size={28} color={colors.primary} />
+                <Ionicons name="camera" size={28} color={colors.softPeach} />
                 <Text style={styles.photoActionText}>Take photo</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -239,7 +239,7 @@ export function CaptureScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Choose a photo from library"
               >
-                <Ionicons name="images" size={28} color={colors.primary} />
+                <Ionicons name="images" size={28} color={colors.softPurple} />
                 <Text style={styles.photoActionText}>Choose photo</Text>
               </TouchableOpacity>
             </View>
@@ -278,7 +278,11 @@ export function CaptureScreen() {
               name={recording ? 'mic-off' : 'mic'}
               size={28}
               color={
-                recording ? colors.error : SPEECH_AVAILABLE ? colors.primary : colors.textSecondary
+                recording
+                  ? colors.softRed
+                  : SPEECH_AVAILABLE
+                    ? colors.softPink
+                    : colors.textSecondary
               }
             />
             <Text

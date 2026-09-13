@@ -15,6 +15,9 @@ import type { DietaryRestriction, EffortLevel, ISO8601, UUID } from './index';
 export type HouseholdRelationship =
   'self' | 'partner' | 'child' | 'family' | 'roommate' | 'friend' | 'other';
 
+/** Life-stage used to inform portion sizes and suggestions. */
+export type HouseholdAgeGroup = 'baby' | 'child' | 'adult';
+
 /** HARD constraints — can never be violated, never relaxed by an LLM. */
 export interface HouseholdMemberConstraints {
   allergies: string[];
@@ -28,6 +31,8 @@ export interface HouseholdMemberSoftPreferences {
   dislikes: string[];
   spiceLevel?: 'mild' | 'medium' | 'spicy';
   textures?: string[];
+  /** Optional free-text hint ("loves salmon, mild spice") for better suggestions. */
+  note?: string;
 }
 
 export interface HouseholdMemberProfile {
@@ -36,6 +41,7 @@ export interface HouseholdMemberProfile {
   displayName: string;
   initials: string;
   relationship: HouseholdRelationship;
+  ageGroup?: HouseholdAgeGroup;
   isOwner: boolean;
   active: boolean;
   constraints: HouseholdMemberConstraints;
@@ -133,6 +139,7 @@ export interface GetHouseholdResponse {
 export interface CreateMemberRequest {
   displayName: string;
   relationship?: HouseholdRelationship;
+  ageGroup?: HouseholdAgeGroup;
   constraints?: Partial<HouseholdMemberConstraints>;
   preferences?: Partial<HouseholdMemberSoftPreferences>;
 }

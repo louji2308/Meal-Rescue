@@ -4,6 +4,7 @@ import { Op } from 'sequelize';
 
 import type {
   Household,
+  HouseholdAgeGroup,
   HouseholdMemberProfile,
   HouseholdRelationship,
   UUID,
@@ -29,6 +30,7 @@ export interface HouseholdMemberRow {
   displayName: string;
   initials: string;
   relationship: string;
+  ageGroup?: HouseholdAgeGroup;
   isOwner: boolean;
   active: boolean;
   constraints: HouseholdMemberProfile['constraints'];
@@ -43,6 +45,7 @@ export function memberToProfile(row: HouseholdMemberRow): HouseholdMemberProfile
     displayName: row.displayName,
     initials: row.initials,
     relationship: row.relationship as HouseholdRelationship,
+    ageGroup: row.ageGroup ?? 'adult',
     isOwner: row.isOwner,
     active: row.active,
     constraints: row.constraints,

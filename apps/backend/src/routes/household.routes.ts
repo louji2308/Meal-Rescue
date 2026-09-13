@@ -15,6 +15,7 @@ const createMemberSchema = z.object({
   relationship: z
     .enum(['self', 'partner', 'child', 'family', 'roommate', 'friend', 'other'])
     .optional(),
+  ageGroup: z.enum(['baby', 'child', 'adult']).optional(),
   constraints: z
     .object({
       allergies: z.array(z.string().min(1).max(80)).default([]),

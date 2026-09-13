@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from './AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing } from '../theme';
@@ -35,11 +36,11 @@ export function RescueCard({
       <View style={styles.card}>
         <View style={styles.header}>
           <View style={styles.badge}>
-            <Ionicons name="help-buoy" size={20} color={colors.primary} />
+            <Ionicons name="help-buoy" size={20} color={colors.softCyan} />
             <Text style={styles.badgeText}>Meal Rescue</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel="Close">
-            <Ionicons name="close" size={24} color={colors.textSecondary} />
+            <Ionicons name="close" size={24} color={colors.softRed} />
           </TouchableOpacity>
         </View>
 
@@ -58,11 +59,11 @@ export function RescueCard({
 
         <View style={styles.meta}>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+            <Ionicons name="time-outline" size={16} color={colors.softCyan} />
             <Text>{timeMinutes} min</Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="flash-outline" size={16} color={colors.textSecondary} />
+            <Ionicons name="flash-outline" size={16} color={colors.softYellow} />
             <Text>Extra effort: {effort}</Text>
           </View>
         </View>

@@ -10,12 +10,12 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -61,6 +61,14 @@ const SIGNAL_ICONS: Record<string, string> = {
   expiring_soon: 'time',
   low_stock: 'trending-down',
   unused_long: 'hourglass',
+};
+
+const SIGNAL_COLORS: Record<string, string> = {
+  use_first: colors.softRed,
+  almost_a_meal: colors.softGreen,
+  expiring_soon: colors.softCyan,
+  low_stock: colors.softYellow,
+  unused_long: colors.softPurple,
 };
 
 export function KitchenScreen() {
@@ -374,7 +382,7 @@ export function KitchenScreen() {
         </View>
         {item.isExpiringSoon && (
           <View style={styles.expiryWarning}>
-            <Ionicons name="time" size={14} color={colors.error} />
+            <Ionicons name="time" size={14} color={colors.softRed} />
             <Text style={styles.expiryWarningText}>
               Expires in {item.daysUntilExpiry} day{item.daysUntilExpiry === 1 ? '' : 's'}
             </Text>
@@ -430,7 +438,7 @@ export function KitchenScreen() {
         }}
       >
         <View style={styles.signalHeader}>
-          <Ionicons name={iconName as any} size={20} color={colors.text} />
+          <Ionicons name={iconName as any} size={20} color={SIGNAL_COLORS[signal.type] ?? colors.softViolet} />
           <Text style={styles.signalTitle}>{signal.title}</Text>
           {signalBadge(signal.priority)}
         </View>
@@ -487,7 +495,7 @@ export function KitchenScreen() {
     return (
       <View style={styles.makeSection}>
         <View style={styles.makeHeader}>
-          <Ionicons name="bulb" size={20} color={colors.text} />
+          <Ionicons name="bulb" size={20} color={colors.softYellow} />
           <Text style={styles.makeTitle}>What can I make?</Text>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -496,7 +504,7 @@ export function KitchenScreen() {
               setMakeIdeas([]);
             }}
           >
-            <Ionicons name="close" size={20} color={colors.textSecondary} />
+            <Ionicons name="close" size={20} color={colors.softRed} />
           </TouchableOpacity>
         </View>
         {makeBusy ? (
@@ -573,7 +581,7 @@ export function KitchenScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Close form"
                 >
-                  <Ionicons name="close" size={20} color={colors.textSecondary} />
+                  <Ionicons name="close" size={20} color={colors.softRed} />
                 </TouchableOpacity>
               </View>
 
@@ -774,7 +782,7 @@ export function KitchenScreen() {
         {/* Empty state */}
         {!hasContent && (
           <View style={styles.emptyState}>
-            <Ionicons name="restaurant-outline" size={48} color={colors.textSecondary} />
+            <Ionicons name="restaurant-outline" size={48} color={colors.softGreen} />
             <Text style={styles.emptyTitle}>Your kitchen is quiet</Text>
             <Text style={styles.emptySubtitle}>
               Add ingredients and I'll help you make the most of what you have.
@@ -818,7 +826,7 @@ export function KitchenScreen() {
         {/* Pantry items */}
         {!hasAnything ? (
           <View style={styles.emptyState}>
-            <Ionicons name="file-tray-outline" size={48} color={colors.textSecondary} />
+            <Ionicons name="file-tray-outline" size={48} color={colors.softPurple} />
             <Text style={styles.emptyTitle}>Nothing here yet</Text>
             <Text style={styles.emptySubtitle}>
               Tap + to add ingredients or snap a photo to identify food.
@@ -850,7 +858,7 @@ export function KitchenScreen() {
             {identifyBusy ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Ionicons name="camera" size={20} color={colors.primary} />
+              <Ionicons name="camera" size={20} color={colors.softPeach} />
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -859,7 +867,7 @@ export function KitchenScreen() {
             onPress={() => void handleCameraPick('library')}
             disabled={identifyBusy}
           >
-            <Ionicons name="images" size={20} color={colors.primary} />
+            <Ionicons name="images" size={20} color={colors.softPurple} />
           </TouchableOpacity>
         </View>
       </View>

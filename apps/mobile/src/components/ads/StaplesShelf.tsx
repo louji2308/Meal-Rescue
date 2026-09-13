@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../AppText';
 
 import { getAdEligibility } from '../../services/ads.api';
 import { colors, spacing, typography } from '../../theme';

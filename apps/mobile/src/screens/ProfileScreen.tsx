@@ -8,10 +8,10 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PersonalizationInsight, PreferenceLearned } from '@meal-rescue/shared-types';
@@ -137,18 +137,18 @@ export function ProfileScreen() {
                 </Text>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={20} color={colors.softViolet} />
           </TouchableOpacity>
         )}
 
         <View style={styles.section}>
           <View style={styles.sectionTitle}>
-            <Ionicons name="settings-outline" size={20} color={colors.text} />
+            <Ionicons name="settings-outline" size={20} color={colors.softViolet} />
             <Text style={styles.sectionTitleText}>Settings</Text>
           </View>
 
           <View style={styles.settingRow}>
-            <Ionicons name="notifications-outline" size={22} color={colors.text} />
+            <Ionicons name="notifications-outline" size={22} color={colors.softPink} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Reminders</Text>
               <Text style={styles.settingSub}>Rescue reminders and smart nudges</Text>
@@ -169,16 +169,16 @@ export function ProfileScreen() {
             style={styles.settingRow}
             activeOpacity={0.7}
           >
-            <Ionicons name="mail-outline" size={22} color={colors.text} />
+            <Ionicons name="mail-outline" size={22} color={colors.softPurple} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Support</Text>
               <Text style={styles.settingSub}>{SUPPORT_EMAIL}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={18} color={colors.softViolet} />
           </TouchableOpacity>
 
           <View style={styles.settingRow}>
-            <Ionicons name="information-circle-outline" size={22} color={colors.text} />
+            <Ionicons name="information-circle-outline" size={22} color={colors.softCyan} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>About Meal Rescue</Text>
               <Text style={styles.settingSub}>Version {APK_VERSION}</Text>
@@ -192,12 +192,12 @@ export function ProfileScreen() {
             style={styles.settingRow}
             activeOpacity={0.7}
           >
-            <Ionicons name="book-outline" size={22} color={colors.text} />
+            <Ionicons name="book-outline" size={22} color={colors.softPeach} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Taste Journal</Text>
               <Text style={styles.settingSub}>What Meal Rescue remembers about you</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={18} color={colors.softViolet} />
           </TouchableOpacity>
         </View>
 
@@ -206,7 +206,7 @@ export function ProfileScreen() {
         {insights.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitle}>
-              <Ionicons name="sparkles-outline" size={20} color={colors.text} />
+              <Ionicons name="sparkles-outline" size={20} color={colors.softYellow} />
               <Text style={styles.sectionTitleText}>What Meal Rescue has learned</Text>
             </View>
             {insights.map((insight, i) => (
@@ -214,8 +214,8 @@ export function ProfileScreen() {
                 <Ionicons
                   name={typeIcon(insight.type)}
                   size={24}
-                  color={colors.text}
                   style={styles.insightIcon}
+                  color={colors.softViolet}
                 />
                 <View style={styles.insightContent}>
                   <Text style={styles.insightDesc}>{insight.description}</Text>
@@ -238,7 +238,7 @@ export function ProfileScreen() {
         {preferences.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitle}>
-              <Ionicons name="stats-chart-outline" size={20} color={colors.text} />
+              <Ionicons name="stats-chart-outline" size={20} color={colors.softGreen} />
               <Text style={styles.sectionTitleText}>Learned preferences</Text>
             </View>
             {preferences.map((pref, i) => (
@@ -261,7 +261,7 @@ export function ProfileScreen() {
             <Ionicons
               name="sparkles-outline"
               size={48}
-              color={colors.textSecondary}
+              color={colors.softPurple}
               style={styles.emptyIcon}
             />
             <Text style={styles.emptyText}>No learnings yet</Text>

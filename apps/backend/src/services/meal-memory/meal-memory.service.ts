@@ -13,6 +13,7 @@ import { Op } from 'sequelize';
 
 import type {
   FoodWorldState,
+  IntentEntities,
   IntentResolution,
   InventoryReservation,
   MealEvent,
@@ -48,8 +49,12 @@ import { AccountingService } from './accounting.service';
 import { addDays, dateKeyFor, nextWeekStartFor, weekStartFor } from './date-utils';
 import {
   MUTATIONS_ALWAYS_CONFIRMED,
+  bandFor,
   buildClarificationPrompt,
   classifyIntent,
+  ingredientsMatch,
+  isBareCancellation,
+  isBareConfirmation,
 } from './intent-classifier';
 import { toMealEvent } from './mappers';
 import { MealMemoryAiService } from './meal-memory-ai.service';
@@ -159,6 +164,63 @@ export class MealMemoryService {
     }
     const householdId =
       (event.get('householdId') as UUID) ?? (await this.requireHouseholdId(userId));
+    const trimmedAnswer = answer.trim();
+    const originalStatus = event.get('status') as string;
+
+    // A bare yes/no on an awaiting-confirmation mutation reuses the original
+    // (already refined) resolution. Reclassifying "rawText + yes" pollutes
+    // entity extraction (e.g. ingredient becomes "peanuts yes"), so on pure
+    // confirmation words we execute what the ledger already locked in.
+    if (originalStatus === 'awaiting_confirmation') {
+      if (isBareCancellation(trimmedAnswer)) {
+        await event.update({ status: 'cancelled' });
+        return {
+          intentId,
+          status: 'actioned',
+          resolution: {
+            intent: event.get('intent') as IntentResolution['intent'],
+            confidence: Number(event.get('confidence') ?? 0),
+            confidenceBand: bandFor(Number(event.get('confidence') ?? 0)),
+            entities:
+              (event.get('entities') as unknown as IntentEntities | null) ?? ({} as IntentEntities),
+            rawText: (event.get('rawText') as string) ?? '',
+            requiresClarification: Boolean(event.get('requiresClarification')),
+            clarificationQuestion: (event.get('clarificationQuestion') as string | null) ?? null,
+          },
+          clarification: null,
+          result: {
+            message: 'Got it — nothing changed.',
+            mealEvents: [],
+            plan: null,
+            rule: null,
+            reservation: null,
+            purchaseSuggestions: [],
+          },
+        };
+      }
+
+      if (isBareConfirmation(trimmedAnswer)) {
+        const resolution: IntentResolution = {
+          intent: event.get('intent') as IntentResolution['intent'],
+          confidence: Number(event.get('confidence') ?? 0),
+          confidenceBand: bandFor(Number(event.get('confidence') ?? 0)),
+          entities: (event.get('entities') as unknown as IntentEntities | null) ?? ({} as IntentEntities),
+          rawText: (event.get('rawText') as string) ?? '',
+          requiresClarification: Boolean(event.get('requiresClarification')),
+          clarificationQuestion: (event.get('clarificationQuestion') as string | null) ?? null,
+        };
+        const result = await this.executeAction(userId, householdId, resolution);
+        await event.update({ status: 'actioned' });
+        return {
+          intentId,
+          status: 'actioned',
+          resolution,
+          clarification: null,
+          result,
+        };
+      }
+    }
+
     const rawText = `${event.get('rawText') as string} ${answer}`.trim();
     const members = await this.models.HouseholdMember.findAll({
       where: { householdId, active: true },
@@ -516,6 +578,8 @@ export class MealMemoryService {
         return this.actionBlockTime(userId, householdId, resolution);
       case 'SET_RULE':
         return this.actionSetRule(userId, householdId, resolution);
+      case 'REMOVE_RULE':
+        return this.actionRemoveRule(userId, householdId, resolution);
       case 'REMEMBER':
         return this.actionRemember(userId, householdId, resolution);
       case 'MODIFY_INVENTORY_INTENT':
@@ -803,6 +867,52 @@ export class MealMemoryService {
       plan: null,
       rule,
       reservation,
+      purchaseSuggestions: [],
+    };
+  }
+
+  private async actionRemoveRule(
+    userId: UUID,
+    householdId: UUID,
+    resolution: IntentResolution,
+  ): Promise<MemoryActionResult> {
+    const ingredient = (resolution.entities.ingredient ?? '').trim().toLowerCase();
+    let releasedHolds = 0;
+    if (ingredient) {
+      const rules = await this.models.MealRule.findAll({ where: { householdId, active: true } });
+      const matched = rules.find((r) => {
+        const stored = r.get('ingredient');
+        return stored != null && ingredientsMatch(String(stored), ingredient);
+      });
+      if (!matched) {
+        return {
+          message: `I could not find an active rule on ${ingredient} to remove.`,
+          mealEvents: [],
+          plan: null,
+          rule: null,
+          reservation: null,
+          purchaseSuggestions: [],
+        };
+      }
+      await this.models.MealRule.update(
+        { active: false },
+        { where: { id: matched.get('id') as string } },
+      );
+      const [reservationCount] = await this.models.InventoryReservation.update(
+        { active: false },
+        { where: { householdId, active: true, ingredient: String(matched.get('ingredient')) } },
+      );
+      releasedHolds = reservationCount;
+    }
+    const message = ingredient
+      ? `Removed the rule on ${ingredient}${releasedHolds > 0 ? ' and released its hold' : ''}.`
+      : 'I could not tell which rule to remove — name the ingredient.';
+    return {
+      message,
+      mealEvents: [],
+      plan: null,
+      rule: null,
+      reservation: null,
       purchaseSuggestions: [],
     };
   }

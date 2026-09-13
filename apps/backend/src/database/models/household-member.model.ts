@@ -8,6 +8,7 @@ import {
 } from 'sequelize';
 
 import type {
+  HouseholdAgeGroup,
   HouseholdMemberConstraints,
   HouseholdMemberSoftPreferences,
   HouseholdRelationship,
@@ -28,6 +29,7 @@ export class HouseholdMember extends Model<
   declare displayName: string;
   declare initials: string;
   declare relationship: HouseholdRelationship;
+  declare ageGroup: CreationOptional<HouseholdAgeGroup>;
   declare isOwner: CreationOptional<boolean>;
   declare active: CreationOptional<boolean>;
   declare constraints: HouseholdMemberConstraints;
@@ -61,6 +63,12 @@ export function defineHouseholdMemberModel(sequelize: Sequelize): typeof Househo
         type: DataTypes.STRING(20),
         allowNull: false,
         defaultValue: 'other',
+      },
+      ageGroup: {
+        type: DataTypes.STRING(10),
+        allowNull: false,
+        defaultValue: 'adult',
+        validate: { isIn: [['baby', 'child', 'adult']] },
       },
       isOwner: {
         type: DataTypes.BOOLEAN,

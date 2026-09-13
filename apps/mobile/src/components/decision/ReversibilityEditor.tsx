@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../AppText';
 
 import { haptics } from '../../services/haptics';
 import { colors, spacing } from '../../theme';
@@ -52,7 +53,7 @@ export function ReversibilityEditor({
                 }}
                 style={styles.remove}
               >
-                <Ionicons name="close" size={18} color={colors.textSecondary} />
+                <Ionicons name="close" size={18} color={colors.softRed} />
               </TouchableOpacity>
             </View>
             {suggestions.length > 0 ? (

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../AppText';
 
 import type { DecisionAction, RescueCandidate } from '@meal-rescue/shared-types';
 
@@ -48,7 +49,7 @@ export function BestMoveCard({
     return (
       <View style={[styles.card, styles.keepCard]}>
         <View style={styles.keepHead}>
-          <Ionicons name="checkmark-circle" size={28} color={colors.success} />
+          <Ionicons name="checkmark-circle" size={28} color={colors.softGreen} />
           <View style={styles.keepTextWrap}>
             <Text style={[typography.heading, styles.keepTitle]}>You’re done.</Text>
             <Text style={styles.keepBody}>
@@ -79,7 +80,7 @@ export function BestMoveCard({
       <Text style={[typography.heading, styles.action]}>{actionLine(action, additions)}</Text>
       <Text style={styles.why}>{whyLine(action, candidate, foods)}</Text>
       <View style={styles.costRow}>
-        <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+        <Ionicons name="time-outline" size={16} color={colors.softCyan} />
         <Text style={styles.cost}>
           {costLine(candidate.estimatedMinutes, candidate.estimatedCostLevel)}
         </Text>

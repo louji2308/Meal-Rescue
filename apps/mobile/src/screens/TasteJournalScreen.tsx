@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -184,7 +185,7 @@ export function TasteJournalScreen() {
           onPress={() => navigation.goBack()}
           style={styles.backRow}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.text} />
+          <Ionicons name="arrow-back" size={20} color={colors.softViolet} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
@@ -246,7 +247,7 @@ export function TasteJournalScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {header}
           <View style={styles.empty}>
-            <Ionicons name="book-outline" size={44} color={colors.textSecondary} />
+            <Ionicons name="book-outline" size={44} color={colors.softPurple} />
             <Text style={styles.emptyText}>No memories yet</Text>
             <Text style={styles.emptySub}>
               Rescue a meal or give feedback and we&apos;ll start writing it all down here.

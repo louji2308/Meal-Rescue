@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PantryItem, PantryUpsertRequest } from '@meal-rescue/shared-types';
@@ -221,7 +223,7 @@ export function PantryScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Close form"
               >
-                <Ionicons name="close" size={20} color={colors.textSecondary} />
+                <Ionicons name="close" size={20} color={colors.softRed} />
               </TouchableOpacity>
             </View>
             <TextInput

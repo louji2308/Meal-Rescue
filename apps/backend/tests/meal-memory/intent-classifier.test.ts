@@ -5,6 +5,9 @@ import {
   bandFor,
   buildClarificationPrompt,
   classifyIntent,
+  ingredientsMatch,
+  isBareCancellation,
+  isBareConfirmation,
   isPlanWeek,
   nextWeekStartForDate,
   weekStartForDate,
@@ -62,6 +65,18 @@ describe('intent-classifier', () => {
       const r = classifyIntent("don't use eggs", ctx());
       expect(r.intent).toBe('SET_RULE');
       expect(r.entities.ingredient).toBe('eggs');
+    });
+
+    it('recognises REMOVE_RULE for "forget the dairy rule"', () => {
+      const r = classifyIntent('forget the dairy rule', ctx());
+      expect(r.intent).toBe('REMOVE_RULE');
+      expect(r.entities.ingredient).toBe('dairy');
+    });
+
+    it('recognises REMOVE_RULE for "remove the gluten rule"', () => {
+      const r = classifyIntent('remove the gluten rule', ctx());
+      expect(r.intent).toBe('REMOVE_RULE');
+      expect(r.entities.ingredient).toBe('gluten');
     });
 
     it('recognises PURCHASE_SUGGESTION', () => {
@@ -123,6 +138,7 @@ describe('intent-classifier', () => {
     it('MUTATIONS_ALWAYS_CONFIRMED contains destructive intents', () => {
       expect(MUTATIONS_ALWAYS_CONFIRMED.has('REMOVE_MEAL')).toBe(true);
       expect(MUTATIONS_ALWAYS_CONFIRMED.has('REPLAN')).toBe(true);
+      expect(MUTATIONS_ALWAYS_CONFIRMED.has('REMOVE_RULE')).toBe(true);
       expect(MUTATIONS_ALWAYS_CONFIRMED.has('PLAN_WEEK')).toBe(false);
     });
 
@@ -142,6 +158,33 @@ describe('intent-classifier', () => {
     it('buildClarificationPrompt returns a question when entities are missing', () => {
       const r = classifyIntent('schedule something', ctx());
       expect(buildClarificationPrompt(r)).not.toBeNull();
+    });
+
+    it('isBareConfirmation matches plain green-light words only', () => {
+      for (const word of ['yes', 'Yes', 'y', 'yeah', 'sure', 'okay', 'go ahead', 'please do']) {
+        expect(isBareConfirmation(word)).toBe(true);
+      }
+      expect(isBareConfirmation('yes please add eggs')).toBe(false);
+      expect(isBareConfirmation('the dairy rule')).toBe(false);
+      expect(isBareConfirmation('no')).toBe(false);
+    });
+
+    it('isBareCancellation matches plain red-light words only', () => {
+      for (const word of ['no', 'No', 'n', 'nope', 'cancel', 'never mind', 'no thanks', 'forget it']) {
+        expect(isBareCancellation(word)).toBe(true);
+      }
+      expect(isBareCancellation('no peanuts in meals')).toBe(false);
+      expect(isBareCancellation('yes')).toBe(false);
+    });
+
+    it('ingredientsMatch tolerates singular/plural and case', () => {
+      expect(ingredientsMatch('peanuts', 'peanut')).toBe(true);
+      expect(ingredientsMatch('Peanuts', 'PEANUT')).toBe(true);
+      expect(ingredientsMatch('eggs', 'egg')).toBe(true);
+      expect(ingredientsMatch('rice', 'rice')).toBe(true);
+      expect(ingredientsMatch('dairy', 'gluten')).toBe(false);
+      expect(ingredientsMatch('', 'peanut')).toBe(false);
+      expect(ingredientsMatch('peanut', '')).toBe(false);
     });
   });
 });

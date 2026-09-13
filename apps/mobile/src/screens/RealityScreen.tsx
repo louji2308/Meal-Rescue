@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Text } from '../components/AppText';
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { StepShell } from '../components/decision/StepShell';
@@ -99,7 +100,7 @@ export function RealityScreen() {
       </View>
 
       <View style={styles.hintRow}>
-        <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} />
+        <Ionicons name="checkmark-circle-outline" size={18} color={colors.softGreen} />
         <Text style={styles.hint}>
           All set to your easiest defaults — change nothing if you like.
         </Text>

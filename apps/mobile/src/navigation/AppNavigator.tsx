@@ -14,15 +14,16 @@ import {
 import { navigationRef } from '../components/aftercare/navigation';
 import { SATISFACTION_ROUTE } from '../components/aftercare/slots';
 import { PawStamp } from '../components/mascot/PawStamp';
+import { CommonTableNavigator } from './CommonTableNavigator';
 import { CaptureScreen } from '../screens/CaptureScreen';
 import { AiRescueScreen } from '../screens/AiRescueScreen';
 import { CravingScreen } from '../screens/CravingScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
-import { FridgeNegotiatorScreen } from '../screens/FridgeNegotiatorScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { IntentScreen } from '../screens/IntentScreen';
 import { KitchenScreen } from '../screens/KitchenScreen';
 import { LoginScreen } from '../screens/LoginScreen';
+import { MealPlanScreen } from '../screens/MealPlanScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -34,7 +35,7 @@ import { TasteJournalScreen } from '../screens/TasteJournalScreen';
 import { syncSubscription } from '../services/ads.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useMonetization } from '../stores/monetization.store';
-import { colors } from '../theme';
+import { colors, fonts } from '../theme';
 
 export type HomeStackParamList = {
   HomeMain: undefined;
@@ -52,8 +53,8 @@ export type HomeStackParamList = {
 
 export type RootTabParamList = {
   Home: undefined;
-  FridgeNegotiator: undefined;
   Kitchen: undefined;
+  MealPlan: undefined;
   Profile: undefined;
 };
 
@@ -66,6 +67,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Paywall: undefined;
   TasteJournal: undefined;
+  CommonTableStack: undefined;
 };
 
 function HomeStack() {
@@ -88,13 +90,20 @@ function HomeStack() {
 
 const TAB_ICONS: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
   Home: 'restaurant',
-  FridgeNegotiator: 'snow',
   Kitchen: 'file-tray-full',
+  MealPlan: 'calendar',
   Profile: 'person',
 };
 
+const TAB_ACTIVE_COLORS: Record<keyof RootTabParamList, string> = {
+  Home: colors.softRed,
+  Kitchen: colors.softGreen,
+  MealPlan: colors.softPurple,
+  Profile: colors.softCyan,
+};
+
 /**
- * 4 tabs: Rescue (core loop), Fridge Negotiator, Kitchen, Profile
+ * 3 tabs: Rescue (core loop), Kitchen, Profile
  */
 function AuthenticatedTabs() {
   const isPro = useMonetization((state) => state.isPro);
@@ -116,36 +125,39 @@ function AuthenticatedTabs() {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-        },
-        tabBarIcon: ({ focused, color, size }) => {
-          if (route.name === 'Profile' && isPro) {
-            return <PawStamp size={size} opacity={focused ? 1 : 0.45} />;
-          }
-          const iconName = TAB_ICONS[route.name as keyof RootTabParamList] ?? null;
-          if (!iconName) {
-            return null;
-          }
-          return <Ionicons name={iconName} size={size} color={focused ? colors.primary : color} />;
-        },
-      })}
+      screenOptions={({ route }) => {
+        const activeColor =
+          TAB_ACTIVE_COLORS[route.name as keyof RootTabParamList] ?? colors.primary;
+        return {
+          headerShown: false,
+          tabBarActiveTintColor: activeColor,
+          tabBarInactiveTintColor: colors.textSecondary,
+          tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 11 },
+          tabBarStyle: {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+          },
+          tabBarIcon: ({ focused, size }) => {
+            if (route.name === 'Profile' && isPro) {
+              return <PawStamp size={size} opacity={focused ? 1 : 0.45} />;
+            }
+            const iconName = TAB_ICONS[route.name as keyof RootTabParamList] ?? null;
+            if (!iconName) {
+              return null;
+            }
+            return (
+              <Ionicons name={iconName} size={size} color={focused ? activeColor : colors.textSecondary} />
+            );
+          },
+        };
+      }}
     >
       <Tab.Screen name="Home" options={{ title: 'Rescue' }}>
         {() => <HomeStack />}
       </Tab.Screen>
-      <Tab.Screen
-        name="FridgeNegotiator"
-        component={FridgeNegotiatorScreen}
-        options={{ title: 'Fridge' }}
-      />
       <Tab.Screen name="Kitchen" component={KitchenScreen} options={{ title: 'Kitchen' }} />
+      <Tab.Screen name="MealPlan" component={MealPlanScreen} options={{ title: 'Meal Plan' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
@@ -177,6 +189,7 @@ export function AppNavigator() {
             options={{ presentation: 'modal' }}
           />
           <RootStack.Screen name="TasteJournal" component={TasteJournalScreen} />
+          <RootStack.Screen name="CommonTableStack" component={CommonTableNavigator} />
         </RootStack.Navigator>
       ) : (
         <LoginScreen />

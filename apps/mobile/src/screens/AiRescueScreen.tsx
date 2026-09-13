@@ -7,11 +7,11 @@ import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { HomeStackParamList } from '../navigation/AppNavigator';
@@ -125,7 +125,7 @@ export function AiRescueScreen() {
       >
         {/* Header */}
         <View style={styles.hero}>
-          <Ionicons name="bulb" size={28} color={colors.primary} />
+          <Ionicons name="bulb" size={28} color={colors.softYellow} />
           <Text style={[typography.heading, styles.title]}>Here's what I'd do</Text>
           <Text style={styles.foodTag}>{foodSummary}</Text>
         </View>
@@ -159,7 +159,7 @@ export function AiRescueScreen() {
 
               <View style={styles.metaRow}>
                 <View style={styles.metaChip}>
-                  <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+                  <Ionicons name="time-outline" size={14} color={colors.softCyan} />
                   <Text style={styles.metaText}>~{result.timeMinutes} min</Text>
                 </View>
                 <View style={styles.metaChip}>
@@ -172,7 +172,13 @@ export function AiRescueScreen() {
                           : 'fitness-outline'
                     }
                     size={14}
-                    color={colors.textSecondary}
+                    color={
+                      result.effort === 'low'
+                        ? colors.softYellow
+                        : result.effort === 'medium'
+                          ? colors.softRed
+                          : colors.softCyan
+                    }
                   />
                   <Text style={styles.metaText}>{result.effort} effort</Text>
                 </View>
@@ -310,8 +316,6 @@ export function AiRescueScreen() {
     </SafeAreaView>
   );
 }
-
-const EFFORT_COLORS = { low: colors.success, medium: '#F59E0B', high: colors.error };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
