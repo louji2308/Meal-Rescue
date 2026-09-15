@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +15,8 @@ import type {
 } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
+import { Skeleton } from '../components/Skeleton';
+import { FadeInView } from '../components/motion/FadeInView';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { getTasteBundle, getTasteV2 } from '../services/taste.api';
@@ -28,37 +31,37 @@ const SECTION_META: Record<
   preference: {
     title: 'From your finish-a-meal picks',
     icon: 'sparkles',
-    accent: '#000000',
+    accent: colors.softAlert,
     hint: 'The little additions you reached for as you set up your taste.',
   },
   culture: {
     title: 'Your food world',
     icon: 'compass',
-    accent: '#6B6B6B',
+    accent: colors.softFresh,
     hint: 'How you lean between home-style and a twist.',
   },
   learned: {
     title: 'From your rescues',
     icon: 'restaurant',
-    accent: '#999999',
-    hint: 'What you leaned into â€” or away from â€” after saving meals.',
+    accent: colors.softWarm,
+    hint: 'What you leaned into — or away from — after saving meals.',
   },
   personality_shift: {
     title: 'Shifts',
     icon: 'trending-up',
-    accent: '#6B6B6B',
+    accent: colors.softCool,
     hint: 'Moments your taste changed.',
   },
   milestone: {
     title: 'Milestones',
     icon: 'flag',
-    accent: '#000000',
+    accent: colors.softAccent,
     hint: 'Little wins worth remembering.',
   },
   corrected: {
     title: 'Corrections',
     icon: 'refresh',
-    accent: '#999999',
+    accent: colors.softRose,
     hint: 'Times we got it wrong and you told us.',
   },
 };
@@ -151,24 +154,41 @@ export function TasteJournalScreen() {
   const [journal, setJournal] = useState<TasteJournalEntry[]>([]);
   const [personality, setPersonality] = useState<FoodPersonality | null>(null);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const lastLoadedAt = useRef(0);
+
+  const loadBundle = useCallback(
+    async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
+      if (mode === 'refresh') setRefreshing(true);
+      if (mode === 'initial' && !lastLoadedAt.current) setLoading(true);
+      try {
+        const [v2Data, bundle] = await Promise.all([getTasteV2().catch(() => null), getTasteBundle()]);
+        lastLoadedAt.current = Date.now();
+        if (v2Data) setV2(v2Data);
+        setJournal(bundle.journal);
+        setPersonality(bundle.personality);
+        setError(null);
+      } catch (err) {
+        setError(toApiError(err));
+      } finally {
+        if (mode !== 'background') {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      Promise.all([getTasteV2().catch(() => null), getTasteBundle()])
-        .then(([v2Data, bundle]) => {
-          if (!active) return;
-          if (v2Data) setV2(v2Data);
-          setJournal(bundle.journal);
-          setPersonality(bundle.personality);
-        })
-        .catch((err) => {
-          if (active) setError(toApiError(err));
-        });
-      return () => {
-        active = false;
-      };
-    }, []),
+      if (!lastLoadedAt.current) {
+        void loadBundle('initial');
+      } else if (Date.now() - lastLoadedAt.current > 30_000) {
+        void loadBundle('background');
+      }
+    }, [loadBundle]),
   );
 
   const v1Sections = useMemo(() => groupBySections(journal), [journal]);
@@ -179,15 +199,15 @@ export function TasteJournalScreen() {
   const header = useMemo(
     () => (
       <>
-        <TouchableOpacity
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to profile"
           onPress={() => navigation.goBack()}
           style={styles.backRow}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.softViolet} />
+            <Ionicons name="arrow-back" size={20} color={colors.softAlert} />
           <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
+        </Pressable>
 
         <View style={styles.hero}>
           <View style={styles.heroEmblem}>
@@ -195,7 +215,7 @@ export function TasteJournalScreen() {
           </View>
           <Text style={[typography.title, styles.heroTitle]}>Your Taste Journal</Text>
           <Text style={[typography.body, styles.heroSub]}>
-            What Meal Rescue remembers about how you eat â€”{'\n'}and the small things it learned
+            What Meal Rescue remembers about how you eat —{'\n'}and the small things it learned
             while watching.
           </Text>
           <View style={styles.heroStatRow}>
@@ -239,7 +259,36 @@ export function TasteJournalScreen() {
     [journal.length, navigation, personality, v2],
   );
 
-  const v2Content = v2 && (v2.combinations.length > 0 || topPrefs || recentEvents.length > 0);
+const v2Content = v2 && (v2.combinations.length > 0 || topPrefs || recentEvents.length > 0);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.hero}>
+            <View style={styles.heroEmblem}>
+              <Ionicons name="book" size={22} color="#FFFFFF" />
+            </View>
+            <Skeleton.Block width={210} height={28} />
+            <Skeleton.Block width={280} height={14} />
+            <Skeleton.Block width={140} height={14} />
+          </View>
+          <View style={styles.traitCard}>
+            <Skeleton.Block width="45%" height={16} />
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton.Block key={i} width={i === 2 ? '70%' : '100%'} height={14} />
+            ))}
+          </View>
+          <View style={styles.section}>
+            <Skeleton.Block width="40%" height={16} />
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton.Block key={i} width={i === 2 ? '60%' : '100%'} height={16} />
+            ))}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   if (!v2Content && v1Sections.length === 0) {
     return (
@@ -247,7 +296,7 @@ export function TasteJournalScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {header}
           <View style={styles.empty}>
-            <Ionicons name="book-outline" size={44} color={colors.softPurple} />
+            <Ionicons name="book-outline" size={44} color={colors.softAlert} />
             <Text style={styles.emptyText}>No memories yet</Text>
             <Text style={styles.emptySub}>
               Rescue a meal or give feedback and we&apos;ll start writing it all down here.
@@ -301,16 +350,21 @@ export function TasteJournalScreen() {
         },
       }));
 
-  return (
+return (
     <SafeAreaView style={styles.container}>
-      <FlatList
+<FadeInView style={styles.container}>
+<FlatList
         data={sections}
         keyExtractor={(item) => item.key}
         ListHeaderComponent={header}
         contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void loadBundle('refresh')} tintColor={colors.textSecondary} />
+        }
         renderItem={({ item }) => item.render() as React.ReactElement}
       />
       <ErrorBanner error={error} />
+      </FadeInView>
     </SafeAreaView>
   );
 }
@@ -329,8 +383,8 @@ function v2Sections(
       render: () => (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.primary }]}>
-              <Ionicons name="flask" size={16} color="#FFFFFF" />
+<View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="flask" size={16} color={colors.softAlert} />
             </View>
             <View style={styles.sectionHeaderText}>
               <Text style={styles.sectionTitle}>Sensory Snapshot</Text>
@@ -357,12 +411,12 @@ function v2Sections(
       render: () => (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.primary }]}>
-              <Ionicons name="heart" size={16} color="#FFFFFF" />
+<View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="heart" size={16} color={colors.softAlert} />
             </View>
             <View style={styles.sectionHeaderText}>
               <Text style={styles.sectionTitle}>Love &amp; Avoid</Text>
-              <Text style={styles.sectionHint}>Ingredients you gravitate toward â€” and away from</Text>
+              <Text style={styles.sectionHint}>Ingredients you gravitate toward — and away from</Text>
             </View>
           </View>
           {topPrefs.liked.length > 0 && (
@@ -456,8 +510,8 @@ function v2Sections(
       render: () => (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.primary }]}>
-              <Ionicons name="time" size={16} color="#FFFFFF" />
+<View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
+              <Ionicons name="time" size={16} color={colors.softAlert} />
             </View>
             <View style={styles.sectionHeaderText}>
               <Text style={styles.sectionTitle}>Recent Activity</Text>
@@ -471,7 +525,7 @@ function v2Sections(
                 <Text style={styles.timelineLabel}>{getEventLabel(ev.eventType)}</Text>
                 <Text style={styles.timelineTarget}>
                   {ev.targetId}
-                  {ev.contextKey ? ` Â· ${ev.contextKey}` : ''}
+                  {ev.contextKey ? ` · ${ev.contextKey}` : ''}
                 </Text>
                 <Text style={styles.timelineDate}>
                   {new Date(ev.createdAt).toLocaleDateString()}
@@ -505,11 +559,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  heroEmblem: {
+heroEmblem: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
@@ -623,10 +677,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  pillLove: { backgroundColor: colors.primary, borderColor: colors.primary },
+  pillLove: { backgroundColor: colors.primaryLight, borderColor: colors.borderStrong },
   pillAvoid: { backgroundColor: colors.surface, borderColor: colors.border },
   pillOverexposed: { backgroundColor: colors.surface, borderColor: colors.textSecondary },
-  pillText: { fontSize: 13, fontWeight: '600', color: colors.surface },
+  pillText: { fontSize: 13, fontWeight: '600', color: colors.text },
   pillTextAvoid: { color: colors.textSecondary },
   comboCard: {
     backgroundColor: colors.surface,
@@ -646,11 +700,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
-  timelineDot: {
+timelineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     marginTop: 6,
   },
   timelineContent: { flex: 1 },
@@ -658,3 +712,4 @@ const styles = StyleSheet.create({
   timelineTarget: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
   timelineDate: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 });
+

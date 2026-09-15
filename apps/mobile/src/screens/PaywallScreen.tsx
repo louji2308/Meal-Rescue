@@ -1,11 +1,14 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
+import { Skeleton } from '../components/Skeleton';
+import { FadeInView } from '../components/motion/FadeInView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywallNudge } from '../hooks/usePaywallNudge';
 import { claimProPass } from '../services/ads.api';
@@ -50,6 +53,7 @@ export function PaywallScreen() {
   const nudge = usePaywallNudge();
   const isPro = useMonetization((state) => state.isPro);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [restoredNote, setRestoredNote] = useState<string | null>(null);
@@ -59,7 +63,8 @@ export function PaywallScreen() {
   useEffect(() => {
     fetchCurrentPackages()
       .then(setPackages)
-      .catch(() => setPackages([]));
+      .catch(() => setPackages([]))
+      .finally(() => setPackagesLoading(false));
   }, []);
 
   async function handlePurchase(pkg?: PurchasesPackage, fallbackId?: string) {
@@ -137,14 +142,14 @@ export function PaywallScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <TouchableOpacity
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close paywall"
           onPress={() => navigation.goBack()}
           style={styles.closeButton}
         >
           <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
+        </Pressable>
 
         <Text style={[typography.title, styles.headline]}>Meal Rescue Pro</Text>
         <Text style={[typography.body, styles.tagline]}>Rescue every meal, skip every ad.</Text>
@@ -170,38 +175,58 @@ export function PaywallScreen() {
 
         <Text style={styles.feedTheCat}>Feed the cat — pick a plan below</Text>
 
-        {(packages.length > 0 ? packages : STATIC_PRICING).map((item) => {
+        {packagesLoading ? (
+          <>
+            <View style={styles.planCard}>
+              <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
+              <Skeleton.Block width="30%" height={14} />
+            </View>
+            <View style={styles.planCard}>
+              <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
+              <Skeleton.Block width="30%" height={14} />
+            </View>
+            <View style={styles.planCard}>
+              <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
+              <Skeleton.Block width="30%" height={14} />
+            </View>
+          </>
+        ) : (packages.length > 0 ? packages : STATIC_PRICING).map((item, i) => {
           const pkg = item as PurchasesPackage;
           const id = pkg.identifier ?? (item as { id: string }).id;
           const rawTitle = pkg.product?.title ?? (item as { title: string }).title;
           const title = TITLE_OVERRIDES[id] ?? rawTitle;
           const price = pkg.product?.priceString ?? (item as { price: string }).price;
+          const recommended = /annual|year/i.test(title) || id === 'annual';
           return (
-            <TouchableOpacity
-              key={id}
+            <FadeInView key={id} delay={i * 90} rise={6}>
+            <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Choose ${title} plan`}
-              style={styles.planCard}
-              activeOpacity={0.85}
+              style={[styles.planCard, recommended && styles.planCardRecommended]}
               disabled={busy || isPro || !hasRevenueCatKeys()}
               onPress={() => void handlePurchase(pkg, id)}
             >
+              {recommended && (
+                <View style={styles.recommendedBadge}>
+                  <Text style={styles.recommendedBadgeText}>Best value</Text>
+                </View>
+              )}
               <Text style={styles.planTitle}>{title}</Text>
               <Text style={styles.planPrice}>{price}</Text>
-            </TouchableOpacity>
+            </Pressable>
+            </FadeInView>
           );
         })}
 
         {passNote ? <Text style={styles.passNote}>{passNote}</Text> : null}
 
-        <TouchableOpacity
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel="Try Pro free for 1 hour"
           onPress={() => void handleFreeProHour()}
           disabled={passBusy || isPro}
           style={styles.passButton}
-          activeOpacity={0.7}
-        >
+          >
           <Text style={styles.passText}>
             {isPro
               ? 'You have Pro right now'
@@ -209,7 +234,7 @@ export function PaywallScreen() {
                 ? 'Loading…'
                 : 'Not sure yet? Taste it free for 1 hour'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {!hasRevenueCatKeys() && (
           <Text style={styles.devNote}>Configure RevenueCat keys to enable purchases.</Text>
@@ -219,7 +244,7 @@ export function PaywallScreen() {
         <ErrorBanner error={error} />
         {restoredNote ? <Text style={styles.restoredNote}>{restoredNote}</Text> : null}
 
-        <TouchableOpacity
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel="Restore purchases"
           onPress={() => void handleRestore()}
@@ -227,7 +252,7 @@ export function PaywallScreen() {
           style={styles.restoreButton}
         >
           <Text style={styles.restoreText}>Restore purchases</Text>
-        </TouchableOpacity>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -273,7 +298,7 @@ const styles = StyleSheet.create({
 
   nudge: {
     textAlign: 'center',
-    color: colors.primary,
+    color: colors.textSecondary,
     fontWeight: '600',
     marginBottom: spacing.md,
     marginTop: -spacing.sm,
@@ -289,7 +314,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   propBullet: {
-    color: colors.primary,
+    color: colors.textSecondary,
     fontWeight: '700',
     marginRight: spacing.sm,
   },
@@ -307,12 +332,31 @@ const styles = StyleSheet.create({
   },
   planCard: {
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.borderStrong,
     borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.sm,
     minHeight: 68,
     justifyContent: 'center',
+  },
+  planCardRecommended: {
+    borderColor: colors.borderStrong,
+    borderWidth: 2,
+    backgroundColor: colors.accentSoft,
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: -10,
+    right: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  recommendedBadgeText: {
+    color: colors.surface,
+    fontSize: 11,
+    fontWeight: '700',
   },
   planTitle: {
     fontSize: 16,
@@ -338,7 +382,7 @@ const styles = StyleSheet.create({
   },
   passNote: {
     textAlign: 'center',
-    color: colors.primary,
+    color: colors.textSecondary,
     marginTop: spacing.sm,
     fontSize: 14,
     fontWeight: '600',

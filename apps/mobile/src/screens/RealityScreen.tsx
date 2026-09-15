@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -100,7 +101,7 @@ export function RealityScreen() {
       </View>
 
       <View style={styles.hintRow}>
-        <Ionicons name="checkmark-circle-outline" size={18} color={colors.softGreen} />
+        <Ionicons name="checkmark-circle-outline" size={18} color={colors.rescueAccent} />
         <Text style={styles.hint}>
           All set to your easiest defaults — change nothing if you like.
         </Text>
@@ -128,19 +129,18 @@ function Chip({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       style={[styles.chip, selected ? styles.chipSelected : null]}
-      activeOpacity={0.7}
       onPress={() => {
         haptics.light();
         onPress();
       }}
     >
       <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>{label}</Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -167,16 +167,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
   },
-  chipSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
+chipSelected: {
+    backgroundColor: colors.homeTintNeutral,
+    borderColor: colors.borderStrong,
   },
   chipLabel: {
     fontSize: 14,
     color: colors.text,
   },
   chipLabelSelected: {
-    color: colors.primary,
+    color: colors.text,
     fontWeight: '600',
   },
   hintRow: {
@@ -194,3 +194,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
 });
+

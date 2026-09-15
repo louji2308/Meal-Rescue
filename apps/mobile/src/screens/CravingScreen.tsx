@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 
@@ -64,19 +65,18 @@ export function CravingScreen() {
         {cravingChips.map((chip) => {
           const selected = chips.includes(chip);
           return (
-            <TouchableOpacity
+            <Pressable
               key={chip}
               accessibilityRole="button"
               accessibilityLabel={chip}
               accessibilityState={{ selected }}
               style={[styles.chip, selected ? styles.chipSelected : null]}
-              activeOpacity={0.7}
               onPress={() => toggleChip(chip)}
             >
               <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>
                 {chip}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -101,19 +101,18 @@ export function CravingScreen() {
         style={styles.primary}
       />
 
-      <TouchableOpacity
+      <Pressable
         accessibilityRole="button"
         accessibilityLabel="Skip craving"
         style={styles.skip}
-        activeOpacity={0.7}
         onPress={() => {
           clearCraving();
           navigation.navigate('RescueLoading', { mealId, foods });
         }}
       >
-        <Ionicons name="arrow-forward" size={16} color={colors.softViolet} />
+        <Ionicons name="arrow-forward" size={16} color={colors.rescueAccent} />
         <Text style={styles.skipText}>No craving — just show me the best move</Text>
-      </TouchableOpacity>
+      </Pressable>
     </StepShell>
   );
 }
@@ -133,16 +132,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
   },
-  chipSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
+chipSelected: {
+    backgroundColor: colors.homeTintNeutral,
+    borderColor: colors.borderStrong,
   },
   chipLabel: {
     fontSize: 14,
     color: colors.text,
   },
   chipLabelSelected: {
-    color: colors.primary,
+    color: colors.text,
     fontWeight: '600',
   },
   input: {
@@ -171,3 +170,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+

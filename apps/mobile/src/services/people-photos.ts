@@ -6,6 +6,8 @@ const PHOTOS_KEY = 'meal-rescue/common-table/people-photos';
  * Local-only member photos. Household member profiles have no photo column;
  * the picture stays on-device so nobody's data leaves the phone. Keys are
  * plain member ids; values are local URI strings (file:// or content://).
+ * Remote http(s) URIs are intentionally NOT persisted — a photo must come
+ * from the device library, never a fetched resource.
  */
 export async function loadPeoplePhotos(): Promise<Record<string, string>> {
   try {
@@ -15,7 +17,7 @@ export async function loadPeoplePhotos(): Promise<Record<string, string>> {
     if (typeof parsed !== 'object' || parsed === null) return {};
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === 'string') out[key] = value;
+      if (typeof value === 'string' && isDeviceUri(value)) out[key] = value;
     }
     return out;
   } catch {
@@ -24,6 +26,7 @@ export async function loadPeoplePhotos(): Promise<Record<string, string>> {
 }
 
 export async function savePeoplePhoto(memberId: string, uri: string): Promise<void> {
+  if (!isDeviceUri(uri)) return;
   const photos = await loadPeoplePhotos();
   photos[memberId] = uri;
   await AsyncStorage.setItem(PHOTOS_KEY, JSON.stringify(photos));
@@ -34,4 +37,8 @@ export async function removePeoplePhoto(memberId: string): Promise<void> {
   if (!(memberId in photos)) return;
   delete photos[memberId];
   await AsyncStorage.setItem(PHOTOS_KEY, JSON.stringify(photos));
+}
+
+function isDeviceUri(uri: string): boolean {
+  return /^(file|content|ph|assets-library):/i.test(uri);
 }

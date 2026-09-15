@@ -39,9 +39,11 @@ export interface PlanParams {
   mealSlots: MealSlot[];
   strategy: PlanStrategy;
   ownerUserId: UUID;
+  /** Restrict whose coverage the plan fills. Defaults to every household member. */
+  memberIds?: UUID[];
 }
 
-interface Candidate {
+export interface Candidate {
   source: InventoryItemState;
   recordName: string | null;
   label: string;
@@ -51,10 +53,39 @@ interface Candidate {
   prepTimeMinutes: number;
 }
 
+/**
+ * A candidate ranked against a specific calendar slot.
+ * Returned by `rankWeek` — read-only, no side-effects.
+ */
+export interface RankedWeekCandidate {
+  candidate: Candidate;
+  slot: SlotKey;
+  score: number;
+  reasons: string[];
+  planReasons: PlanningReason[];
+}
+
+/**
+ * Fixed reference score used to convert raw scores to matchPercent.
+ *
+ * Achievable max per slot (typical):
+ *   base 1 + affinity 1.5 + expiring 2 + leftover 1.5 = 6
+ */
+export const MEAL_MATCH_PERFECT_SCORE = 6;
+
+export function scoreToMatchPercent(score: number): number {
+  const raw = Math.round((score / MEAL_MATCH_PERFECT_SCORE) * 100);
+  return raw < 2 ? 2 : raw > 100 ? 100 : raw;
+}
+
+export function matchGradeFor(percent: number): 'high' | 'medium' | 'low' {
+  return percent >= 75 ? 'high' : percent >= 45 ? 'medium' : 'low';
+}
+
 const USAGE_PER_MEAL = 1;
 const SLOT_ORDER: MealSlot[] = ['dinner', 'lunch', 'breakfast', 'snack'];
 
-function methodFor(item: InventoryItemState, recordName: string | null): string {
+export function methodFor(item: InventoryItemState, recordName: string | null): string {
   if (item.kind === 'leftover') {
     return item.dishName ? `Reheat ${item.dishName}` : `Leftover ${item.name}`;
   }
@@ -151,7 +182,9 @@ export class PlanningEngine {
         preferredDays: null,
         mealRole: this.roleFor(candidate, params),
         ingredients,
-        memberIds: world.householdMembers.map((m) => m.id),
+        memberIds: params.memberIds?.length
+          ? params.memberIds
+          : world.householdMembers.map((m) => m.id),
         reasons: best.reasons,
         effort: this.effortFor(candidate),
         rawText: null,
@@ -185,6 +218,54 @@ export class PlanningEngine {
       reasons,
       confidence: this.confidenceFor(events.length, slots.length, world),
     };
+  }
+
+  /**
+   * Read-only ranking of all candidates against every open slot this week.
+   * Returns the full scoring matrix — the caller picks the best per candidate.
+   * No database writes, no LLM calls.
+   */
+  rankWeek(world: FoodWorldState, params: PlanParams): RankedWeekCandidate[] {
+    const candidates = this.buildCandidates(world);
+    if (candidates.length === 0) return [];
+
+    const out: RankedWeekCandidate[] = [];
+    const slots = this.buildSlots(world, params);
+    const usageCounts = new Map<string, number>();
+    const weekConcepts = new Set<string>();
+
+    for (const slot of slots) {
+      const scored = candidates
+        .map((candidate) => ({
+          candidate,
+          ...this.scoreCandidate(candidate, slot, params, usageCounts, weekConcepts, world),
+        }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      // Greedily advance usage counts so downstream rankings stay consistent
+      // with what the actual planner would do.
+      if (scored.length > 0) {
+        const best = scored[0]!;
+        usageCounts.set(
+          best.candidate.source.id,
+          (usageCounts.get(best.candidate.source.id) ?? 0) + 1,
+        );
+        weekConcepts.add(best.candidate.label.toLowerCase());
+      }
+
+      for (const entry of scored) {
+        out.push({
+          candidate: entry.candidate,
+          slot,
+          score: entry.score,
+          reasons: entry.reasons,
+          planReasons: entry.persistReasons(entry.candidate),
+        });
+      }
+    }
+
+    return out;
   }
 
   private async persistPlan(
@@ -273,7 +354,7 @@ export class PlanningEngine {
 
   // -- candidate construction -------------------------------------------------
 
-  private buildCandidates(world: FoodWorldState): Candidate[] {
+  buildCandidates(world: FoodWorldState): Candidate[] {
     const candidates: Candidate[] = [];
     for (const item of world.inventory) {
       const isLeftover = item.kind === 'leftover';
@@ -298,16 +379,40 @@ export class PlanningEngine {
 
   private buildSlots(world: FoodWorldState, params: PlanParams): SlotKey[] {
     const blocked = new Set(world.blockedSlots.map((slot) => `${slot.dateKey}:${slot.mealSlot}`));
+    const held = this.independentlyHeldSlots(world);
     const slots: SlotKey[] = [];
     for (const dateKey of allWeekDates(params.weekStart)) {
       for (const mealSlot of [...new Set(params.mealSlots)].sort(
         (a, b) => SLOT_ORDER.indexOf(a) - SLOT_ORDER.indexOf(b),
       )) {
-        if (blocked.has(`${dateKey}:${mealSlot}`)) continue;
+        const key = `${dateKey}:${mealSlot}`;
+        if (blocked.has(key)) continue;
+        if (held.has(key)) continue;
         slots.push({ dateKey, mealSlot });
       }
     }
     return slots;
+  }
+
+  /**
+   * Positions the planner must NOT touch: meals the household scheduled
+   * directly (via the intent path, planId === null), plus keep-open / blocked
+   * placeholders that are not owned by a (replaced-on-replan) MealPlan row.
+   * Plan-owned events are excluded because persistPlan replaces them wholesale.
+   */
+  private independentlyHeldSlots(world: FoodWorldState): Set<string> {
+    const keys = new Set<string>();
+    const terminal: MealEvent['state'][] = ['CANCELLED', 'SKIPPED', 'EATEN', 'MOVED'];
+    for (const meal of world.plannedMeals) {
+      if (!meal.dateKey || meal.kind !== 'plan' || meal.planId !== null) continue;
+      if (terminal.includes(meal.state)) continue;
+      if (meal.concept) {
+        keys.add(`${meal.dateKey}:${meal.mealSlot}`);
+      } else if (meal.conceptType === 'flexible' || meal.conceptType === 'blocked') {
+        keys.add(`${meal.dateKey}:${meal.mealSlot}`);
+      }
+    }
+    return keys;
   }
 
   private scoreCandidate(

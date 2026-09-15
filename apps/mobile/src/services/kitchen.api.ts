@@ -1,4 +1,8 @@
+import type { PantryItem } from '@meal-rescue/shared-types';
+
 import { api } from './api';
+
+import type { MarkUsedResult } from './pantry.api';
 
 export interface KitchenItem {
   id: string;
@@ -124,15 +128,17 @@ export async function upsertKitchenItem(payload: {
   servings?: number | null;
   notes?: string | null;
   madeAt?: string | null;
-}): Promise<KitchenItem> {
-  const res = await api.post<KitchenItem>('/api/v1/pantry', payload);
-  return res.data as any;
+  mergeQuantity?: boolean;
+}): Promise<PantryItem> {
+  const res = await api.post<PantryItem>('/api/v1/pantry', payload);
+  return res.data;
 }
 
 export async function deleteKitchenItem(itemId: string): Promise<void> {
   await api.delete(`/api/v1/pantry/${itemId}`);
 }
 
-export async function markKitchenItemUsed(itemId: string): Promise<void> {
-  await api.post(`/api/v1/pantry/${itemId}/use`);
+export async function markKitchenItemUsed(itemId: string): Promise<MarkUsedResult> {
+  const res = await api.post<MarkUsedResult>(`/api/v1/pantry/${itemId}/use`);
+  return res.data;
 }

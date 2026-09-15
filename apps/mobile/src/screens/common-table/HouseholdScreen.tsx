@@ -2,8 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../../components/motion/Pressable';
 
+import { AppImage, prefetchImages } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -13,9 +15,10 @@ import { toApiError } from '../../services/api';
 import { loadPeoplePhotos } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
+import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
- * Household â€” the people you cook for, shown as a roster.
+ * Household — the people you cook for, shown as a roster.
  * Adding and editing happen on the dedicated Add People page.
  */
 export function HouseholdScreen() {
@@ -29,10 +32,13 @@ export function HouseholdScreen() {
   const [photos, setPhotos] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    loadHousehold()
+loadHousehold()
       .catch((err) => setError(toApiError(err)))
       .finally(() => setBusy(false));
-    void loadPeoplePhotos().then(setPhotos);
+    void loadPeoplePhotos().then((loaded) => {
+      setPhotos(loaded);
+      prefetchImages(Object.values(loaded));
+    });
   }, [loadHousehold]);
 
   function handleDelete(memberId: string, name: string) {
@@ -54,8 +60,9 @@ export function HouseholdScreen() {
 
   const sorted = [...members].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
 
-  return (
+return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <FadeInView>
       <ErrorBanner error={error} />
 
       <Text style={styles.intro}>
@@ -63,11 +70,15 @@ export function HouseholdScreen() {
       </Text>
 
       {busy ? (
-        <Text style={styles.loading}>Loading your tableâ€¦</Text>
+        <Text style={styles.loading}>Loading your table…</Text>
       ) : sorted.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="people-outline" size={36} color={colors.softViolet} />
+          <Ionicons name="people-outline" size={36} color={colors.softAlert} />
           <Text style={styles.emptyText}>No one at the table yet.</Text>
+          <Text style={styles.emptySub}>
+            Add the people you cook for — allergies and avoid lists become hard rules the
+            planner never breaks.
+          </Text>
         </View>
       ) : (
         <View style={styles.memberList}>
@@ -81,8 +92,8 @@ export function HouseholdScreen() {
               <View key={member.id} style={styles.memberCard}>
                 <View style={styles.memberRow}>
                   <View style={[styles.avatar, photo && styles.avatarPhoto]}>
-                    {photo ? (
-                      <Image source={{ uri: photo }} style={styles.photo} />
+{photo ? (
+                      <AppImage source={{ uri: photo }} style={styles.photo} />
                     ) : (
                       <Text style={styles.avatarText}>{member.initials}</Text>
                     )}
@@ -92,31 +103,31 @@ export function HouseholdScreen() {
                       {member.displayName}
                       {member.isOwner ? ' (you)' : ''}
                     </Text>
-                    <Text style={styles.memberMeta}>
-                      {member.ageGroup ?? 'adult'}
-                      {member.preferences.note ? ' Â· ' + member.preferences.note : ''}
+<Text style={styles.memberMeta}>
+                      {[member.relationship, member.ageGroup ?? 'adult']
+                        .filter(Boolean)
+                        .join(' · ')}
+                      {member.preferences.note ? ' · ' + member.preferences.note : ''}
                     </Text>
                   </View>
                   <View style={styles.memberActions}>
-                    <TouchableOpacity
+                    <Pressable
                       style={styles.iconButton}
-                      activeOpacity={0.7}
                       onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
                       accessibilityRole="button"
                       accessibilityLabel={`Edit ${member.displayName}`}
                     >
-                      <Ionicons name="create-outline" size={18} color={colors.softPurple} />
-                    </TouchableOpacity>
+                      <Ionicons name="create-outline" size={18} color={colors.softAlert} />
+                    </Pressable>
                     {!member.isOwner && (
-                      <TouchableOpacity
+                      <Pressable
                         style={styles.iconButton}
-                        activeOpacity={0.7}
                         onPress={() => handleDelete(member.id, member.displayName)}
                         accessibilityRole="button"
                         accessibilityLabel={`Remove ${member.displayName}`}
                       >
-                        <Ionicons name="trash-outline" size={18} color={colors.softRed} />
-                      </TouchableOpacity>
+                        <Ionicons name="trash-outline" size={18} color={colors.softAlert} />
+                      </Pressable>
                     )}
                   </View>
                 </View>
@@ -145,12 +156,13 @@ export function HouseholdScreen() {
         </View>
       )}
 
-      <PrimaryButton
+<PrimaryButton
         label="Add someone"
         onPress={() => navigation.navigate('AddPeople')}
         style={styles.addButton}
         busy={busy}
       />
+      </FadeInView>
     </ScrollView>
   );
 }
@@ -179,6 +191,14 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  emptySub: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 280,
   },
   memberList: {
     gap: spacing.sm,
@@ -196,11 +216,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  avatar: {
+avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -213,8 +235,8 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
   },
-  avatarText: {
-    color: colors.surface,
+avatarText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: '700',
   },

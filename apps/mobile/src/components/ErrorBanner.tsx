@@ -31,7 +31,7 @@ export function ErrorBanner({ error }: ErrorBannerProps) {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: '#FDECEA',
+    backgroundColor: colors.errorSoft,
     borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.md,

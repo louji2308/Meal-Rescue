@@ -116,8 +116,21 @@ describe('fallbackCopy templates', () => {
     expect(copy.body).toMatch(/dinner|minutes/);
   });
 
+  it('writes a pick_for_me recommendation naming the dish', () => {
+    const copy = fallbackCopy('pick_for_me', {
+      dish: 'chicken stir-fry',
+      foods: ['chicken', 'broccoli'],
+      mins: 15,
+    });
+    expect(copy.title).toContain("Can't decide");
+    expect(copy.body).toContain('chicken stir-fry');
+    expect(copy.body).toContain('chicken');
+    expect(copy.title.length).toBeLessThanOrEqual(40);
+    expect(copy.body.length).toBeLessThanOrEqual(90);
+  });
+
   it('survives missing context without exceeding limits', () => {
-    for (const kind of ['rescue_window', 'spoiler_alert', 'generic'] as const) {
+    for (const kind of ['rescue_window', 'spoiler_alert', 'pick_for_me', 'generic'] as const) {
       const copy = fallbackCopy(kind, {});
       expect(copy.title.length).toBeLessThanOrEqual(40);
       expect(copy.body.length).toBeLessThanOrEqual(90);

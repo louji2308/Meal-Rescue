@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   tag: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     borderRadius: 10,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,

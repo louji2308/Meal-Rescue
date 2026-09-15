@@ -264,6 +264,12 @@ export interface PantryUpsertRequest {
   servings?: number | null;
   notes?: string | null;
   madeAt?: ISO8601 | null;
+  /**
+   * Photo-import flag: when true and a canonical match already exists, the
+   * incoming quantity is ADDED to the current quantity instead of replacing
+   * it. Manual adds keep the default overwrite behaviour.
+   */
+  mergeQuantity?: boolean;
 }
 
 export interface PantryDeleteResponse {

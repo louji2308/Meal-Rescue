@@ -20,6 +20,7 @@ import type {
   MealMemoryConfirmResponse,
   MealMemoryCreateRuleRequest,
   MealMemoryDay,
+  MealMemoryDeactivateRuleResponse,
   MealMemoryFeedbackRequest,
   MealMemoryFeedbackResponse,
   MealMemoryIntentResponse,
@@ -27,8 +28,11 @@ import type {
   MealMemoryMoveMealRequest,
   MealMemoryRecordActualRequest,
   MealMemoryRecordActualResponse,
+  MealMemoryRecentsResponse,
   MealMemoryRememberRequest,
   MealMemoryRememberResponse,
+  MealMemoryReuseWeekRequest,
+  MealMemoryReuseWeekResponse,
   MealMemoryRulesResponse,
   MealMemorySlotView,
   MealMemoryUpdateMealRequest,
@@ -46,7 +50,7 @@ import type { Db } from '../../database/models';
 import { AppError, ErrorCategory } from '../../lib/errors';
 import { HouseholdService } from '../common-table/household.service';
 import { AccountingService } from './accounting.service';
-import { addDays, dateKeyFor, nextWeekStartFor, weekStartFor } from './date-utils';
+import { addDays, dateKeyFor, nextWeekStartFor, previousWeekStartFor, weekStartFor } from './date-utils';
 import {
   MUTATIONS_ALWAYS_CONFIRMED,
   bandFor,
@@ -60,7 +64,7 @@ import { toMealEvent } from './mappers';
 import { MealMemoryAiService } from './meal-memory-ai.service';
 import { MemoryLearningService } from './memory-learning.service';
 import { type PlanParams, type PlanStrategy, PlanningEngine } from './planning-engine';
-import { WorldStateService } from './world-state.service';
+import { narrowCoverageForMember, WorldStateService } from './world-state.service';
 
 const DEFAULT_WEEK_MEAL_SLOTS: MealSlot[] = ['dinner', 'lunch'];
 const DEFAULT_INTENT_MEAL_SLOT: MealSlot = 'dinner';
@@ -109,6 +113,18 @@ export class MealMemoryService {
       resolution = await this.aiService.refineIntent(resolution, text);
     }
 
+    // The classifier marks a member by display name; resolve it to a real id
+    // (or neutralise it) BEFORE any mutation or coverage answer so a stale or
+    // hallucinated member reference can never scope a plan or leak coverage.
+    if (resolution.entities.memberId) {
+      const memberRef = resolution.entities.memberId;
+      const resolvedMemberId = await this.resolveMemberId(householdId, memberRef);
+      resolution = {
+        ...resolution,
+        entities: { ...resolution.entities, memberId: resolvedMemberId },
+      };
+    }
+
     const intentId = randomUUID();
     const readOnly = this.isReadOnly(resolution.intent);
 
@@ -120,7 +136,10 @@ export class MealMemoryService {
       status = 'clarification';
     } else if (readOnly) {
       const world = await this.worldStateService.getState(householdId, userId);
-      result = await this.answerReadOnly(resolution, world);
+      result = await this.answerReadOnly(
+        resolution,
+        narrowCoverageForMember(world, resolution.entities.memberId),
+      );
       status = 'question';
     } else if (
       resolution.confidenceBand === 'HIGH' &&
@@ -271,22 +290,26 @@ export class MealMemoryService {
     const todayKey = dateKeyFor(new Date(), 0);
     const weekStart = input.weekStart ?? weekStartFor(todayKey);
     const strategy: PlanStrategy = input.strategy ?? 'balance';
+    const memberIds = await this.validateMemberIds(householdId, input.memberIds);
     const world = await this.worldStateService.getState(householdId, userId);
     const params: PlanParams = {
       weekStart,
       mealSlots: input.mealSlots?.length ? input.mealSlots : DEFAULT_WEEK_MEAL_SLOTS,
       strategy,
       ownerUserId: userId,
+      memberIds,
     };
     let result = await this.planningEngine.planWeek(world, params);
     if (this.aiService) result = await this.aiService.polishPlan(result);
     return { result };
   }
 
-  async getWeek(userId: UUID, weekStart?: string): Promise<MealMemoryWeekResponse> {
+  async getWeek(userId: UUID, weekStart?: string, memberId?: UUID): Promise<MealMemoryWeekResponse> {
     const householdId = await this.requireHouseholdId(userId);
     const todayKey = dateKeyFor(new Date(), 0);
     const start = weekStart ?? weekStartFor(todayKey);
+    const scopeMember =
+      memberId && (await this.resolveMemberId(householdId, memberId)) ? memberId : null;
     const rows = await this.models.MealEvent.findAll({
       where: {
         householdId,
@@ -297,7 +320,11 @@ export class MealMemoryService {
         ['mealSlot', 'ASC'],
       ],
     });
-    const events = rows.map(toMealEvent);
+    const events = rows
+      .map(toMealEvent)
+      .filter(
+        (e) => !scopeMember || e.memberIds == null || e.memberIds.includes(scopeMember),
+      );
 
     const days: MealMemoryDay[] = [];
     for (let i = 0; i < 7; i++) {
@@ -375,6 +402,16 @@ export class MealMemoryService {
         recoverable: false,
       });
     }
+    const sourceState = row.get('state') as MealEvent['state'];
+    if (!['PLANNED', 'CONFIRMED', 'OPEN', 'MOVED'].includes(sourceState)) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'EVENT_NOT_MOVABLE',
+        message: `A ${sourceState.toLowerCase()} meal can't be moved`,
+        statusCode: 409,
+        recoverable: true,
+      });
+    }
     const targetSlot = input.mealSlot ?? (row.get('mealSlot') as MealSlot);
     const targetKey = input.dateKey;
     if (targetKey === row.get('dateKey') && targetSlot === row.get('mealSlot')) {
@@ -413,6 +450,19 @@ export class MealMemoryService {
   async removeMeal(userId: UUID, eventId: UUID): Promise<MealEvent> {
     const householdId = await this.requireHouseholdId(userId);
     const row = await this.loadEventRow(householdId, eventId);
+    const state = row.get('state') as MealEvent['state'];
+    if (state === 'EATEN' || state === 'SKIPPED') {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'PAST_MEAL_NOT_REMOVABLE',
+        message: `A ${state.toLowerCase()} meal can't be cancelled`,
+        statusCode: 409,
+        recoverable: true,
+      });
+    }
+    if (state === 'CANCELLED') {
+      return toMealEvent(row); // idempotent double-tap
+    }
     await row.update({ state: 'CANCELLED', slotStatus: 'OPEN', updatedAt: new Date() });
     return toMealEvent(row);
   }
@@ -537,6 +587,142 @@ export class MealMemoryService {
     return { rules };
   }
 
+  async deactivateRule(userId: UUID, ruleId: UUID): Promise<MealMemoryDeactivateRuleResponse> {
+    const householdId = await this.requireHouseholdId(userId);
+    const rule = await this.accountingService.deactivateRule(householdId, ruleId);
+    return { rule };
+  }
+
+  async reuseWeek(
+    userId: UUID,
+    input: MealMemoryReuseWeekRequest,
+  ): Promise<MealMemoryReuseWeekResponse> {
+    const householdId = await this.requireHouseholdId(userId);
+    const todayKey = dateKeyFor(new Date(), 0);
+    const toWeekStart = input.toWeekStart ?? weekStartFor(todayKey);
+    const fromWeekStart = input.fromWeekStart ?? previousWeekStartFor(toWeekStart);
+    const sourceRows = await this.models.MealEvent.findAll({
+      where: {
+        householdId,
+        kind: 'plan',
+        dateKey: { [Op.gte]: fromWeekStart, [Op.lte]: addDays(fromWeekStart, 6) },
+        state: { [Op.in]: ['PLANNED', 'CONFIRMED'] },
+      },
+      order: [
+        ['dateKey', 'ASC'],
+        ['mealSlot', 'ASC'],
+      ],
+    });
+    const candidates = sourceRows.map(toMealEvent).filter((e) => this.reusableEvent(e));
+
+    const targetRows = await this.models.MealEvent.findAll({
+      where: {
+        householdId,
+        kind: 'plan',
+        dateKey: { [Op.gte]: toWeekStart, [Op.lte]: addDays(toWeekStart, 6) },
+      },
+    });
+    const heldByIntent = new Set<string>();
+    const replayablePlanIds: UUID[] = [];
+    for (const row of targetRows) {
+      const event = toMealEvent(row);
+      if (event.planId) {
+        replayablePlanIds.push(event.planId);
+      } else if (!['CANCELLED', 'SKIPPED', 'EATEN', 'MOVED'].includes(event.state)) {
+        heldByIntent.add(`${event.dateKey}:${event.mealSlot}`);
+      }
+    }
+    const existingPlanIds = [...new Set(replayablePlanIds)];
+    if (existingPlanIds.length > 0) {
+      await this.models.MealEvent.update(
+        { planId: null },
+        { where: { planId: { [Op.in]: existingPlanIds } } },
+      );
+      await this.models.MealEvent.destroy({
+        where: { planId: { [Op.in]: existingPlanIds }, kind: 'plan' },
+      });
+      await this.models.MealPlan.update(
+        { status: 'superseded' },
+        { where: { id: { [Op.in]: existingPlanIds } } },
+      );
+    }
+
+    const planId = randomUUID();
+    const planRow = await this.models.MealPlan.create({
+      id: planId,
+      householdId,
+      ownerId: userId,
+      status: 'proposed',
+      weekStart: toWeekStart,
+      source: 'replan',
+      createdAt: new Date(),
+    });
+
+    const shiftDays = weekShiftDays(fromWeekStart, toWeekStart);
+    const copied: MealEvent[] = [];
+    for (const source of candidates) {
+      const dateKey = addDays(source.dateKey!, shiftDays);
+      if (heldByIntent.has(`${dateKey}:${source.mealSlot}`)) continue;
+      const id = randomUUID();
+      await this.models.MealEvent.create({
+        id,
+        householdId,
+        planId,
+        userId,
+        dateKey,
+        mealSlot: source.mealSlot,
+        kind: 'plan',
+        concept: source.concept,
+        conceptType: source.conceptType,
+        state: 'PLANNED',
+        slotStatus: 'OPEN',
+        flexible: false,
+        horizon: null,
+        excludedDays: null,
+        preferredDays: null,
+        mealRole: source.mealRole,
+        ingredients: source.ingredients,
+        memberIds: source.memberIds,
+        reasons: source.reasons,
+        effort: source.effort,
+        rawText: null,
+        movedFrom: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      copied.push({ ...source, id, planId, dateKey, state: 'PLANNED', slotStatus: 'OPEN' });
+    }
+
+    const world = await this.worldStateService.getState(householdId, userId);
+    const copiedKeys = new Set(copied.map((e) => `${e.dateKey}:${e.mealSlot}`));
+    return {
+      plan: {
+        id: planId,
+        householdId,
+        status: 'proposed',
+        weekStart: toWeekStart,
+        source: 'replan',
+        meals: copied,
+        openSlots: world.openSlots.filter((slot) => !copiedKeys.has(`${slot.dateKey}:${slot.mealSlot}`)),
+        createdAt: planRow.createdAt.toISOString(),
+      },
+      copied,
+    };
+  }
+
+  async recentMeals(userId: UUID): Promise<MealMemoryRecentsResponse> {
+    const householdId = await this.requireHouseholdId(userId);
+    const rows = await this.models.MealEvent.findAll({
+      where: { householdId, kind: 'actual', concept: { [Op.not]: null } },
+      order: [
+        ['dateKey', 'DESC'],
+        ['createdAt', 'DESC'],
+      ],
+      limit: 14,
+    });
+    return { meals: rows.map(toMealEvent) };
+  }
+
   async feedback(
     userId: UUID,
     input: MealMemoryFeedbackRequest,
@@ -613,6 +799,7 @@ export class MealMemoryService {
       mealSlots: DEFAULT_WEEK_MEAL_SLOTS,
       strategy: resolution.entities.effort === 'low' ? 'easy' : 'balance',
       ownerUserId: userId,
+      memberIds: resolution.entities.memberId ? [resolution.entities.memberId] : undefined,
     };
     let result = await this.planningEngine.planWeek(world, params);
     if (this.aiService) result = await this.aiService.polishPlan(result);
@@ -1123,6 +1310,48 @@ export class MealMemoryService {
     return row ? toMealEvent(row) : null;
   }
 
+  /**
+   * Resolve a classifier member reference (display name or, defensively, a
+   * raw id) to an active household member id. Unknown references return null
+   * so they can never leak or scope a plan.
+   */
+  private async resolveMemberId(householdId: UUID, raw: string): Promise<UUID | null> {
+    const members = await this.models.HouseholdMember.findAll({
+      where: { householdId, active: true },
+    });
+    const lower = raw.trim().toLowerCase();
+    const byId = members.find((m) => String(m.get('id')).toLowerCase() === lower);
+    if (byId) return byId.get('id') as string;
+    const byExactName = members.find(
+      (m) => String(m.get('displayName') ?? '').toLowerCase() === lower,
+    );
+    if (byExactName) return byExactName.get('id') as string;
+    return (
+      members.find((m) => String(m.get('displayName') ?? '').toLowerCase().includes(lower))?.get(
+        'id',
+      ) as string | undefined
+    ) ?? null;
+  }
+
+  private async validateMemberIds(
+    householdId: UUID,
+    memberIds: UUID[] | undefined,
+  ): Promise<UUID[] | undefined> {
+    if (!memberIds?.length) return undefined;
+    const members = await this.models.HouseholdMember.findAll({
+      where: { householdId, active: true },
+    });
+    const known = new Set(members.map((m) => m.get('id') as string));
+    const valid = memberIds.filter((id) => known.has(id));
+    return valid.length > 0 ? valid : undefined;
+  }
+
+  private reusableEvent(event: MealEvent): boolean {
+    if (!event.dateKey || !event.concept) return false;
+    if (event.conceptType === 'flexible' || event.conceptType === 'blocked') return false;
+    return !['BLOCKED', 'OUT', 'CANCELLED', 'SKIPPED', 'EATEN', 'OPEN'].includes(event.state);
+  }
+
   private async loadEvent(householdId: UUID, eventId: UUID): Promise<MealEvent> {
     const row = await this.loadEventRow(householdId, eventId);
     return toMealEvent(row);
@@ -1216,4 +1445,11 @@ function weekDaysOf(weekStart: string): string[] {
   const days: string[] = [];
   for (let i = 0; i < 7; i++) days.push(addDays(weekStart, i));
   return days;
+}
+
+function weekShiftDays(fromWeekStart: string, toWeekStart: string): number {
+  const ms =
+    new Date(`${toWeekStart}T00:00:00.000Z`).getTime() -
+    new Date(`${fromWeekStart}T00:00:00.000Z`).getTime();
+  return ms / 86_400_000;
 }

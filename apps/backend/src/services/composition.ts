@@ -22,6 +22,7 @@ import { MealAnalyzerService } from './meal-analyzer.service';
 import { MealCompletionService } from './meal-completion.service';
 import { AccountingService } from './meal-memory/accounting.service';
 import { MealMemoryAiService } from './meal-memory/meal-memory-ai.service';
+import { MealIntelligenceService } from './meal-memory/meal-intelligence.service';
 import { MealMemoryService } from './meal-memory/meal-memory.service';
 import { MemoryLearningService } from './meal-memory/memory-learning.service';
 import { PlanningEngine } from './meal-memory/planning-engine';
@@ -88,6 +89,7 @@ export function buildServices(redis: Redis | null): {
   households: HouseholdService;
   householdMembers: HouseholdMemberService;
   mealMemory: MealMemoryService;
+  mealIntelligence: MealIntelligenceService;
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
@@ -136,6 +138,12 @@ export function buildServices(redis: Redis | null): {
     householdService,
     aiService,
   });
+  const mealIntelligenceService = new MealIntelligenceService({
+    worldStateService,
+    planningEngine,
+    householdService,
+    aiService,
+  });
 
   return {
     mealAnalyzer: new MealAnalyzerService(llm, redis),
@@ -167,5 +175,6 @@ export function buildServices(redis: Redis | null): {
     households: householdService,
     householdMembers: new HouseholdMemberService(dbModels),
     mealMemory: mealMemoryService,
+    mealIntelligence: mealIntelligenceService,
   };
 }

@@ -7,9 +7,9 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { submitFeedback } from '../services/feedback.api';
 import { colors, spacing, typography } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
 
 /**
  * Post-rescue feedback prompt. One simple question:
@@ -74,6 +75,7 @@ export function FeedbackScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content}>
+          <FadeInView>
           <Text style={[typography.title, styles.title]}>How did that work for you?</Text>
           <Text style={[typography.body, styles.subtitle]}>
             Your feedback helps Meal Rescue learn what works for you.
@@ -81,13 +83,12 @@ export function FeedbackScreen() {
 
           <View style={styles.options}>
             {options.map((opt) => (
-              <TouchableOpacity
+              <Pressable
                 key={opt.value}
                 accessibilityRole="button"
                 accessibilityLabel={opt.label}
                 accessibilityState={{ selected: satisfaction === opt.value }}
                 style={[styles.option, satisfaction === opt.value ? styles.optionSelected : null]}
-                activeOpacity={0.8}
                 onPress={() => setSatisfaction(opt.value)}
               >
                 <Text style={styles.emoji}>{opt.emoji}</Text>
@@ -99,7 +100,7 @@ export function FeedbackScreen() {
                 >
                   {opt.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -128,13 +129,14 @@ export function FeedbackScreen() {
             style={styles.submit}
           />
 
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             onPress={() => navigation.popToTop()}
             style={styles.skip}
           >
             <Text style={styles.skipText}>Skip for now</Text>
-          </TouchableOpacity>
+          </Pressable>
+          </FadeInView>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -176,8 +178,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   optionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.homeTintNeutral,
   },
   emoji: {
     fontSize: 32,
@@ -189,7 +191,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   optionLabelSelected: {
-    color: colors.primary,
+    color: colors.rescueAccent,
   },
   textInputWrapper: {
     marginBottom: spacing.lg,

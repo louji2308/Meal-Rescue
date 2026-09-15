@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,14 +17,25 @@ import {
   getPantry,
   markPantryItemUsed,
   upsertPantryItem,
+  type MarkUsedResult,
 } from '../services/pantry.api';
 import { PickedImage, analyzeMeal } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
+
+interface Toast {
+  id: number;
+  message: string;
+  actionLabel: string;
+  onAction: () => void;
+}
 
 /**
  * Pantry - inventory with expiry awareness (Phase 4).
- * List items with expiry badges, add/edit/delete, quantity/unit.
- * Tapping an item marks it as used (decrements qty).
+ *
+ * Guardrails: tapping a row never mutates. Consuming ("Use") and deleting are
+ * explicit, confirmed actions, and every mutation offers an in-app Undo so no
+ * inventory is lost to an accidental tap.
  */
 export function PantryScreen() {
   const [items, setItems] = useState<PantryItem[]>([]);
@@ -35,17 +47,29 @@ export function PantryScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [snapBusy, setSnapBusy] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newQty, setNewQty] = useState('');
   const [newUnit, setNewUnit] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
-  const [usedHint, setUsedHint] = useState(false);
 
   useEffect(() => {
     loadPantry();
   }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  function showToast(message: string, actionLabel: string, onAction: () => void) {
+    setToast({ id: Date.now(), message, actionLabel, onAction });
+  }
 
   function parseRelativeDate(input: string): string | null {
     const lower = input.toLowerCase().trim();
@@ -111,12 +135,33 @@ export function PantryScreen() {
     }
   }
 
-  async function handleDelete(itemId: string) {
-    setUsedHint(true);
+  function confirmDelete(item: PantryItem) {
+    const label =
+      item.kind === 'leftover' ? (item.dishName ?? item.ingredientName) : item.ingredientName;
+    Alert.alert('Remove item?', `Delete ${label} from your pantry?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void handleDelete(item);
+        },
+      },
+    ]);
+  }
+
+  async function handleDelete(item: PantryItem) {
     setBusy(true);
     try {
-      await deletePantryItem(itemId);
-      loadPantry();
+      await deletePantryItem(item.id);
+      await loadPantry();
+      showToast(
+        `Deleted ${item.kind === 'leftover' ? item.dishName ?? item.ingredientName : item.ingredientName}`,
+        'Undo',
+        () => {
+          void handleUndoDelete(item);
+        },
+      );
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -124,12 +169,111 @@ export function PantryScreen() {
     }
   }
 
-  async function handleUse(item: PantryItem) {
-    setUsedHint(true);
+  async function handleUndoDelete(item: PantryItem) {
     setBusy(true);
     try {
-      await markPantryItemUsed(item.id);
-      loadPantry();
+      const common: PantryUpsertRequest = {
+        ingredientName: item.ingredientName,
+        unit: item.unit ?? null,
+        expiresAt: item.expiresAt ?? null,
+      };
+      if (item.kind === 'leftover') {
+        const dishName = item.dishName ?? item.ingredientName;
+        await upsertPantryItem({
+          ...common,
+          ingredientName: dishName,
+          kind: 'leftover',
+          dishName,
+          servings: item.servings ?? 1,
+          madeAt: item.madeAt ?? new Date().toISOString(),
+        });
+      } else {
+        await upsertPantryItem({ ...common, quantity: item.quantity ?? null });
+      }
+      await loadPantry();
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmUse(item: PantryItem) {
+    const label =
+      item.kind === 'leftover' ? (item.dishName ?? item.ingredientName) : item.ingredientName;
+    Alert.alert(
+      item.kind === 'leftover' ? 'Serve leftover?' : 'Use item?',
+      item.kind === 'leftover'
+        ? `Eat one serving of ${label}?`
+        : `Use 1 ${item.unit ? `${item.unit} of ` : ''}${label}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: item.kind === 'leftover' ? 'Serve 1' : 'Use 1',
+          style: 'destructive',
+          onPress: () => {
+            void handleUse(item);
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleUse(item: PantryItem) {
+    setBusy(true);
+    try {
+      const result = await markPantryItemUsed(item.id);
+      await loadPantry();
+      if (item.kind === 'leftover') {
+        showToast(
+          result.removed
+            ? `Finished ${item.dishName ?? item.ingredientName}`
+            : `Ate a serving of ${item.dishName ?? item.ingredientName}`,
+          'Undo',
+          () => {
+            void handleUndoUse(item, result);
+          },
+        );
+      } else if (result.removed) {
+        showToast(`Used the last ${item.ingredientName}`, 'Undo', () => {
+          void handleUndoUse(item, result);
+        });
+      } else {
+        const unit = item.unit ? ` ${item.unit}` : '';
+        showToast(`Used 1${unit} ${item.ingredientName}`, 'Undo', () => {
+          void handleUndoUse(item, result);
+        });
+      }
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUndoUse(item: PantryItem, result: MarkUsedResult) {
+    setBusy(true);
+    try {
+      if (item.kind === 'leftover') {
+        const dishName = item.dishName ?? item.ingredientName;
+        const currentServings = result.removed ? 0 : (result.item?.servings ?? 1);
+        await upsertPantryItem({
+          ingredientName: dishName,
+          kind: 'leftover',
+          dishName,
+          servings: result.removed ? 1 : currentServings + 1,
+          notes: item.notes ?? null,
+          madeAt: item.madeAt ?? new Date().toISOString(),
+        });
+      } else {
+        await upsertPantryItem({
+          ingredientName: item.ingredientName,
+          unit: item.unit ?? null,
+          quantity: 1,
+          mergeQuantity: true,
+        });
+      }
+      await loadPantry();
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -162,22 +306,74 @@ export function PantryScreen() {
 
     setSnapBusy(true);
     try {
+      const before = items;
       const analysis = await analyzeMeal({ image });
-      const names = analysis.detectedFoods.map((food) => food.name).filter(Boolean);
-      if (names.length === 0) {
+      const foods = analysis.detectedFoods.map((food) => food.name).filter(Boolean);
+      if (foods.length === 0) {
         setError(
           toApiError(new Error("I couldn't spot anything in that photo. Try a clearer shot.")),
         );
         return;
       }
-      for (const name of names) {
-        await upsertPantryItem({ ingredientName: name, usePriority: 0 });
+      const results: PantryItem[] = [];
+      for (const name of foods) {
+        const saved = await upsertPantryItem({
+          ingredientName: name,
+          quantity: 1,
+          mergeQuantity: true,
+          usePriority: 0,
+        });
+        results.push(saved);
       }
-      loadPantry();
+      await loadPantry();
+
+      const unique = [...new Map(results.map((r) => [r.id, r])).values()];
+      const names = unique.map((r) => r.ingredientName);
+      const preview =
+        names.length <= 3
+          ? names.join(', ')
+          : `${names.slice(0, 3).join(', ')} +${names.length - 3} more`;
+      showToast(
+        `Added ${names.length} item${names.length === 1 ? '' : 's'}: ${preview}`,
+        'Undo',
+        () => {
+          void handleUndoImport(results, before);
+        },
+      );
+
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 300);
     } catch (err) {
       setError(toApiError(err));
     } finally {
       setSnapBusy(false);
+    }
+  }
+
+  async function handleUndoImport(results: PantryItem[], before: PantryItem[]) {
+    setBusy(true);
+    try {
+      const beforeById = new Map(before.map((i) => [i.id, i]));
+      const unique = [...new Map(results.map((r) => [r.id, r])).values()];
+      for (const result of unique) {
+        const prior = beforeById.get(result.id);
+        if (prior) {
+          await upsertPantryItem({
+            ingredientName: result.ingredientName,
+            quantity: prior.quantity,
+            unit: prior.unit ?? null,
+            expiresAt: prior.expiresAt ?? null,
+          });
+        } else {
+          await deletePantryItem(result.id);
+        }
+      }
+      await loadPantry();
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -193,16 +389,22 @@ export function PantryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <FadeInView style={styles.container}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Text style={[typography.heading, styles.title]}>My Pantry</Text>
-          <TouchableOpacity
+          <Pressable
             style={styles.addButton}
-            activeOpacity={0.8}
             onPress={() => setShowAdd(true)}
           >
             <Text style={styles.addButtonText}>+ Add Item</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         <ErrorBanner error={error} />
@@ -211,8 +413,7 @@ export function PantryScreen() {
           <View style={styles.addForm}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Add to Pantry</Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
+              <Pressable
                 onPress={() => {
                   setShowAdd(false);
                   setNewName('');
@@ -223,8 +424,8 @@ export function PantryScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Close form"
               >
-                <Ionicons name="close" size={20} color={colors.softRed} />
-              </TouchableOpacity>
+                <Ionicons name="close" size={20} color={colors.softAlert} />
+              </Pressable>
             </View>
             <TextInput
               style={styles.input}
@@ -323,33 +524,76 @@ export function PantryScreen() {
         ) : (
           <View style={styles.list}>
             {items.map((item) => (
-              <TouchableOpacity
+              <Pressable
                 key={item.id}
                 style={styles.item}
-                activeOpacity={0.7}
-                onPress={() => handleUse(item)}
-                onLongPress={() => handleDelete(item.id)}
+                onLongPress={() => confirmDelete(item)}
+                delayLongPress={500}
               >
                 <View style={styles.itemMain}>
-                  <Text style={styles.itemName}>{item.ingredientName}</Text>
+                  <Text style={styles.itemName}>
+                    {item.kind === 'leftover' ? item.dishName ?? item.ingredientName : item.ingredientName}
+                  </Text>
                   {expiryBadge(item)}
                 </View>
                 <View style={styles.itemDetails}>
-                  {item.quantity !== null && (
-                    <Text style={styles.itemQty}>
-                      {item.quantity}
-                      {item.unit ? ' ' + item.unit : ''}
+                  <Text style={styles.itemQty}>
+                    {item.kind === 'leftover'
+                      ? item.servings !== null
+                        ? `${item.servings} serving${item.servings === 1 ? '' : 's'}`
+                        : 'Leftover'
+                      : item.quantity !== null
+                        ? `${item.quantity}${item.unit ? ' ' + item.unit : ''}`
+                        : 'On hand'}
+                  </Text>
+                  <Pressable
+                    style={styles.useChip}
+                    onPress={() => confirmUse(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Mark ${item.ingredientName} as used`}
+                  >
+                    <Text style={styles.useChipText}>
+                      {item.kind === 'leftover' ? 'Serve' : 'Use'}
                     </Text>
-                  )}
-                  {!usedHint && (
-                    <Text style={styles.itemHint}>Tap to use · Long press to delete</Text>
-                  )}
+                  </Pressable>
                 </View>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
         )}
-      </View>
+
+        {toast && (
+          <View style={styles.toast}>
+            <Text style={styles.toastText} numberOfLines={1}>
+              {toast.message}
+            </Text>
+            <Pressable
+              onPress={() => {
+                toast.onAction();
+                setToast(null);
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Undo last action"
+            >
+              <Text style={styles.toastAction}>{toast.actionLabel}</Text>
+            </Pressable>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Scanning overlay */}
+      {snapBusy && (
+        <View style={styles.scanningOverlay}>
+          <View style={styles.scanningCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.scanningTitle}>Scraps is scanning...</Text>
+            <Text style={styles.scanningSubtitle}>Identifying your groceries</Text>
+          </View>
+        </View>
+      )}
+      </FadeInView>
     </SafeAreaView>
   );
 }
@@ -361,7 +605,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: spacing.lg,
+    paddingBottom: 120,
   },
   header: {
     flexDirection: 'row',
@@ -373,7 +620,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   addButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 8,
@@ -503,6 +750,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
+    flexShrink: 1,
   },
   expiryBadgeExpiring: {
     backgroundColor: colors.primaryLight,
@@ -510,7 +758,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontSize: 12,
-    color: colors.primary,
+    color: colors.textSecondary,
   },
   expiryBadgeLow: {
     backgroundColor: colors.primaryLight,
@@ -530,8 +778,80 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
   },
-  itemHint: {
-    fontSize: 12,
+  useChip: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  useChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  toast: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    backgroundColor: colors.text,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  toastText: {
+    flex: 1,
+    color: colors.surface,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  toastAction: {
+    color: colors.surface,
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  scanningOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  scanningCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  scanningTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: spacing.xs,
+  },
+  scanningSubtitle: {
+    fontSize: 13,
     color: colors.textSecondary,
   },
 });

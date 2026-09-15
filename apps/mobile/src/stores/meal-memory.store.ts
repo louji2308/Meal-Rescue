@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type {
+  MealEvent,
   MealMemoryCreateRuleRequest,
   MealMemoryFeedbackRequest,
   MealMemoryIntentResponse,
@@ -12,9 +13,12 @@ import type {
   PlanWeekRequest,
 } from '@meal-rescue/shared-types';
 
+import { toApiError } from '../services/api';
 import {
   confirmIntent,
   createRule,
+  deactivateRule as deactivateRuleApi,
+  getRecents,
   getWeek,
   listRules,
   moveMeal,
@@ -24,15 +28,36 @@ import {
   recordActual,
   remember,
   removeMeal,
+  reuseWeek,
   updateMeal,
 } from '../services/meal-memory.api';
-import { toApiError } from '../services/api';
+import { useCommonTableStore } from './common-table.store';
 
 /**
  * Meal Memory store — drives the agent tab: free-text intents, the weekly
  * calendar grid, active rules, and reality memory. Screen code subscribes to
  * this store and calls actions; API errors surface through `error`.
+ *
+ * Cell/ingredient edits flow through `autosaveUpdateEvent`: the change is
+ * applied optimistically to the local week immediately, the PATCH is
+ * debounced (~900ms), a Saved/Saving… indicator tracks the flush, and a
+ * failed save rolls the local grid back instead of corrupting it.
  */
+
+const AUTOSAVE_DEBOUNCE_MS = 900;
+const SAVED_INDICATOR_MS = 2200;
+
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let savedTimer: ReturnType<typeof setTimeout> | null = null;
+let autosaveHadFailure = false;
+let pendingAutosave: {
+  eventId: string;
+  input: MealMemoryUpdateMealRequest;
+  before: MealEvent | null;
+} | null = null;
+let shiftSeq = 0;
+
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface MealMemoryState {
   /** Calendar grid for the currently selected week. */
@@ -44,6 +69,10 @@ interface MealMemoryState {
   rules: MealRule[];
   /** Last action result message (e.g. plan confirmation copy). */
   lastMessage: string | null;
+  /** Recently eaten meals (for quick re-planning). */
+  recentMeals: MealEvent[];
+  /** Auto-save flush indicator (debounced cell/ingredient edits). */
+  saveStatus: SaveStatus;
 
   busy: boolean;
   error: ReturnType<typeof toApiError> | null;
@@ -59,8 +88,12 @@ interface MealMemoryState {
   feedBack: (input: MealMemoryFeedbackRequest) => Promise<void>;
   markRemembered: (input: MealMemoryRememberRequest) => Promise<void>;
   updateEvent: (eventId: string, input: MealMemoryUpdateMealRequest) => Promise<void>;
+  autosaveUpdateEvent: (eventId: string, input: MealMemoryUpdateMealRequest) => void;
+  reuseLastWeek: () => Promise<void>;
+  loadRecents: () => Promise<void>;
   loadRules: () => Promise<void>;
   addRule: (input: MealMemoryCreateRuleRequest) => Promise<void>;
+  deactivateRule: (ruleId: string) => Promise<void>;
   clearError: () => void;
   reset: () => void;
 }
@@ -71,19 +104,72 @@ function shiftWeekStart(weekStart: string, delta: number): string {
   return anchor.toISOString().slice(0, 10);
 }
 
+/** When exactly one household member is selected, scope the view to them. */
+function activeSoloMemberId(): string | null {
+  const ids = useCommonTableStore.getState().selectedMemberIds;
+  return ids.length === 1 ? ids[0] : null;
+}
+
+function currentPendingAutosave(): typeof pendingAutosave {
+  return pendingAutosave;
+}
+
+function eventPatch(event: MealEvent): MealMemoryUpdateMealRequest {
+  return {
+    concept: event.concept ?? undefined,
+    memberIds: event.memberIds ?? undefined,
+    effort: event.effort ?? undefined,
+    state: event.state ?? undefined,
+    slotStatus: event.slotStatus ?? undefined,
+  };
+}
+
+function applyAutosavePatch(
+  state: { week: MealMemoryWeekResponse | null },
+  eventId: string,
+  input: MealMemoryUpdateMealRequest,
+): { week: MealMemoryWeekResponse | null } | null {
+  const week = state.week;
+  if (!week) return null;
+  let changed = false;
+  const days = week.days.map((day) => ({
+    ...day,
+    slots: day.slots.map((slot) => {
+      const meal = slot.planned;
+      if (!meal || meal.id !== eventId) return slot;
+      changed = true;
+      return {
+        ...slot,
+        planned: {
+          ...meal,
+          concept: input.concept ?? meal.concept,
+          memberIds: input.memberIds ?? meal.memberIds,
+          effort: input.effort ?? meal.effort,
+          state: input.state ?? meal.state,
+          slotStatus: input.slotStatus ?? meal.slotStatus,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }),
+  }));
+  return changed ? { week: { ...week, days } } : null;
+}
+
 export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   week: null,
   weekStart: '',
   pendingIntent: null,
   rules: [],
   lastMessage: null,
+  recentMeals: [],
+  saveStatus: 'idle',
   busy: false,
   error: null,
 
   loadWeek: async (weekStart) => {
     set({ busy: true, error: null });
     try {
-      const week = await getWeek(weekStart);
+      const week = await getWeek(weekStart, activeSoloMemberId() ?? undefined);
       set({ week, weekStart: week.weekStart });
     } catch (err) {
       set({ error: toApiError(err) });
@@ -95,7 +181,17 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   shiftWeek: async (delta) => {
     const current = get().weekStart;
     if (!current) return;
-    await get().loadWeek(shiftWeekStart(current, delta));
+    const next = shiftWeekStart(current, delta);
+    const seq = ++shiftSeq;
+    set({ weekStart: next, error: null });
+    try {
+      const week = await getWeek(next, activeSoloMemberId() ?? undefined);
+      if (seq !== shiftSeq) return;
+      set({ week, weekStart: week.weekStart });
+    } catch (err) {
+      if (seq !== shiftSeq) return;
+      set({ error: toApiError(err) });
+    }
   },
 
   sendIntent: async (text) => {
@@ -105,6 +201,7 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
       set({ pendingIntent: response, lastMessage: response.result?.message ?? null });
       await get().loadWeek();
       await get().loadRules();
+      await get().loadRecents();
       return response;
     } catch (err) {
       set({ error: toApiError(err) });
@@ -138,10 +235,17 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
 
   planThisWeek: async (input) => {
     set({ busy: true, error: null });
+    const solo = activeSoloMemberId();
+    const memberIds = solo ? [solo] : undefined;
     try {
-      const { result } = await planWeek({ weekStart: get().weekStart || undefined, ...input });
+      const { result } = await planWeek({
+        weekStart: get().weekStart || undefined,
+        ...input,
+        memberIds,
+      });
       set({ lastMessage: result.plan ? 'Plan ready for the week.' : 'The week stays open.' });
       await get().loadWeek();
+      await get().loadRecents();
     } catch (err) {
       set({ error: toApiError(err) });
       throw err;
@@ -179,13 +283,86 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   updateEvent: async (eventId, input) => {
     set({ busy: true, error: null });
     try {
-      await updateMeal(eventId, input);
+      const saved = await updateMeal(eventId, input);
+      const applied = applyAutosavePatch(get(), eventId, eventPatch(saved));
+      if (applied) set(applied);
+      set({ saveStatus: 'saved' });
+    } catch (err) {
+      set({ error: toApiError(err), saveStatus: 'error' });
+      throw err;
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  autosaveUpdateEvent: (eventId, input) => {
+    if (!get().week || !findPlannedEvent(get().week, eventId)) return;
+    if (input.concept !== undefined && input.concept.trim() === '') return;
+
+    const before = findPlannedEvent(get().week, eventId);
+    pendingAutosave = { eventId, input, before: before ?? null };
+    const applied = applyAutosavePatch(get(), eventId, input);
+    if (applied) set(applied);
+    set({ saveStatus: 'saving' });
+
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      const pending = pendingAutosave;
+      if (!pending) return;
+      pendingAutosave = null;
+      const { eventId: id, input: patch, before } = pending;
+      void (async () => {
+        try {
+          const saved = await updateMeal(id, patch);
+          set({ saveStatus: 'saved', error: autosaveHadFailure ? null : get().error });
+          autosaveHadFailure = false;
+          if (savedTimer) clearTimeout(savedTimer);
+          savedTimer = setTimeout(() => set({ saveStatus: 'idle' }), SAVED_INDICATOR_MS);
+          const superseded = currentPendingAutosave()?.eventId === id;
+          if (!superseded) {
+            const applied = applyAutosavePatch(get(), id, eventPatch(saved));
+            if (applied) set(applied);
+          }
+        } catch (err) {
+          const superseded = currentPendingAutosave()?.eventId === id;
+          if (!superseded && before) {
+            const applied = applyAutosavePatch(get(), id, eventPatch(before));
+            if (applied) set(applied);
+          }
+          autosaveHadFailure = true;
+          set({ error: toApiError(err), saveStatus: 'error' });
+          if (savedTimer) clearTimeout(savedTimer);
+          savedTimer = setTimeout(() => set({ saveStatus: 'idle' }), SAVED_INDICATOR_MS);
+        }
+      })();
+    }, AUTOSAVE_DEBOUNCE_MS);
+  },
+
+  reuseLastWeek: async () => {
+    set({ busy: true, error: null });
+    try {
+      if (!get().weekStart) await get().loadWeek();
+      const response = await reuseWeek({ toWeekStart: get().weekStart || undefined });
+      set({
+        lastMessage: response.copied.length
+          ? `Reused ${response.copied.length} meal${response.copied.length === 1 ? '' : 's'} from last week.`
+          : 'Nothing reusable from last week.',
+      });
       await get().loadWeek();
     } catch (err) {
       set({ error: toApiError(err) });
       throw err;
     } finally {
       set({ busy: false });
+    }
+  },
+
+  loadRecents: async () => {
+    try {
+      const response = await getRecents();
+      set({ recentMeals: response.meals });
+    } catch {
+      // Recents are a convenience strip — stay empty, never a banner.
     }
   },
 
@@ -254,16 +431,51 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
     }
   },
 
+  deactivateRule: async (ruleId) => {
+    set({ busy: true, error: null });
+    try {
+      const deactivated = await deactivateRuleApi(ruleId);
+      set({ rules: get().rules.filter((r) => r.id !== deactivated.id) });
+    } catch (err) {
+      set({ error: toApiError(err) });
+      throw err;
+    } finally {
+      set({ busy: false });
+    }
+  },
+
   clearError: () => set({ error: null }),
 
-  reset: () =>
+  reset: () => {
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    if (savedTimer) clearTimeout(savedTimer);
+    autosaveTimer = null;
+    savedTimer = null;
+    pendingAutosave = null;
+    autosaveHadFailure = false;
     set({
       week: null,
       weekStart: '',
       pendingIntent: null,
       rules: [],
       lastMessage: null,
+      recentMeals: [],
+      saveStatus: 'idle',
       busy: false,
       error: null,
-    }),
+    });
+  },
 }));
+
+function findPlannedEvent(
+  week: MealMemoryWeekResponse | null,
+  eventId: string,
+): MealEvent | null {
+  if (!week) return null;
+  for (const day of week.days) {
+    for (const slot of day.slots) {
+      if (slot.planned?.id === eventId) return slot.planned;
+    }
+  }
+  return null;
+}

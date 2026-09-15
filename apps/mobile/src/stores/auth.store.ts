@@ -2,6 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 import { setAuthToken } from '../services/api';
+import { useCommonTableStore } from './common-table.store';
+import { useDecisionStore } from './decision.store';
+import { useMealMemoryStore } from './meal-memory.store';
 
 /**
  * Auth session store. The JWT survives app restarts via AsyncStorage;
@@ -47,17 +50,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     setAuthToken(null);
     void AsyncStorage.removeItem(STORAGE_KEY);
     set({ token: null, user: null });
+    useCommonTableStore.getState().reset();
+    useMealMemoryStore.getState().reset();
+    useDecisionStore.getState().reset();
   },
   hydrate: async () => {
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as { token: string; user: SessionUser };
-        setAuthToken(saved.token);
-        set({ token: saved.token, user: saved.user });
-      }
+      // Always clear session on boot so the login screen shows first.
+      // The user must explicitly sign in each app session.
+      await AsyncStorage.removeItem(STORAGE_KEY);
     } catch {
-      // Corrupt or missing session - start signed out.
+      // ignore
     } finally {
       set({ hydrated: true });
     }

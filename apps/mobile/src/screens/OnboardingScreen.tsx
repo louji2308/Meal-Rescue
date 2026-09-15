@@ -1,458 +1,522 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  ActivityIndicator,
+  Dimensions,
   Image,
-  ImageSourcePropType,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
+  TextInput,
   View,
 } from 'react-native';
 import { Text } from '../components/AppText';
+import { Pressable } from '../components/motion/Pressable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type {
-  CulinaryFamily,
-} from '@meal-rescue/shared-types';
-
-import { ErrorBanner } from '../components/ErrorBanner';
-import { PrimaryButton } from '../components/PrimaryButton';
+import type { CulinaryFamily } from '@meal-rescue/shared-types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { toApiError } from '../services/api';
 import { haptics } from '../services/haptics';
-import { startOnboarding, submitCuisinePreferences } from '../services/taste.api';
+import { submitCuisinePreferences } from '../services/taste.api';
 import { useAuthStore } from '../stores/auth.store';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
 
 // ---------------------------------------------------------------------------
-// Data
+// Cuisine grid data
 // ---------------------------------------------------------------------------
 
 interface CuisineOption {
-  family: CulinaryFamily;
-  name: string;
-  examples: string;
-  image: ImageSourcePropType;
+  id: CulinaryFamily;
+  label: string;
+  image: number;
 }
 
 const CUISINE_OPTIONS: CuisineOption[] = [
-  { family: 'italian', name: 'Italian', examples: 'Pizza, pasta, risotto', image: require('../../assets/cuisines/italian.png') },
-  { family: 'indian', name: 'Indian', examples: 'Curry, biryani, dosa', image: require('../../assets/cuisines/indian.png') },
-  { family: 'mexican', name: 'Mexican', examples: 'Tacos, burritos, mole', image: require('../../assets/cuisines/mexican.png') },
-  { family: 'east_asian', name: 'East Asian', examples: 'Ramen, stir-fry, pho', image: require('../../assets/cuisines/east_asian.png') },
-  { family: 'mediterranean', name: 'Mediterranean', examples: 'Falafel, hummus, shawarma', image: require('../../assets/cuisines/mediterranean.png') },
-  { family: 'american', name: 'American', examples: 'Burgers, BBQ, soul food', image: require('../../assets/cuisines/american.png') },
-  { family: 'middle_eastern', name: 'Middle Eastern', examples: 'Kebabs, tabbouleh, shakshuka', image: require('../../assets/cuisines/middle_eastern.png') },
-  { family: 'african', name: 'African', examples: 'Jollof, injera, tagine', image: require('../../assets/cuisines/african.png') },
-  { family: 'caribbean', name: 'Caribbean', examples: 'Jerk, plantains, roti', image: require('../../assets/cuisines/caribbean.png') },
-  { family: 'thai', name: 'Thai', examples: 'Pad thai, green curry, som tum', image: require('../../assets/cuisines/thai.png') },
+  { id: 'african', label: 'African', image: require('../../assets/cuisines/african.jpg') },
+  { id: 'american', label: 'American', image: require('../../assets/cuisines/american.jpg') },
+  { id: 'caribbean', label: 'Caribbean', image: require('../../assets/cuisines/caribbean.jpg') },
+  { id: 'east_asian', label: 'East Asian', image: require('../../assets/cuisines/east_asian.jpg') },
+  { id: 'indian', label: 'Indian', image: require('../../assets/cuisines/indian.jpg') },
+  { id: 'italian', label: 'Italian', image: require('../../assets/cuisines/italian.jpg') },
+  { id: 'mediterranean', label: 'Mediterranean', image: require('../../assets/cuisines/mediterranean.jpg') },
+  { id: 'mexican', label: 'Mexican', image: require('../../assets/cuisines/mexican.jpg') },
+  { id: 'middle_eastern', label: 'Middle Eastern', image: require('../../assets/cuisines/middle_eastern.jpg') },
+  { id: 'thai', label: 'Thai', image: require('../../assets/cuisines/thai.jpg') },
 ];
-
-const MEAL_FEEL_OPTIONS: Array<{ id: string; label: string; desc: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { id: 'comforting', label: 'Comforting', desc: 'Warm, familiar, satisfying', icon: 'heart-outline' },
-  { id: 'flavorful', label: 'Flavorful', desc: 'Bold, spicy, rich, exciting', icon: 'flame-outline' },
-  { id: 'fresh', label: 'Fresh', desc: 'Light, crisp, refreshing', icon: 'leaf-outline' },
-  { id: 'filling', label: 'Filling', desc: 'Something that really feels substantial', icon: 'restaurant-outline' },
-  { id: 'textural', label: 'Textural', desc: 'Crunchy, crispy, creamy, interesting', icon: 'grid-outline' },
-  { id: 'balanced', label: 'Balanced', desc: 'A little bit of everything', icon: 'git-compare-outline' },
-];
-
-const RESCUE_STYLE_OPTIONS: Array<{ id: string; label: string; desc: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { id: 'mostly_same', label: 'Keep it mostly the same', desc: 'Small additions or finishing touches', icon: 'add-circle-outline' },
-  { id: 'little_upgrade', label: 'Give it a little upgrade', desc: 'Add a couple of things', icon: 'arrow-up-outline' },
-  { id: 'open_to_change', label: "I'm open to changing it", desc: 'Bigger modifications are okay', icon: 'swap-horizontal-outline' },
-  { id: 'surprise_me', label: 'Surprise me', desc: "I don't mind unusual ideas", icon: 'shuffle-outline' },
-];
-
-const HUNGRY_OPTIONS: Array<{ id: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { id: 'fast', label: 'I want it fast', icon: 'flash-outline' },
-  { id: 'low_cleanup', label: 'I hate cleanup', icon: 'sparkles-outline' },
-  { id: 'dont_mind_cooking', label: "I don't mind cooking", icon: 'restaurant-outline' },
-  { id: 'one_extra', label: 'I can get one extra ingredient', icon: 'cart-outline' },
-  { id: 'use_existing', label: 'I want to use what I already have', icon: 'home-outline' },
-];
-
-const RESCUE_PRIORITY_OPTIONS: Array<{ id: string; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { id: 'satisfaction', label: 'Make it more satisfying', icon: 'heart-outline' },
-  { id: 'keep_craving', label: 'Keep the craving intact', icon: 'bookmark-outline' },
-  { id: 'use_what_i_have', label: 'Use what I already have', icon: 'cube-outline' },
-  { id: 'try_something_new', label: 'Try something new', icon: 'compass-outline' },
-];
-
-const TOTAL_STEPS = 5;
 
 // ---------------------------------------------------------------------------
-// Types
+// Questions (same as before, but with backend integration)
 // ---------------------------------------------------------------------------
 
-type OnboardingStep = 'cuisine' | 'mealFeel' | 'rescueStyle' | 'hungryTired' | 'rescuePriority';
+type QuestionId =
+  | 'cuisine'
+  | 'rescueStyle'
+  | 'mealFeel'
+  | 'changeAmount'
+  | 'familiarVsNew'
+  | 'cookingEffort'
+  | 'whoAtTable'
+  | 'neverSuggest';
+
+type StepId = QuestionId | 'done';
+
+interface Question {
+  id: QuestionId;
+  title: string;
+  subtitle?: string;
+  options: Array<{ id: string; label: string; desc?: string }>;
+  maxSelect?: number;
+}
+
+const RESCUE_STYLE_Q: Question = {
+  id: 'rescueStyle',
+  title: 'You already have some food.\nWhat would you do with it?',
+  options: [
+    { id: 'keep_simple', label: 'Keep it simple', desc: 'Just make it better.' },
+    { id: 'add_something', label: 'Add something', desc: 'Find a good side for it.' },
+    { id: 'change_little', label: 'Change it a little', desc: 'Give it a new twist.' },
+    { id: 'make_new', label: 'Make something new', desc: 'Turn it into a new meal.' },
+  ],
+};
+
+const MEAL_FEEL_Q: Question = {
+  id: 'mealFeel',
+  title: 'What makes a meal feel right to you?',
+  subtitle: 'Pick up to 2.',
+  options: [
+    { id: 'fresh', label: 'Fresh' },
+    { id: 'crispy', label: 'Crispy' },
+    { id: 'spicy', label: 'Spicy' },
+    { id: 'tangy', label: 'Tangy' },
+    { id: 'creamy', label: 'Creamy' },
+    { id: 'filling', label: 'Something filling' },
+  ],
+  maxSelect: 2,
+};
+
+const CHANGE_AMOUNT_Q: Question = {
+  id: 'changeAmount',
+  title: 'How much should we\nchange your food?',
+  subtitle: "We won't change what you love.",
+  options: [
+    { id: 'little', label: 'Just a little' },
+    { id: 'twist', label: 'A nice twist' },
+    { id: 'surprise', label: 'Surprise me' },
+  ],
+};
+
+const FAMILIAR_VS_NEW_Q: Question = {
+  id: 'familiarVsNew',
+  title: 'Tonight, which sounds better?',
+  options: [
+    { id: 'familiar', label: 'Something I know I\u2019ll enjoy' },
+    { id: 'different', label: 'Show me something different' },
+  ],
+};
+
+const COOKING_EFFORT_Q: Question = {
+  id: 'cookingEffort',
+  title: 'How much work sounds\nokay today?',
+  options: [
+    { id: 'easy', label: 'Keep it easy', desc: '10\u201315 min' },
+    { id: 'little', label: 'I can cook a little', desc: '20\u201330 min' },
+    { id: 'enjoy', label: 'I enjoy cooking', desc: 'Take your time' },
+  ],
+};
+
+const WHO_AT_TABLE_Q: Question = {
+  id: 'whoAtTable',
+  title: 'Who is usually at the table?',
+  subtitle: 'You can change this anytime.',
+  options: [
+    { id: 'just_me', label: 'Just me' },
+    { id: 'family', label: 'Me + family' },
+    { id: 'few_people', label: 'A few people' },
+  ],
+};
+
+const NEVER_SUGGEST_Q: Question = {
+  id: 'neverSuggest',
+  title: 'What should we\nnever suggest?',
+  subtitle: 'Pick all that apply.',
+  options: [
+    { id: 'too_spicy', label: 'Too spicy' },
+    { id: 'too_sweet', label: 'Too sweet' },
+    { id: 'too_much_work', label: 'Too much work' },
+    { id: 'too_different', label: 'Too different' },
+  ],
+};
 
 // ---------------------------------------------------------------------------
-// Component
+// Dynamic question routing
+// ---------------------------------------------------------------------------
+
+function getNextQuestion(
+  current: QuestionId,
+  selections: Record<string, Set<string>>,
+): StepId | null {
+  switch (current) {
+    case 'cuisine': {
+      const cuisines = selections.cuisine ?? new Set();
+      const hasIndian = cuisines.has('indian');
+      return hasIndian ? 'rescueStyle' : 'mealFeel';
+    }
+    case 'rescueStyle':
+      return 'mealFeel';
+    case 'mealFeel':
+      return 'changeAmount';
+    case 'changeAmount':
+      return 'familiarVsNew';
+    case 'familiarVsNew':
+      return 'cookingEffort';
+    case 'cookingEffort':
+      return 'whoAtTable';
+    case 'whoAtTable':
+      return 'neverSuggest';
+    case 'neverSuggest':
+      return 'done';
+    default:
+      return null;
+  }
+}
+
+function getQuestionList(selections: Record<string, Set<string>>): StepId[] {
+  const list: StepId[] = ['cuisine'];
+  let current: QuestionId = 'cuisine';
+  let next: StepId | null = 'cuisine';
+  while (next && next !== 'done') {
+    next = getNextQuestion(current, selections);
+    if (next && next !== 'done') {
+      list.push(next);
+      current = next;
+    }
+  }
+  list.push('done');
+  return list;
+}
+
+function getQuestion(id: QuestionId): Question | null {
+  const map: Record<string, Question> = {
+    rescueStyle: RESCUE_STYLE_Q,
+    mealFeel: MEAL_FEEL_Q,
+    changeAmount: CHANGE_AMOUNT_Q,
+    familiarVsNew: FAMILIAR_VS_NEW_Q,
+    cookingEffort: COOKING_EFFORT_Q,
+    whoAtTable: WHO_AT_TABLE_Q,
+    neverSuggest: NEVER_SUGGEST_Q,
+  };
+  return map[id] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Progress indicator
+// ---------------------------------------------------------------------------
+
+function ProgressDots({ total, current }: { total: number; current: number }) {
+  return (
+    <View style={styles.dotsRow}>
+      {Array.from({ length: total }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.dot,
+            i === current ? styles.dotActive : null,
+            i < current ? styles.dotDone : null,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cuisine grid screen
+// ---------------------------------------------------------------------------
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const GRID_COLUMNS = 2;
+const GRID_GAP = 12;
+const GRID_ITEM_WIDTH = (SCREEN_WIDTH - spacing.lg * 2 - GRID_GAP) / GRID_COLUMNS;
+
+function CuisineGridScreen({
+  selected,
+  onToggle,
+  onContinue,
+}: {
+  selected: Set<CulinaryFamily>;
+  onToggle: (id: CulinaryFamily) => void;
+  onContinue: () => void;
+}) {
+  return (
+    <ScrollView
+      contentContainerStyle={styles.qContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.qTitle}>What food feels{'\n'}most like home?</Text>
+      <Text style={styles.qSubtitle}>Pick the ones you naturally enjoy.</Text>
+
+      <View style={styles.cuisineGrid}>
+        {CUISINE_OPTIONS.map((cuisine) => {
+          const isSelected = selected.has(cuisine.id);
+          return (
+            <Pressable
+              key={cuisine.id}
+              style={[styles.cuisineItem, isSelected && styles.cuisineItemSelected]}
+              onPress={() => onToggle(cuisine.id)}
+              scaleTo={1}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+            >
+              <Image source={cuisine.image} style={styles.cuisineImage} resizeMode="cover" />
+              <View style={[styles.cuisineLabelWrap, isSelected && styles.cuisineLabelWrapSelected]}>
+                <Text style={[styles.cuisineLabel, isSelected && styles.cuisineLabelSelected]}>
+                  {cuisine.label}
+                </Text>
+              </View>
+              {isSelected && <View style={styles.cuisineCheck}><Text style={styles.checkmark}>?</Text></View>}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Pressable
+        style={[styles.continueBtn, selected.size === 0 && styles.continueBtnDisabled]}
+        onPress={onContinue}
+        scaleTo={1}
+        disabled={selected.size === 0}
+      >
+        <Text style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}>
+          Continue
+        </Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Question screen
+// ---------------------------------------------------------------------------
+
+function QuestionScreen({
+  question,
+  selected,
+  onToggle,
+  onContinue,
+  onBack,
+  extraInput,
+}: {
+  question: Question;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onContinue: () => void;
+  onBack: () => void;
+  extraInput?: { value: string; onChange: (t: string) => void };
+}) {
+  const canContinue = selected.size > 0;
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.qContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <Pressable onPress={onBack} style={styles.backBtn} scaleTo={1}>
+        <Text style={styles.backBtnText}>Back</Text>
+      </Pressable>
+
+      <Text style={styles.qTitle}>{question.title}</Text>
+      {question.subtitle ? (
+        <Text style={styles.qSubtitle}>{question.subtitle}</Text>
+      ) : null}
+
+      <View style={styles.chipsWrap}>
+        {question.options.map((opt) => {
+          const isSelected = selected.has(opt.id);
+          return (
+            <Pressable
+              key={opt.id}
+              style={[styles.chip, isSelected && styles.chipSelected]}
+              onPress={() => onToggle(opt.id)}
+              scaleTo={1}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+            >
+              <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
+                {opt.label}
+              </Text>
+              {opt.desc ? (
+                <Text style={[styles.chipDesc, isSelected && styles.chipDescSelected]}>
+                  {opt.desc}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {extraInput ? (
+        <View style={styles.extraInputWrap}>
+          <TextInput
+            style={styles.extraInput}
+            placeholder="Anything else..."
+            placeholderTextColor={colors.homeTextTertiary}
+            value={extraInput.value}
+            onChangeText={extraInput.onChange}
+            multiline
+          />
+        </View>
+      ) : null}
+
+      <Pressable
+        style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
+        onPress={onContinue}
+        scaleTo={1}
+        disabled={!canContinue}
+      >
+        <Text style={[styles.continueBtnText, !canContinue && styles.continueBtnTextDisabled]}>
+          Continue
+        </Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
 // ---------------------------------------------------------------------------
 
 export function OnboardingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Onboarding'>>();
   const setOnboardingCompleted = useAuthStore((state) => state.setOnboardingCompleted);
 
-  const [step, setStep] = useState<OnboardingStep>('cuisine');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<'cuisine' | 'questions' | 'done'>('cuisine');
+  const [selections, setSelections] = useState<Record<string, Set<string>>>({});
+  const [cuisineSelections, setCuisineSelections] = useState<Set<CulinaryFamily>>(new Set());
+  const [customNever, setCustomNever] = useState('');
+  const [_submitting, setSubmitting] = useState(false);
 
-  // Selections
-  const [selectedCuisines, setSelectedCuisines] = useState<Set<CulinaryFamily>>(new Set());
-  const [selectedMealFeel, setSelectedMealFeel] = useState<Set<string>>(new Set());
-  const [selectedRescueStyle, setSelectedRescueStyle] = useState<Set<string>>(new Set());
-  const [selectedHungry, setSelectedHungry] = useState<Set<string>>(new Set());
-  const [selectedPriority, setSelectedPriority] = useState<Set<string>>(new Set());
+  // Build question list dynamically based on current selections
+  const questionList = getQuestionList(selections);
+  const questionSteps = questionList.filter((q) => q !== 'cuisine' && q !== 'done');
+  const [stepIndex, setStepIndex] = useState(0);
 
-  const currentStepNum =
-    step === 'cuisine' ? 1
-    : step === 'mealFeel' ? 2
-    : step === 'rescueStyle' ? 3
-    : step === 'hungryTired' ? 4
-    : 5;
+  const currentQuestionId = questionSteps[stepIndex] as QuestionId | undefined;
+  const currentQuestion = currentQuestionId ? getQuestion(currentQuestionId) : null;
 
-  useEffect(() => {
-    void loadOnboarding();
-  }, []);
-
-  useEffect(() => {
-    if (step === 'cuisine' && !loading) {
-      // Already handled by loadOnboarding
-    }
-  }, [step, loading]);
-
-  function finishOnboarding() {
-    navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
-  }
-
-  function handleSkip() {
-    navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
-  }
-
-  async function loadOnboarding() {
-    setLoading(true);
-    setError(null);
-    try {
-      const state = await startOnboarding();
-      if (state.completed) {
-        finishOnboarding();
-        return;
+  function toggleCuisine(id: CulinaryFamily) {
+    haptics.light();
+    setCuisineSelections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
       }
-      // Onboarding step comes back as 'cuisine' or 'pair'
-      // We always start with our cuisine step regardless
-      setStep('cuisine');
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ---- Step handlers ----
-
-  function toggleCuisine(family: CulinaryFamily) {
-    haptics.light();
-    setSelectedCuisines((prev) => {
-      const next = new Set(prev);
-      if (next.has(family)) next.delete(family);
-      else next.add(family);
-      return next;
-    });
-  }
-
-  function toggleMulti(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
-    haptics.light();
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
       return next;
     });
   }
 
   async function handleCuisineContinue() {
-    if (selectedCuisines.size === 0) return;
+    haptics.medium();
     setSubmitting(true);
-    setError(null);
     try {
-      await submitCuisinePreferences(Array.from(selectedCuisines));
-      setStep('mealFeel');
-    } catch (err) {
-      setError(toApiError(err));
+      // Submit cuisines to backend
+      await submitCuisinePreferences(Array.from(cuisineSelections));
+      // Also store locally for question routing
+      setSelections({ cuisine: cuisineSelections });
+      setPhase('questions');
+    } catch {
+      // If backend fails, still proceed with local state
+      setSelections({ cuisine: cuisineSelections });
+      setPhase('questions');
     } finally {
       setSubmitting(false);
     }
   }
 
-  function handleMealFeelContinue() {
-    if (selectedMealFeel.size === 0) return;
-    haptics.medium();
-    setStep('rescueStyle');
-  }
-
-  function handleRescueStyleContinue() {
-    if (selectedRescueStyle.size === 0) return;
-    haptics.medium();
-    setStep('hungryTired');
-  }
-
-  function handleHungryContinue() {
-    if (selectedHungry.size === 0) return;
-    haptics.medium();
-    setStep('rescuePriority');
-  }
-
-  function handlePriorityContinue() {
-    if (selectedPriority.size === 0) return;
-    haptics.medium();
-    setOnboardingCompleted(true);
-    finishOnboarding();
-  }
-
-  function goBack() {
+  function toggleOption(id: string) {
     haptics.light();
-    if (step === 'mealFeel') setStep('cuisine');
-    else if (step === 'rescueStyle') setStep('mealFeel');
-    else if (step === 'hungryTired') setStep('rescueStyle');
-    else if (step === 'rescuePriority') setStep('hungryTired');
+    if (!currentQuestionId) return;
+    setSelections((prev) => {
+      const current = new Set(prev[currentQuestionId] ?? []);
+      if (current.has(id)) {
+        current.delete(id);
+      } else {
+        if (currentQuestion?.maxSelect && current.size >= currentQuestion.maxSelect) {
+          return prev;
+        }
+        current.add(id);
+      }
+      return { ...prev, [currentQuestionId]: current };
+    });
   }
 
-  const progress = (currentStepNum / TOTAL_STEPS) * 100;
+  function handleContinue() {
+    haptics.medium();
+    if (!currentQuestionId) return;
 
-  // ---- Loading ----
+    // Save custom "never suggest" text
+    if (currentQuestionId === 'neverSuggest' && customNever.trim()) {
+      setSelections((prev) => {
+        const never = new Set(prev.neverSuggest ?? []);
+        never.add(`custom:${customNever.trim()}`);
+        return { ...prev, neverSuggest: never };
+      });
+    }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-          <Text style={styles.loadingText}>Setting up your taste profile…</Text>
-        </View>
-      </SafeAreaView>
-    );
+    if (stepIndex < questionSteps.length - 1) {
+      const newList = getQuestionList(selections);
+      const newSteps = newList.filter((q) => q !== 'cuisine' && q !== 'done');
+      if (stepIndex < newSteps.length - 1) {
+        setStepIndex(stepIndex + 1);
+      } else {
+        setOnboardingCompleted(true);
+        navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+      }
+    } else {
+      setOnboardingCompleted(true);
+      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+    }
   }
 
-  // ---- Render ----
+  function handleBack() {
+    haptics.light();
+    if (stepIndex > 0) {
+      setStepIndex(stepIndex - 1);
+    } else {
+      setPhase('cuisine');
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.progressRow}>
-        <Text style={styles.progressText}>
-          Step {currentStepNum} of {TOTAL_STEPS}
-        </Text>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
-        </View>
-      </View>
-
-      {step === 'cuisine' && (
-        <CuisineStep
-          options={CUISINE_OPTIONS}
-          selected={selectedCuisines}
-          busy={submitting}
-          onToggle={toggleCuisine}
-          onContinue={handleCuisineContinue}
-          error={error}
-          onSkip={handleSkip}
-        />
+      {phase === 'cuisine' && (
+        <FadeInView style={styles.flex}>
+          <CuisineGridScreen
+            selected={cuisineSelections}
+            onToggle={toggleCuisine}
+            onContinue={() => void handleCuisineContinue()}
+          />
+        </FadeInView>
       )}
 
-      {step === 'mealFeel' && (
-        <MultiSelectStep
-          title="What makes a meal feel right?"
-          subtitle="Pick 1–3 that matter most to you."
-          options={MEAL_FEEL_OPTIONS}
-          selected={selectedMealFeel}
-          minSelect={1}
-          onToggle={(id) => toggleMulti(setSelectedMealFeel, id)}
-          onContinue={handleMealFeelContinue}
-          onBack={goBack}
-        />
-      )}
-
-      {step === 'rescueStyle' && (
-        <MultiSelectStep
-          title="How do you like food rescued?"
-          subtitle="When food needs a little help, what sounds most like you?"
-          options={RESCUE_STYLE_OPTIONS}
-          selected={selectedRescueStyle}
-          minSelect={1}
-          onToggle={(id) => toggleMulti(setSelectedRescueStyle, id)}
-          onContinue={handleRescueStyleContinue}
-          onBack={goBack}
-        />
-      )}
-
-      {step === 'hungryTired' && (
-        <MultiSelectStep
-          title="When you're hungry and tired, what's usually true?"
-          subtitle="Pick whatever fits."
-          options={HUNGRY_OPTIONS}
-          selected={selectedHungry}
-          minSelect={1}
-          onToggle={(id) => toggleMulti(setSelectedHungry, id)}
-          onContinue={handleHungryContinue}
-          onBack={goBack}
-        />
-      )}
-
-      {step === 'rescuePriority' && (
-        <MultiSelectStep
-          title="When I rescue your food, what should I prioritize?"
-          subtitle="Pick up to 2."
-          options={RESCUE_PRIORITY_OPTIONS}
-          selected={selectedPriority}
-          minSelect={1}
-          maxSelect={2}
-          onToggle={(id) => {
-            toggleMulti(setSelectedPriority, id);
-            // Enforce max 2
-            setSelectedPriority((prev) => {
-              if (prev.size > 2) {
-                const arr = Array.from(prev);
-                return new Set(arr.slice(-2));
-              }
-              return prev;
-            });
-          }}
-          onContinue={handlePriorityContinue}
-          onBack={goBack}
-        />
+      {phase === 'questions' && currentQuestion && currentQuestionId && (
+        <FadeInView key={currentQuestionId} style={styles.flex}>
+          <ProgressDots total={questionSteps.length} current={stepIndex} />
+          <QuestionScreen
+            question={currentQuestion}
+            selected={selections[currentQuestionId] ?? new Set()}
+            onToggle={toggleOption}
+            onContinue={handleContinue}
+            onBack={handleBack}
+            extraInput={
+              currentQuestionId === 'neverSuggest'
+                ? { value: customNever, onChange: setCustomNever }
+                : undefined
+            }
+          />
+        </FadeInView>
       )}
     </SafeAreaView>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-steps
-// ---------------------------------------------------------------------------
-
-function CuisineStep({
-  options,
-  selected,
-  busy,
-  onToggle,
-  onContinue,
-  error,
-  onSkip,
-}: {
-  options: CuisineOption[];
-  selected: Set<CulinaryFamily>;
-  busy: boolean;
-  onToggle: (family: CulinaryFamily) => void;
-  onContinue: () => void;
-  error: ReturnType<typeof toApiError> | null;
-  onSkip: () => void;
-}) {
-  return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <Text style={typography.title}>What kinds of food do you love?</Text>
-      <Text style={styles.subtitle}>Select 3–5.</Text>
-      <View style={styles.grid}>
-        {options.map((option) => {
-          const isSelected = selected.has(option.family);
-          return (
-            <TouchableOpacity
-              key={option.family}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={option.name}
-              onPress={() => onToggle(option.family)}
-              activeOpacity={0.85}
-              style={[styles.cell, isSelected && styles.cellSelected]}
-            >
-              <Image source={option.image} style={styles.cellImage} />
-              <Text style={styles.cellName}>{option.name}</Text>
-              <Text style={styles.cellExamples}>{option.examples}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      <ErrorBanner error={error} />
-      <PrimaryButton
-        label={selected.size > 0 ? `Continue (${selected.size})` : 'Pick at least one'}
-        onPress={onContinue}
-        busy={busy}
-        disabled={selected.size === 0}
-      />
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel="Skip onboarding"
-        onPress={onSkip}
-        style={styles.skipButton}
-      >
-        <Text style={styles.skipText}>Skip for now</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-}
-
-function MultiSelectStep({
-  title,
-  subtitle,
-  options,
-  selected,
-  minSelect = 1,
-  maxSelect: _maxSelect,
-  onToggle,
-  onContinue,
-  onBack,
-}: {
-  title: string;
-  subtitle: string;
-  options: Array<{ id: string; label: string; desc?: string; icon: keyof typeof Ionicons.glyphMap }>;
-  selected: Set<string>;
-  minSelect?: number;
-  maxSelect?: number;
-  onToggle: (id: string) => void;
-  onContinue: () => void;
-  onBack: () => void;
-}) {
-  const canContinue = selected.size >= minSelect;
-  return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={onBack} style={styles.backButton}>
-        <Text style={styles.backText}>← Back</Text>
-      </TouchableOpacity>
-      <Text style={[typography.title, styles.stepTitle]}>{title}</Text>
-      <Text style={styles.subtitle}>{subtitle}</Text>
-      {options.map((option) => {
-        const isSelected = selected.has(option.id);
-        return (
-          <TouchableOpacity
-            key={option.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected }}
-            accessibilityLabel={option.label}
-            onPress={() => onToggle(option.id)}
-            activeOpacity={0.85}
-            style={[styles.optionRow, isSelected && styles.optionRowSelected]}
-          >
-            <View style={[styles.optionIconWrap, isSelected && styles.optionIconWrapSelected]}>
-              <Ionicons name={option.icon} size={22} color={isSelected ? colors.softViolet : colors.textSecondary} />
-            </View>
-            <View style={styles.optionTextWrap}>
-              <Text style={styles.optionLabel}>{option.label}</Text>
-              {option.desc ? <Text style={styles.optionDesc}>{option.desc}</Text> : null}
-            </View>
-            <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
-              {isSelected && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <PrimaryButton
-        label={canContinue ? 'Continue' : `Pick at least ${minSelect}`}
-        onPress={onContinue}
-        disabled={!canContinue}
-      />
-    </ScrollView>
   );
 }
 
@@ -460,86 +524,236 @@ function MultiSelectStep({
 // Styles
 // ---------------------------------------------------------------------------
 
+const CHARCOAL = '#161616';
+const SMOKE = '#D1D1D6';
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: {
+  flex: { flex: 1 },
+
+  // Progress dots — full-width dashes
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
+  dot: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: SMOKE,
+  },
+  dotActive: {
+    backgroundColor: CHARCOAL,
+    flex: 1.8,
+  },
+  dotDone: {
+    backgroundColor: CHARCOAL,
+  },
+
+  // Intro
+  introWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: 32,
   },
-  loadingText: { color: colors.textSecondary, fontSize: 14 },
-  progressRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
-  progressText: { color: colors.textSecondary, fontSize: 13 },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden' },
-  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.primary },
-  content: { padding: spacing.lg, paddingBottom: spacing.xl },
-  subtitle: { color: colors.textSecondary, fontSize: 15, marginBottom: spacing.md },
-  stepTitle: { marginBottom: spacing.xs },
+  introSpacer: { flex: 0.4 },
+  introTitle: {
+    fontFamily: fonts.semiBold,
+    fontSize: 30,
+    lineHeight: 38,
+    color: CHARCOAL,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  introSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 17,
+    lineHeight: 24,
+    color: colors.homeTextSecondary,
+    textAlign: 'center',
+    marginBottom: 40,
+  },
+  startButton: {
+    width: 200,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: CHARCOAL,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startButtonText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+
+  // Question screen
+  qContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  backBtn: {
+    minHeight: 40,
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  backBtnText: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: colors.homeTextSecondary,
+  },
+  qTitle: {
+    fontFamily: fonts.semiBold,
+    fontSize: 26,
+    lineHeight: 33,
+    color: CHARCOAL,
+    marginBottom: 8,
+  },
+  qSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.homeTextSecondary,
+    marginBottom: 24,
+  },
 
   // Cuisine grid
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  cell: {
-    width: '48%',
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    padding: spacing.sm,
-    alignItems: 'center',
-  },
-  cellSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  cellImage: { width: 80, height: 80, borderRadius: 8, marginBottom: spacing.sm },
-  cellName: { fontSize: 15, fontWeight: '600', color: colors.text },
-  cellExamples: { fontSize: 12, color: colors.textSecondary, textAlign: 'center', marginTop: 2 },
-
-  // Multi-select options
-  optionRow: {
+  cuisineGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    flexWrap: 'wrap',
+    gap: GRID_GAP,
+    marginBottom: 24,
+  },
+  cuisineItem: {
+    width: GRID_ITEM_WIDTH,
+    height: GRID_ITEM_WIDTH * 0.85,
     borderRadius: 16,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    backgroundColor: colors.surface,
-    gap: spacing.md,
-    minHeight: 72,
+    overflow: 'hidden',
+    backgroundColor: SMOKE,
   },
-  optionRowSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  optionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primaryLight,
+  cuisineItemSelected: {
+    borderWidth: 2.5,
+    borderColor: CHARCOAL,
+  },
+  cuisineImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cuisineLabelWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
+  cuisineLabelWrapSelected: {
+    backgroundColor: 'rgba(22, 22, 22, 0.7)',
+  },
+  cuisineLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  cuisineLabelSelected: {
+    color: '#FFFFFF',
+  },
+  cuisineCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: CHARCOAL,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  optionIconWrapSelected: { backgroundColor: colors.primary },
-  optionTextWrap: { flex: 1 },
-  optionLabel: { fontSize: 17, fontWeight: '600', color: colors.text },
-  optionDesc: { fontSize: 14, color: colors.textSecondary, marginTop: 3 },
-  checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: fonts.bold,
   },
-  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkmark: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
-  // Navigation
-  backButton: { marginBottom: spacing.md, minHeight: 44, justifyContent: 'center' },
-  backText: { color: colors.textSecondary, fontSize: 15 },
-  skipButton: {
-    minHeight: 44,
+  // Chips
+  chipsWrap: {
+    gap: 10,
+  },
+  chip: {
+    borderWidth: 1.5,
+    borderColor: SMOKE,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    backgroundColor: colors.surface,
+  },
+  chipSelected: {
+    borderColor: CHARCOAL,
+    backgroundColor: '#F0F0EC',
+  },
+  chipLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: CHARCOAL,
+  },
+  chipLabelSelected: {
+    color: CHARCOAL,
+  },
+  chipDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.homeTextSecondary,
+    marginTop: 2,
+  },
+  chipDescSelected: {
+    color: colors.homeTextSecondary,
+  },
+
+  // Extra input
+  extraInputWrap: {
+    marginTop: 14,
+    borderWidth: 1.5,
+    borderColor: SMOKE,
+    borderRadius: 14,
+    padding: 14,
+  },
+  extraInput: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 21,
+    color: CHARCOAL,
+    minHeight: 40,
+    padding: 0,
+  },
+
+  // Continue button
+  continueBtn: {
+    marginTop: 24,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: CHARCOAL,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.sm,
   },
-  skipText: { color: colors.textSecondary, fontSize: 14 },
+  continueBtnDisabled: {
+    backgroundColor: SMOKE,
+  },
+  continueBtnText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  continueBtnTextDisabled: {
+    color: '#8E8E93',
+  },
 });

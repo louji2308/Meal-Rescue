@@ -2,6 +2,7 @@ import type {
   MealMemoryConfirmRequest,
   MealMemoryConfirmResponse,
   MealMemoryCreateRuleRequest,
+  MealMemoryDeactivateRuleResponse,
   MealMemoryFeedbackRequest,
   MealMemoryFeedbackResponse,
   MealMemoryIntentRequest,
@@ -10,8 +11,11 @@ import type {
   MealMemoryMoveMealRequest,
   MealMemoryRecordActualRequest,
   MealMemoryRecordActualResponse,
+  MealMemoryRecentsResponse,
   MealMemoryRememberRequest,
   MealMemoryRememberResponse,
+  MealMemoryReuseWeekRequest,
+  MealMemoryReuseWeekResponse,
   MealMemoryRulesResponse,
   MealMemoryUpdateMealRequest,
   MealMemoryWeekResponse,
@@ -47,10 +51,22 @@ export async function planWeek(input: PlanWeekRequest): Promise<PlanWeekResponse
   return res.data;
 }
 
-export async function getWeek(weekStart?: string): Promise<MealMemoryWeekResponse> {
+export async function getWeek(weekStart?: string, memberId?: string): Promise<MealMemoryWeekResponse> {
   const res = await api.get<MealMemoryWeekResponse>('/api/v1/meal-memory/week', {
-    params: { weekStart },
+    params: { weekStart, memberId },
   });
+  return res.data;
+}
+
+export async function reuseWeek(
+  input: MealMemoryReuseWeekRequest,
+): Promise<MealMemoryReuseWeekResponse> {
+  const res = await api.post<MealMemoryReuseWeekResponse>('/api/v1/meal-memory/reuse-week', input);
+  return res.data;
+}
+
+export async function getRecents(): Promise<MealMemoryRecentsResponse> {
+  const res = await api.get<MealMemoryRecentsResponse>('/api/v1/meal-memory/recent');
   return res.data;
 }
 
@@ -108,6 +124,13 @@ export async function createRule(input: MealMemoryCreateRuleRequest): Promise<Me
 export async function listRules(): Promise<MealRule[]> {
   const res = await api.get<MealMemoryRulesResponse>('/api/v1/meal-memory/rules');
   return res.data.rules;
+}
+
+export async function deactivateRule(ruleId: string): Promise<MealRule> {
+  const res = await api.post<MealMemoryDeactivateRuleResponse>(
+    `/api/v1/meal-memory/rules/${ruleId}/deactivate`,
+  );
+  return res.data.rule;
 }
 
 export async function postFeedback(

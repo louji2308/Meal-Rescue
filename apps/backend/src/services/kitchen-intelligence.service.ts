@@ -2,6 +2,7 @@ import type {
   PantryItem,
   UUID,
 } from '@meal-rescue/shared-types';
+import { z } from 'zod';
 
 import { env } from '../config/env';
 import type { PantryService } from './pantry.service';
@@ -73,6 +74,33 @@ export interface IdentifyResponse {
   foods: FoodIdentification[];
   summary: string;
 }
+
+// Strict structured output guards: AI payloads are never trusted verbatim.
+// Any shape violation falls back to the deterministic fallback instead of
+// shipping malformed/hallucinated data to the UI.
+const foodIdentificationSchema = z.object({
+  name: z.string().min(1).max(120),
+  confidence: z.number().min(0).max(1),
+  estimatedExpiryDays: z.number().min(0).max(365).optional(),
+  category: z.string().max(60),
+  state: z.enum(['raw', 'cooked', 'leftover', 'packaged']),
+});
+const identifyResponseSchema = z.object({
+  foods: z.array(foodIdentificationSchema).min(1).max(20),
+  summary: z.string().max(500),
+});
+
+const whatCanIMakeIdeaSchema = z.object({
+  name: z.string().min(1).max(120),
+  ingredients: z.array(z.string().max(120)).max(20),
+  missingEssentials: z.array(z.string().max(120)).max(12),
+  effort: z.enum(['low', 'medium', 'high']),
+  estimatedMinutes: z.number().min(0).max(300),
+  description: z.string().max(500),
+});
+const whatCanIMakeResponseSchema = z.object({
+  ideas: z.array(whatCanIMakeIdeaSchema).max(6),
+});
 
 /**
  * Kitchen Intelligence Service — the brain of the Kitchen tab.
@@ -158,8 +186,7 @@ Return ONLY valid JSON, no markdown fences.`,
         choices: Array<{ message: { content: string } }>;
       };
       const content = data.choices?.[0]?.message?.content ?? '';
-      const parsed = JSON.parse(content) as IdentifyResponse;
-      return parsed;
+      return identifyResponseSchema.parse(JSON.parse(content));
     } catch {
       return this.identifyFoodFallback();
     }
@@ -225,8 +252,7 @@ Return ONLY valid JSON, no markdown fences.`;
         choices: Array<{ message: { content: string } }>;
       };
       const content = data.choices?.[0]?.message?.content ?? '';
-      const parsed = JSON.parse(content) as WhatCanIMakeResponse;
-      return parsed;
+      return whatCanIMakeResponseSchema.parse(JSON.parse(content));
     } catch {
       return this.whatCanIMakeFallback(itemNames);
     }

@@ -90,6 +90,10 @@ const envSchema = z.object({
   // Ad reward configuration
   AD_REWARD_CREDITS: z.coerce.number().int().positive().default(2),
   PRO_PASS_MINUTES: z.coerce.number().int().positive().default(60),
+
+  // Google OAuth
+  GOOGLE_WEB_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import {
-  Image,
+  ActivityIndicator,
+  ImageBackground,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { Text } from '../components/AppText';
+import { Pressable } from '../components/motion/Pressable';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,15 +17,60 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { toApiError } from '../services/api';
 import { loginWithCredentials, registerAccount } from '../services/auth.api';
+import { signInWithGoogle } from '../services/google-auth';
 import { useAuthStore } from '../stores/auth.store';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing } from '../theme';
 
-/**
- * Sign in / create account - one screen, one toggle. Email+password only;
- * social providers arrive when the Firebase project is provisioned.
- */
+function GoogleLogo() {
+  return (
+    <View style={googleStyles.wrap}>
+      <View style={googleStyles.g}>
+        <View style={googleStyles.red} />
+        <View style={googleStyles.yellow} />
+        <View style={googleStyles.green} />
+        <View style={googleStyles.blue} />
+        <View style={googleStyles.center} />
+        <View style={googleStyles.bar} />
+      </View>
+    </View>
+  );
+}
+
+const googleStyles = StyleSheet.create({
+  wrap: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  g: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4285F4',
+    overflow: 'hidden',
+  },
+  red: { position: 'absolute', top: 0, left: 0, width: 12, height: 12, backgroundColor: '#EA4335' },
+  yellow: { position: 'absolute', top: 0, right: 0, width: 12, height: 12, backgroundColor: '#FBBC05' },
+  green: { position: 'absolute', bottom: 0, left: 0, width: 12, height: 12, backgroundColor: '#34A853' },
+  blue: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, backgroundColor: '#4285F4' },
+  center: {
+    position: 'absolute',
+    top: 7,
+    left: 7,
+    width: 10,
+    height: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 5,
+  },
+  bar: {
+    position: 'absolute',
+    top: 10,
+    right: 0,
+    width: 14,
+    height: 5,
+    backgroundColor: '#FFFFFF',
+  },
+});
+
 export function LoginScreen() {
   const setSession = useAuthStore((state) => state.setSession);
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +79,22 @@ export function LoginScreen() {
 
   const isRegister = mode === 'register';
 
-  async function handleSubmit() {
+  async function handleGoogleSignIn() {
+    setBusy(true);
+    setError(null);
+    try {
+      const tokens = await signInWithGoogle();
+      if (tokens) {
+        setSession(tokens.accessToken, tokens.user);
+      }
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleEmailSubmit() {
     setError(null);
     setBusy(true);
     try {
@@ -48,105 +110,258 @@ export function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <View style={styles.container}>
+      <ImageBackground
+        source={require('../../assets/continue-with-google-page.png')}
+        style={styles.background}
+        resizeMode="cover"
       >
-        <View style={styles.logoWrap}>
-          <Image
-            source={require('../../assets/mascot.png')}
-            style={styles.cat}
-            resizeMode="contain"
-            accessible
-            accessibilityLabel="Scraps the rescue cat"
-          />
-        </View>
-        <Text style={[typography.title, styles.title]}>Meal Rescue</Text>
-        <Text style={[typography.body, styles.subtitle]}>
-          The smallest change that makes your meal better.
-        </Text>
+        <View style={styles.bottomOverlay} />
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.bottomSection}>
+            <Text style={styles.headline}>
+              Rescue your meals.{'\n'}Love your food.
+            </Text>
+            <Text style={styles.subtitle}>
+              Transform leftovers into something{'\n'}beautiful and delicious.
+            </Text>
 
-        <ErrorBanner error={error} />
+            <Pressable
+              style={styles.googleButton}
+              onPress={() => void handleGoogleSignIn()}
+              disabled={busy}
+              scaleTo={0.97}
+            >
+              {busy ? (
+                <ActivityIndicator size="small" color="#333" />
+              ) : (
+                <View style={styles.googleButtonInner}>
+                  <GoogleLogo />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </View>
+              )}
+            </Pressable>
 
-        <TextInput
-          accessibilityLabel="Email"
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor={colors.textSecondary}
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          accessibilityLabel="Password"
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={colors.textSecondary}
-          secureTextEntry
-          autoComplete={isRegister ? 'new-password' : 'password'}
-          value={password}
-          onChangeText={setPassword}
-        />
-        {isRegister && (
-          <Text style={styles.passwordHint}>
-            Password must be at least 8 characters, with a letter and a number.
-          </Text>
-        )}
+            <Pressable
+              style={styles.emailButton}
+              onPress={() => setEmailModalVisible(true)}
+              scaleTo={0.97}
+            >
+              <Text style={styles.emailButtonText}>Use Email</Text>
+            </Pressable>
 
-        <PrimaryButton
-          label={isRegister ? 'Create account' : 'Sign in'}
-          onPress={() => void handleSubmit()}
-          busy={busy}
-          disabled={!email.includes('@') || password.length < 8}
-          style={styles.submit}
-        />
+            <Text style={styles.terms}>
+              By continuing, you agree to our{' '}
+              <Text style={styles.termsLink}>Terms of Service</Text>
+              {' '}and{' '}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+          </View>
+        </SafeAreaView>
+      </ImageBackground>
 
-        <TouchableOpacity
-          accessibilityRole="button"
-          onPress={() => {
-            setMode(isRegister ? 'login' : 'register');
-            setError(null);
-          }}
-          style={styles.toggle}
-        >
-          <Text style={styles.toggleText}>
-            {isRegister ? 'Already have an account? Sign in' : 'New here? Create an account'}
-          </Text>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <Modal
+        visible={emailModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setEmailModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <KeyboardAvoidingView
+            style={styles.modalContent}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.modalHeader}>
+              <Pressable
+                onPress={() => {
+                  setEmailModalVisible(false);
+                  setError(null);
+                }}
+                style={styles.modalCloseBtn}
+                scaleTo={1}
+              >
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </Pressable>
+              <Text style={styles.modalTitle}>
+                {isRegister ? 'Create Account' : 'Sign In'}
+              </Text>
+              <View style={styles.modalCloseBtn} />
+            </View>
+
+            <View style={styles.modalBody}>
+              <ErrorBanner error={error} />
+
+              <TextInput
+                accessibilityLabel="Email"
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={colors.textSecondary}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <TextInput
+                accessibilityLabel="Password"
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={colors.textSecondary}
+                secureTextEntry
+                autoComplete={isRegister ? 'new-password' : 'password'}
+                value={password}
+                onChangeText={setPassword}
+              />
+              {isRegister && (
+                <Text style={styles.passwordHint}>
+                  Password must be at least 8 characters, with a letter and a number.
+                </Text>
+              )}
+
+              <PrimaryButton
+                label={isRegister ? 'Create account' : 'Sign in'}
+                onPress={() => void handleEmailSubmit()}
+                busy={busy}
+                disabled={!email.includes('@') || password.length === 0 || (isRegister && password.length < 8)}
+                style={styles.submit}
+              />
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setMode(isRegister ? 'login' : 'register');
+                  setError(null);
+                }}
+                style={styles.toggle}
+                scaleTo={1}
+              >
+                <Text style={styles.toggleText}>
+                  {isRegister
+                    ? 'Already have an account? Sign in'
+                    : "Don't have an account? Create one"}
+                </Text>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#000',
   },
-  content: {
+  background: {
     flex: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
   },
-  logoWrap: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
+  bottomOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
-  cat: {
-    width: 160,
-    height: 160,
+  safe: {
+    flex: 1,
   },
-  title: {
-    textAlign: 'center',
+  bottomSection: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 28,
+    paddingBottom: 24,
+  },
+  headline: {
+    fontFamily: fonts.display,
+    fontSize: 34,
+    lineHeight: 42,
+    color: '#FFFFFF',
+    marginBottom: 8,
   },
   subtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: 32,
+  },
+  googleButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  googleButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  googleButtonText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    color: '#333333',
+  },
+  emailButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emailButtonText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  terms: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xl,
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    textDecorationLine: 'underline',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalCloseBtn: {
+    width: 60,
+  },
+  modalCloseText: {
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: colors.primary,
+  },
+  modalTitle: {
+    fontFamily: fonts.semiBold,
+    fontSize: 17,
+    color: colors.textPrimary,
+  },
+  modalBody: {
+    flex: 1,
+    padding: spacing.lg,
+    justifyContent: 'center',
   },
   input: {
     backgroundColor: colors.surface,

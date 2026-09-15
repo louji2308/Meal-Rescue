@@ -70,10 +70,10 @@ export function PlateVisualization({ active, glyph, badged = true }: PlateVisual
     <View style={styles.wrap}>
       <Svg width={200} height={200} viewBox="0 0 200 200">
         <Circle cx={100} cy={100} r={plateRadius} fill={colors.surface} stroke={colors.border} />
-        <Circle cx={100} cy={100} r={bowlRadius} fill="#F4F3F0" />
+        <Circle cx={100} cy={100} r={bowlRadius} fill={colors.homeTintNeutral} />
         <AnimatedPath
           d={BASE_BLOB_PATH}
-          fill={colors.primaryLight}
+          fill={colors.homeTintNeutral}
           stroke={colors.border}
           strokeWidth={1}
         />

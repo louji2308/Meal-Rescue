@@ -1,7 +1,8 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
@@ -91,15 +92,14 @@ export function SatisfactionCheckinSlot({
           <Text style={styles.body}>No spam, no guilt - just one quick nudge after you eat.</Text>
         </View>
       </View>
-      <TouchableOpacity
+      <Pressable
         accessibilityRole="button"
         accessibilityLabel="Check in on how it went"
         onPress={openCheckin}
         style={styles.action}
-        activeOpacity={0.7}
       >
         <Text style={styles.actionText}>How did it hit?</Text>
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 }

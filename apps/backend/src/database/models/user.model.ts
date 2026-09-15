@@ -23,6 +23,7 @@ export class User extends Model<
   declare id: UUID;
   declare email: string;
   declare passwordHash: string | null;
+  declare googleId: string | null;
   declare subscriptionTier: SubscriptionTier;
   declare subscriptionExpiresAt: Date | null;
   /** First-login onboarding (cuisine step + A/B pairs) finished. */
@@ -60,6 +61,11 @@ export function defineUserModel(sequelize: Sequelize): typeof User {
       passwordHash: {
         type: DataTypes.STRING(255),
         allowNull: true,
+      },
+      googleId: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        unique: true,
       },
       subscriptionTier: {
         type: DataTypes.STRING(50),

@@ -29,7 +29,7 @@ export interface PushCopy {
 }
 
 export interface WritePushCopyInput {
-  kind: 'rescue_window' | 'spoiler_alert' | 'generic';
+  kind: 'rescue_window' | 'spoiler_alert' | 'pick_for_me' | 'generic';
   context?: Record<string, unknown>;
 }
 
@@ -98,6 +98,18 @@ export function fallbackCopy(
       return {
         title: clamp(`${item} expires soon`, PUSH_TITLE_MAX),
         body: clamp(`Turn it into dinner in about ${mins} minutes - here's how.`, PUSH_BODY_MAX),
+      };
+    }
+    case 'pick_for_me': {
+      const dish = str(ctx, 'dish') ?? 'something tasty';
+      const mins = num(ctx, 'mins') ?? 20;
+      const foods = listFoods(ctx);
+      return {
+        title: clamp("Can't decide tonight?", PUSH_TITLE_MAX),
+        body: clamp(
+          `We picked one for you: ${dish}. ${mins} min \u00b7 uses ${foods}.`,
+          PUSH_BODY_MAX,
+        ),
       };
     }
     default:

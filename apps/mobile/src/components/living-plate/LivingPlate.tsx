@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
@@ -93,18 +94,17 @@ export function LivingPlate({ result }: LivingPlateProps) {
           {tokens.map((token) => {
             const on = selected?.name === token.name;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={token.name}
                 accessibilityRole="button"
                 accessibilityLabel={`${on ? 'Remove' : 'Add'} ${token.name}`}
                 accessibilityState={{ selected: on }}
                 onPress={() => toggle(token)}
                 style={[styles.chip, on && styles.chipOn]}
-                activeOpacity={0.7}
               >
                 <Text style={styles.chipGlyph}>{glyphForName(token.name)}</Text>
                 <Text style={[styles.chipText, on && styles.chipTextOn]}>{token.name}</Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     borderRadius: 18,
     paddingLeft: spacing.sm,
     paddingRight: spacing.md,

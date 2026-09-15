@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
@@ -15,6 +15,7 @@ import { toApiError } from '../../services/api';
 import { getSharedMeal, splitReached, startCooking } from '../../services/common-table.api';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
+import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
  * Plan & Cook — step 2 of the Common Table flow. Starts as the plan preview
@@ -118,13 +119,14 @@ export function PlanCookScreen() {
 
   if (!cooking) {
     // --- Step 2a: the plan preview --------------------------------------
-    return (
+return (
       <ScrollView contentContainerStyle={styles.content}>
+        <FadeInView>
         <ErrorBanner error={error} />
 
         {meal.blockedIngredients.length > 0 && (
           <View style={styles.safetyCard}>
-            <Ionicons name="shield-checkmark-outline" size={18} color={colors.softGreen} />
+            <Ionicons name="shield-checkmark-outline" size={18} color={colors.softAlert} />
             <Text style={styles.safetyText}>
               Kept out for safety: {meal.blockedIngredients.join(', ')}
             </Text>
@@ -136,11 +138,11 @@ export function PlanCookScreen() {
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={16} color={colors.softCyan} />
+            <Ionicons name="time-outline" size={16} color={colors.softAlert} />
             <Text style={styles.metaText}>~{plan.estimatedMinutes} min</Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="flame-outline" size={16} color={colors.softRed} />
+            <Ionicons name="flame-outline" size={16} color={colors.softAlert} />
             <Text style={styles.metaText}>{plan.effort}</Text>
           </View>
         </View>
@@ -190,19 +192,21 @@ export function PlanCookScreen() {
           </>
         )}
 
-        <PrimaryButton
+<PrimaryButton
           label="Start cooking"
           onPress={() => void handleStartCooking()}
           busy={acting}
           style={styles.actionButton}
         />
+        </FadeInView>
       </ScrollView>
     );
   }
 
-  // --- Step 2b: cooking ------------------------------------------------
+// --- Step 2b: cooking ------------------------------------------------
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <FadeInView>
       <ErrorBanner error={error} />
 
       <Text style={styles.mealName}>{plan.baseName}</Text>
@@ -259,7 +263,7 @@ export function PlanCookScreen() {
             </View>
           ))}
 
-          {hasBranches ? (
+{hasBranches ? (
             <PrimaryButton
               label="We've reached the split point"
               onPress={() => void handleSplit()}
@@ -271,6 +275,7 @@ export function PlanCookScreen() {
           )}
         </>
       )}
+      </FadeInView>
     </ScrollView>
   );
 }
@@ -364,11 +369,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-  stepNumber: {
+stepNumber: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },

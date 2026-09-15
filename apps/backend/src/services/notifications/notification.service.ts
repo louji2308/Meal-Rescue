@@ -26,8 +26,18 @@ const QUIET_DEFAULT_START = 22;
 const QUIET_DEFAULT_END = 8;
 const ONESIGNAL_ENDPOINT = 'https://api.onesignal.com/notifications';
 
-export const NOTIFICATION_KINDS = ['rescue_window', 'spoiler_alert', 'generic'] as const;
+export const NOTIFICATION_KINDS = [
+  'rescue_window',
+  'spoiler_alert',
+  'pick_for_me',
+  'generic',
+] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+export interface PushButton {
+  id: string;
+  text: string;
+}
 
 export type PushOutcome = 'sent' | 'dry_run' | 'skipped_quiet' | 'snoozed' | 'deduped' | 'failed';
 
@@ -100,12 +110,15 @@ export interface SendPushInput {
   title: string;
   body: string;
   deepLink?: string;
+  buttons?: PushButton[];
 }
 
-function logLine(level: 'info' | 'warn', payload: Record<string, unknown>): void {
+function logLine(level: 'info' | 'warn' | 'error', payload: Record<string, unknown>): void {
   // Structured line protocol mirrors ResilientLlmClient's degradation logs.
   /* eslint-disable no-console */
-  if (level === 'warn') {
+  if (level === 'error') {
+    console.error(JSON.stringify({ level, msg: 'push', ...payload }));
+  } else if (level === 'warn') {
     console.warn(JSON.stringify({ level, msg: 'push', ...payload }));
   } else {
     console.log(JSON.stringify({ level, msg: 'push', ...payload }));
@@ -120,7 +133,7 @@ function logLine(level: 'info' | 'warn', payload: Record<string, unknown>): void
  * can still fire after quiet hours end... once per local day max.
  */
 export async function sendToUser(input: SendPushInput): Promise<PushOutcome> {
-  const { user, kind, title, body, deepLink } = input;
+  const { user, kind, title, body, deepLink, buttons } = input;
   const tz = user.tzOffsetMinutes ?? 0;
   const dayKey = localDayKey(tz);
 
@@ -134,47 +147,110 @@ export async function sendToUser(input: SendPushInput): Promise<PushOutcome> {
   let outcome: PushOutcome = enabled ? 'sent' : 'dry_run';
 
   if (enabled) {
-    try {
-      const response = await fetch(ONESIGNAL_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${env.ONESIGNAL_REST_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          app_id: env.ONESIGNAL_APP_ID,
-          include_aliases: { external_id: [user.id] },
-          target_channel: 'push',
-          headings: { en: title },
-          contents: { en: body },
-          data: deepLink ? { deepLink } : {},
-        }),
-      });
-      if (!response.ok) {
-        outcome = 'failed';
-        logLine('warn', {
-          outcome,
-          status: response.status,
-          userId: user.id,
-          kind,
+    const payload: Record<string, unknown> = {
+      app_id: env.ONESIGNAL_APP_ID,
+      include_aliases: { external_id: [user.id] },
+      target_channel: 'push',
+      headings: { en: title },
+      contents: { en: body },
+      data: {
+        ...(deepLink ? { deepLink } : {}),
+        kind,
+      },
+    };
+    if (buttons && buttons.length > 0) {
+      payload.buttons = buttons.map((b) => ({ id: b.id, text: b.text }));
+    }
+
+    const maxRetries = 3;
+    let lastError: { status?: number; responseBody?: string; message: string } | null = null;
+    let succeeded = false;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(ONESIGNAL_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${env.ONESIGNAL_REST_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
         });
+
+        if (response.ok) {
+          succeeded = true;
+          break;
+        }
+
+        const responseBody = await response.text().catch(() => '(unreadable)');
+        const status = response.status;
+
+        lastError = { status, responseBody, message: `HTTP ${status}` };
+
+        // Only retry on 429 and 5xx; all other 4xx are terminal.
+        const retryable = status === 429 || status >= 500;
+        if (!retryable || attempt === maxRetries) {
+          break;
+        }
+
+        // Exponential backoff: 1s, 2s, 4s
+        const delayMs = 2 ** attempt * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        lastError = { message };
+        // Network errors are transient — retry.
+        if (attempt === maxRetries) break;
+        const delayMs = 2 ** attempt * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-    } catch (err) {
+    }
+
+    if (!succeeded) {
       outcome = 'failed';
-      logLine('warn', {
+      logLine('error', {
         outcome,
-        reason: err instanceof Error ? err.message : String(err),
         userId: user.id,
         kind,
+        status: lastError?.status,
+        responseBody: lastError?.responseBody,
+        reason: lastError?.message,
       });
     }
   }
 
-  // Dry-run still marks notified: dedupe semantics stay identical with and
-  // without credentials (and tests assert on the ledger, not the network).
-  await markNotified(user.id, kind, dayKey);
-  if (outcome !== 'failed') {
+  if (outcome === 'sent' || outcome === 'dry_run') {
+    // Ledger on success or dry-run so deduplication still works.
+    // On 'failed', skip so the next scheduler cycle can retry.
+    await markNotified(user.id, kind, dayKey);
     logLine('info', { outcome, userId: user.id, kind, title });
   }
   return outcome;
+}
+
+export async function validateOneSignalCredentials(): Promise<{ valid: boolean; error?: string }> {
+  if (!env.ONESIGNAL_REST_KEY || !env.ONESIGNAL_APP_ID) {
+    return { valid: false, error: 'ONESIGNAL_REST_KEY or ONESIGNAL_APP_ID is not set' };
+  }
+
+  try {
+    const response = await fetch(
+      `https://onesignal.com/api/v1/apps/${env.ONESIGNAL_APP_ID}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${env.ONESIGNAL_REST_KEY}`,
+        },
+      },
+    );
+
+    if (response.ok) {
+      return { valid: true };
+    }
+
+    const body = await response.text().catch(() => '(unreadable)');
+    return { valid: false, error: `HTTP ${response.status}: ${body}` };
+  } catch (err) {
+    return { valid: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

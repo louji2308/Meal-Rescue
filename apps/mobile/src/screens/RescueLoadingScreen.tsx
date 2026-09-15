@@ -78,7 +78,7 @@ export function RescueLoadingScreen({
       <View style={styles.content}>
         <Text style={[typography.heading, styles.title]}>Finding your best move…</Text>
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.rescueAccent} />
         </View>
         <ErrorBanner error={error} />
         {error ? (

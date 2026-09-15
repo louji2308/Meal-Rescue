@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
@@ -116,11 +117,10 @@ export function RescueFuelSheet({
             You have used your 3 free rescues. Keep going with one of these:
           </Text>
 
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Watch a short ad for two extra rescues"
             style={styles.option}
-            activeOpacity={0.8}
             disabled={busy || !canWatchRescueFuel || proPassUntil !== null}
             onPress={() => void handleWatchForCredits()}
           >
@@ -131,14 +131,13 @@ export function RescueFuelSheet({
               </Text>
             </View>
             {credits !== null && credits > 0 && <Text style={styles.creditBadge}>{credits}</Text>}
-          </TouchableOpacity>
+          </Pressable>
 
           {canWatchProPass && !proPassUntil && (
-            <TouchableOpacity
+            <Pressable
               accessibilityRole="button"
               accessibilityLabel="Try Pro free for one hour"
               style={styles.option}
-              activeOpacity={0.8}
               disabled={busy}
               onPress={() => void handleFreeProHour()}
             >
@@ -146,7 +145,7 @@ export function RescueFuelSheet({
                 <Text style={styles.optionTitle}>Try Pro free for 1 hour</Text>
                 <Text style={styles.optionBody}>Unlimited rescues, no ads, no card needed</Text>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           )}
 
           <PrimaryButton
@@ -161,7 +160,7 @@ export function RescueFuelSheet({
 
           {note ? <Text style={styles.note}>{note}</Text> : null}
 
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close"
             onPress={onClose}
@@ -169,7 +168,7 @@ export function RescueFuelSheet({
             disabled={busy}
           >
             <Text style={styles.closeText}>Maybe later</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -220,8 +219,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   creditBadge: {
-    backgroundColor: colors.primaryLight,
-    color: colors.primary,
+    backgroundColor: colors.homeTintNeutral,
+    color: colors.rescueAccent,
     fontSize: 15,
     fontWeight: '700',
     paddingHorizontal: 10,
@@ -234,7 +233,7 @@ const styles = StyleSheet.create({
   },
   note: {
     textAlign: 'center',
-    color: colors.primary,
+    color: colors.rescueAccent,
     marginTop: spacing.md,
     fontSize: 14,
   },

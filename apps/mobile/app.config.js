@@ -12,6 +12,11 @@ module.exports = {
     version: '0.1.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
+    splash: {
+      image: './assets/mascot.png',
+      resizeMode: 'contain',
+      backgroundColor: '#F8F8F0',
+    },
     userInterfaceStyle: 'automatic',
     scheme: 'mealrescue',
     ios: {
@@ -24,10 +29,10 @@ module.exports = {
     android: {
       package: 'com.mealrescue.app',
       adaptiveIcon: {
-        backgroundColor: '#E6F4FE',
-        foregroundImage: './assets/android-icon-foreground.png',
+        backgroundColor: '#F8F8F0',
+        foregroundImage: './assets/mascot.png',
         backgroundImage: './assets/android-icon-background.png',
-        monochromeImage: './assets/android-icon-monochrome.png',
+        monochromeImage: './assets/mascot.png',
       },
       predictiveBackGestureEnabled: false,
       permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],

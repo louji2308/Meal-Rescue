@@ -2,13 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../../components/motion/Pressable';
 
+import { AppImage } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 import { TextInput } from '../../components/AppTextInput';
 
-import type { DietaryRestriction, HouseholdAgeGroup } from '@meal-rescue/shared-types';
+import type {
+  DietaryRestriction,
+  HouseholdAgeGroup,
+  HouseholdRelationship,
+} from '@meal-rescue/shared-types';
 
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -17,6 +23,7 @@ import { toApiError } from '../../services/api';
 import { loadPeoplePhotos, savePeoplePhoto } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
+import { FadeInView } from '../../components/motion/FadeInView';
 
 const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
   { key: 'baby', label: 'Baby', emoji: '•' },
@@ -24,11 +31,20 @@ const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
   { key: 'adult', label: 'Adult', emoji: '•' },
 ];
 
-const DIET_OPTIONS: DietaryRestriction[] = ['vegetarian', 'vegan', 'halal', 'keto'];
+/** 'self' is never offered — the owner member is created automatically. */
+const RELATIONSHIP_OPTIONS: HouseholdRelationship[] = [
+  'partner',
+  'child',
+  'family',
+  'roommate',
+  'friend',
+  'other',
+];
 
-/**
- * Add People — a friendly, human form for the people you cook for.
- * Photo stays on-device (local only); the age group guides portion + ideas.
+/** Add People — a friendly, human form for the people you cook for.
+ * Allergies are HARD rules captured separately so they keep their fail-closed
+ * classification; the avoid list is soft-but-still-ratified. Relationship and
+ * age group guide portions + who gets which finish. Photo stays on-device.
  */
 export function AddPeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
@@ -43,19 +59,25 @@ export function AddPeopleScreen() {
   const [displayName, setDisplayName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [ageGroup, setAgeGroup] = useState<HouseholdAgeGroup>('adult');
-  const [avoid, setAvoid] = useState('');
-  const [diets, setDiets] = useState<DietaryRestriction[]>([]);
-  const [note, setNote] = useState('');
+  const [relationship, setRelationship] = useState<HouseholdRelationship>('partner');
+  const [allergies, setAllergies] = useState('');
+  const [everythingElse, setEverythingElse] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
 
   useEffect(() => {
     if (target) {
       setDisplayName(target.displayName);
       setAgeGroup(target.ageGroup ?? 'adult');
-      setAvoid([...target.constraints.allergies, ...target.constraints.avoidIngredients].join(', '));
-      setDiets([...target.constraints.dietaryRestrictions]);
-      setNote(target.preferences.note ?? '');
+      setRelationship(target.isOwner ? 'self' : (target.relationship ?? 'partner'));
+      setAllergies(target.constraints.allergies.join(', '));
+      // Reconstruct the merged "everything else" field from stored parts.
+      const dietLabels = target.constraints.dietaryRestrictions.join(', ');
+      const avoidLabels = target.constraints.avoidIngredients.join(', ');
+      const noteText = target.preferences.note ?? '';
+      const parts = [avoidLabels, dietLabels, noteText].filter(Boolean);
+      setEverythingElse(parts.join(', '));
       void loadPeoplePhotos().then((photos) => {
         if (target.id in photos) setPhotoUri(photos[target.id]);
       });
@@ -79,32 +101,49 @@ export function AddPeopleScreen() {
     }
   }
 
-  function toggleDiet(diet: DietaryRestriction) {
-    setDiets((d) => (d.includes(diet) ? d.filter((x) => x !== diet) : [...d, diet]));
+  function parseEverythingElse(text: string) {
+    const items = text.split(',').map((s) => s.trim()).filter(Boolean);
+    const DIET_KEYWORDS: string[] = ['vegetarian', 'vegan', 'keto', 'paleo', 'halal', 'kosher'];
+    const dietsFound: DietaryRestriction[] = [];
+    const avoidFound: string[] = [];
+    for (const item of items) {
+      const lower = item.toLowerCase();
+      if (DIET_KEYWORDS.includes(lower)) {
+        dietsFound.push(lower as DietaryRestriction);
+      } else {
+        avoidFound.push(item);
+      }
+    }
+    return { diets: dietsFound, avoid: avoidFound };
   }
 
   async function handleSave() {
+    if (savingRef.current) return;
     const name = displayName.trim();
     if (!name) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
+    const { diets: parsedDiets, avoid: parsedAvoid } = parseEverythingElse(everythingElse);
+    const payload = {
+      displayName: name,
+      relationship,
+      ageGroup,
+      constraints: {
+        allergies: allergies
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        avoidIngredients: parsedAvoid,
+        dietaryRestrictions: parsedDiets,
+      },
+      preferences: {
+        likes: [],
+        dislikes: [],
+        ...(everythingElse.trim() ? { note: everythingElse.trim() } : {}),
+      },
+    };
     try {
-      const payload = {
-        displayName: name,
-        ageGroup,
-        constraints: {
-          avoidIngredients: avoid
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-          dietaryRestrictions: diets,
-        },
-        preferences: {
-          likes: [],
-          dislikes: [],
-          ...(note.trim() ? { note: note.trim() } : {}),
-        },
-      };
       const saved = target ? await updateMember(target.id, payload) : await addMember(payload);
       if (photoUri) {
         await savePeoplePhoto(saved.id, photoUri);
@@ -113,6 +152,7 @@ export function AddPeopleScreen() {
     } catch (err) {
       setError(toApiError(err));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -133,99 +173,105 @@ export function AddPeopleScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <FadeInView>
         <ErrorBanner error={error} />
 
         <View style={styles.photoArea}>
-          <TouchableOpacity
+          <Pressable
             style={styles.avatar}
-            activeOpacity={0.8}
             onPress={() => void handlePhoto()}
             accessibilityRole="button"
             accessibilityLabel="Add a profile photo"
           >
             {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.photo} />
+              <AppImage source={{ uri: photoUri }} style={styles.photo} />
             ) : (
               <Text style={styles.avatarText}>{initials}</Text>
             )}
             <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={14} color={colors.surface} />
+              <Ionicons name="camera" size={16} color={colors.surface} />
             </View>
-          </TouchableOpacity>
-          <Text style={styles.photoHint}>Tap to add a photo (optional)</Text>
+          </Pressable>
+          <Text style={styles.photoHint}>Tap to add a photo</Text>
         </View>
 
         <TextInput
           style={styles.input}
-          placeholder="Name (Maya, Dad…)"
+          placeholder="Name (e.g. Maya, Dad, Partner)"
           placeholderTextColor={colors.textSecondary}
           value={displayName}
           onChangeText={setDisplayName}
           autoFocus={!target}
         />
 
-        <Text style={styles.label}>Who are they?</Text>
+        {!target?.isOwner && (
+          <>
+            <Text style={styles.label}>Their role at the table</Text>
+            <View style={styles.chipRow}>
+              {RELATIONSHIP_OPTIONS.map((opt) => {
+                const active = relationship === opt;
+                return (
+                  <Pressable
+                    key={opt}
+                    style={[styles.choiceChip, active && styles.choiceChipActive]}
+                    onPress={() => setRelationship(opt)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
+                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        <Text style={styles.label}>Age group</Text>
         <View style={styles.chipRow}>
           {AGE_GROUPS.map((opt) => {
             const active = ageGroup === opt.key;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={opt.key}
                 style={[styles.choiceChip, active && styles.choiceChipActive]}
-                activeOpacity={0.8}
                 onPress={() => setAgeGroup(opt.key)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.choiceText, active && styles.choiceTextActive]}>{opt.label}</Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
 
-        <Text style={styles.label}>Anything to avoid?</Text>
+        <Text style={styles.label}>Allergies — hard rules</Text>
         <TextInput
           style={styles.input}
-          placeholder="Allergies or dislikes (peanuts, shellfish, onions)"
+          placeholder="e.g. peanuts, shellfish, dairy, gluten"
           placeholderTextColor={colors.textSecondary}
-          value={avoid}
-          onChangeText={setAvoid}
+          value={allergies}
+          onChangeText={setAllergies}
           autoCapitalize="none"
         />
 
-        <Text style={styles.label}>Diets (optional)</Text>
-        <View style={styles.chipRow}>
-          {DIET_OPTIONS.map((d) => {
-            const active = diets.includes(d);
-            return (
-              <TouchableOpacity
-                key={d}
-                style={[styles.choiceChip, active && styles.choiceChipActive]}
-                activeOpacity={0.8}
-                onPress={() => toggleDiet(d)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: active }}
-              >
-                <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
-                  {d.charAt(0).toUpperCase() + d.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <Text style={styles.label}>Help me suggest better (optional)</Text>
+        <Text style={styles.label}>Anything else we should know?</Text>
         <TextInput
-          style={styles.input}
-          placeholder="e.g. loves salmon, mild spice"
+          style={[styles.input, styles.multilineInput]}
+          placeholder="Foods they won't eat, diets they follow, preferences like 'loves salmon, mild spice'..."
           placeholderTextColor={colors.textSecondary}
-          value={note}
-          onChangeText={setNote}
+          value={everythingElse}
+          onChangeText={setEverythingElse}
           autoCapitalize="none"
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
         />
 
         <Text style={styles.safetyNote}>
-          Avoid items are treated as hard rules and are never relaxed.
+          Allergies are treated as hard rules and are never relaxed. Avoids and
+          diets guide the planner but still never cross an allergy.
         </Text>
 
         <PrimaryButton
@@ -235,6 +281,7 @@ export function AddPeopleScreen() {
           disabled={!displayName.trim()}
           style={styles.saveButton}
         />
+        </FadeInView>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -254,9 +301,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -264,23 +311,23 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   photo: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '800',
-    color: colors.primary,
+    color: colors.textSecondary,
   },
   cameraBadge: {
     position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
+    right: -2,
+    bottom: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -300,6 +347,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     fontSize: 16,
     color: colors.text,
+  },
+  multilineInput: {
+    minHeight: 100,
+    paddingTop: spacing.md,
   },
   label: {
     fontSize: 13,
@@ -322,8 +373,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   choiceChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
   },
   choiceText: {
     fontSize: 13,
@@ -331,7 +382,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   choiceTextActive: {
-    color: colors.surface,
+    color: colors.text,
   },
   safetyNote: {
     fontSize: 12,

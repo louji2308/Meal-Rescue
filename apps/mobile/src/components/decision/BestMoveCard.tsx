@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 
 import type { DecisionAction, RescueCandidate } from '@meal-rescue/shared-types';
@@ -49,7 +50,7 @@ export function BestMoveCard({
     return (
       <View style={[styles.card, styles.keepCard]}>
         <View style={styles.keepHead}>
-          <Ionicons name="checkmark-circle" size={28} color={colors.softGreen} />
+          <Ionicons name="checkmark-circle" size={28} color={colors.rescueAccent} />
           <View style={styles.keepTextWrap}>
             <Text style={[typography.heading, styles.keepTitle]}>You’re done.</Text>
             <Text style={styles.keepBody}>
@@ -58,16 +59,15 @@ export function BestMoveCard({
           </View>
         </View>
         {onKeepAsIs && (
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="That’s it — I’m keeping it as is"
             onPress={onKeepAsIs}
             disabled={busy}
             style={styles.keepCta}
-            activeOpacity={0.7}
           >
             <Text style={styles.keepCtaText}>That’s it — done</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     );
@@ -80,7 +80,7 @@ export function BestMoveCard({
       <Text style={[typography.heading, styles.action]}>{actionLine(action, additions)}</Text>
       <Text style={styles.why}>{whyLine(action, candidate, foods)}</Text>
       <View style={styles.costRow}>
-        <Ionicons name="time-outline" size={16} color={colors.softCyan} />
+        <Ionicons name="time-outline" size={16} color={colors.rescueAccent} />
         <Text style={styles.cost}>
           {costLine(candidate.estimatedMinutes, candidate.estimatedCostLevel)}
         </Text>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.borderStrong,
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     color: colors.secondary,
   },
   action: {
-    color: colors.primary,
+    color: colors.rescueAccent,
     fontSize: 22,
     lineHeight: 28,
     marginBottom: spacing.sm,
@@ -136,9 +136,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cta: {},
-  keepCard: {
+keepCard: {
     borderColor: colors.success,
-    backgroundColor: '#F1F8F1',
+    backgroundColor: colors.successSoft,
   },
   keepHead: {
     flexDirection: 'row',
@@ -170,3 +170,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+

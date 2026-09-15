@@ -17,12 +17,54 @@ import type {
 } from '@meal-rescue/shared-types';
 
 import type { Db } from '../../database/models';
+import { AppError, ErrorCategory } from '../../lib/errors';
 
 export class AccountingService {
   private readonly models: Db['models'];
 
   constructor(models: Db['models']) {
     this.models = models;
+  }
+
+  /**
+   * Deactivate a single rule. A paired HOLD reservation is only released once
+   * no OTHER active rule still depends on the same ingredient, so removing a
+   * blanket rule never silently frees an ingredient another rule is holding.
+   */
+  async deactivateRule(householdId: UUID, ruleId: UUID): Promise<MealRule> {
+    const row = await this.models.MealRule.findOne({ where: { id: ruleId, householdId } });
+    if (!row) {
+      throw new AppError({
+        category: ErrorCategory.NOT_FOUND,
+        code: 'RULE_NOT_FOUND',
+        message: 'Rule not found',
+        statusCode: 404,
+        recoverable: false,
+      });
+    }
+    if (row.get('active') === false) {
+      return this.toRule(row);
+    }
+
+    await row.update({ active: false });
+    const rule = this.toRule(row);
+
+    const ingredient = rule.ingredient;
+    if (
+      ingredient &&
+      (rule.instructionType === 'HOLD_INGREDIENT' || rule.instructionType === 'RESERVE_INGREDIENT')
+    ) {
+      const otherActive = await this.models.MealRule.count({
+        where: { householdId, active: true, ingredient, id: { [Op.ne]: ruleId } },
+      });
+      if (otherActive === 0) {
+        await this.models.InventoryReservation.update(
+          { active: false },
+          { where: { householdId, active: true, ingredient, purpose: 'HOLD' } },
+        );
+      }
+    }
+    return rule;
   }
 
   /** Create a rule, and a paired reservation when the instruction reserves inventory. */

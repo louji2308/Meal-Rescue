@@ -1,24 +1,34 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { MealMemoryIntentResponse, MealRule, MealSlot } from '@meal-rescue/shared-types';
+import type {
+  MealEvent,
+  MealMemoryIntentResponse,
+  MealRule,
+  MealSlot,
+} from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { colors, spacing, typography } from '../theme';
+import { Skeleton } from '../components/Skeleton';
+import { FadeInView } from '../components/motion/FadeInView';
+import { colors, radius, spacing, typography } from '../theme';
 import { useMealMemoryStore } from '../stores/meal-memory.store';
+import { useCommonTableStore } from '../stores/common-table.store';
 
 const SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -31,17 +41,18 @@ const SLOT_ORDER: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 const WEEKDAY_LETTERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const STRATEGY_OPTIONS: { key: 'balance' | 'easy' | 'use_expiring'; label: string }[] = [
+const _STRATEGY_OPTIONS: { key: 'balance' | 'easy' | 'use_expiring'; label: string }[] = [
   { key: 'balance', label: 'Balanced' },
   { key: 'easy', label: 'Easy' },
   { key: 'use_expiring', label: 'Use expiry' },
 ];
 
-const SUGGESTIONS: { label: string; prompt?: string; plan?: boolean }[] = [
+const SUGGESTIONS: { label: string; prompt?: string; plan?: boolean; reuse?: boolean }[] = [
   { plan: true, label: 'Plan this week' },
   { label: 'Plan next week', prompt: 'plan next week' },
   { label: "What's for dinner?", prompt: 'what are we doing for dinner?' },
   { label: "We're out Tuesday", prompt: "we're out next tuesday" },
+  { reuse: true, label: 'Reuse last week' },
 ];
 
 function addDays(dateKey: string, days: number): string {
@@ -85,7 +96,7 @@ function intentBody(intent: MealMemoryIntentResponse | null): string {
   return intent.resolution.rawText;
 }
 
-function ruleIcon(rule: MealRule): keyof typeof Ionicons.glyphMap {
+function _ruleIcon(rule: MealRule): keyof typeof Ionicons.glyphMap {
   if (rule.instructionType === 'BLOCK_SLOT' || rule.instructionType === 'KEEP_OUT') {
     return 'close-circle-outline';
   }
@@ -98,32 +109,76 @@ function ruleIcon(rule: MealRule): keyof typeof Ionicons.glyphMap {
   return 'document-text-outline';
 }
 
-function ruleLabel(rule: MealRule): string {
+function _ruleLabel(rule: MealRule): string {
   if (rule.ingredient) return `no ${rule.ingredient}`;
   if (rule.mealSlot) return `keep ${rule.mealSlot} open`;
   if (rule.note) return rule.note;
   return 'active rule';
 }
 
+function _ruleDetail(rule: MealRule): string {
+  const parts: string[] = [];
+  if (rule.ingredient) parts.push(`No ${rule.ingredient}`);
+  if (rule.mealSlot) parts.push(`Keep ${SLOT_LABELS[rule.mealSlot]} open`);
+  if (rule.note) parts.push(rule.note);
+  if (parts.length === 0) {
+    parts.push(rule.instructionType.toLowerCase().replaceAll('_', ' '));
+  }
+  return parts.join(' � ');
+}
+
 /**
- * Meal Plan — one screen, no sub-tabs. Week-strip calendar on top, a focused
+ * Inline renaming of a planned meal's concept. Every change flows through the
+ * store's debounced autosave so typing stays local-first and a failed save
+ * rolls the grid back instead of leaving wrong text on screen.
+ */
+function SlotConceptEditor({ meal }: { meal: MealEvent }) {
+  const autosaveUpdateEvent = useMealMemoryStore((s) => s.autosaveUpdateEvent);
+  const [value, setValue] = useState(meal.concept ?? '');
+  return (
+    <View style={styles.conceptEditor}>
+      <Text style={styles.conceptEditorLabel}>Concept</Text>
+      <TextInput
+        style={styles.conceptInput}
+        value={value}
+        onChangeText={(text) => {
+          setValue(text);
+          autosaveUpdateEvent(meal.id, { concept: text });
+        }}
+        placeholder="e.g. Butter chicken"
+        placeholderTextColor={colors.textSecondary}
+        autoCorrect={false}
+      />
+    </View>
+  );
+}
+
+/**
+ * Meal Plan � one screen, no sub-tabs. Week-strip calendar on top, a focused
  * day's four slots below, a read-only rules strip, and a pinned command bar
  * so the agent is always a tap away. Rules are managed by talking.
  */
 export function MealPlanScreen() {
-  const [strategy, setStrategy] = useState<'balance' | 'easy' | 'use_expiring'>('balance');
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 14);
+  const composerBottomPad = bottomInset + 86 - insets.bottom + spacing.sm;
+  const [strategy, _setStrategy] = useState<'balance' | 'easy' | 'use_expiring'>('balance');
   const [input, setInput] = useState('');
   const [answer, setAnswer] = useState('');
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<{ dateKey: string; mealSlot: MealSlot } | null>(null);
+  const [_expandedRuleId, _setExpandedRuleId] = useState<string | null>(null);
 
   const week = useMealMemoryStore((s) => s.week);
   const weekStart = useMealMemoryStore((s) => s.weekStart);
   const pendingIntent = useMealMemoryStore((s) => s.pendingIntent);
-  const rules = useMealMemoryStore((s) => s.rules);
+  const _rules = useMealMemoryStore((s) => s.rules);
   const lastMessage = useMealMemoryStore((s) => s.lastMessage);
-  const busy = useMealMemoryStore((s) => s.busy);
+const busy = useMealMemoryStore((s) => s.busy);
   const error = useMealMemoryStore((s) => s.error);
+  const saveStatus = useMealMemoryStore((s) => s.saveStatus);
+  const _recentMeals = useMealMemoryStore((s) => s.recentMeals);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadWeek = useMealMemoryStore((s) => s.loadWeek);
   const loadRules = useMealMemoryStore((s) => s.loadRules);
@@ -135,13 +190,51 @@ export function MealPlanScreen() {
   const removeEvent = useMealMemoryStore((s) => s.removeEvent);
   const markActual = useMealMemoryStore((s) => s.markActual);
   const feedBack = useMealMemoryStore((s) => s.feedBack);
+  const reuseLastWeek = useMealMemoryStore((s) => s.reuseLastWeek);
+  const loadRecents = useMealMemoryStore((s) => s.loadRecents);
+  const _deactivateRule = useMealMemoryStore((s) => s.deactivateRule);
+
+const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
+  const householdMembers = useCommonTableStore((s) => s.members);
+  const ensureHousehold = useCommonTableStore((s) => s.ensureHousehold);
 
   const today = todayKey();
 
+  const scopeLabel = useMemo(() => {
+    if (selectedMemberIds.length !== 1) return null;
+    const id = selectedMemberIds[0];
+    return householdMembers.find((m) => m.id === id)?.displayName ?? null;
+  }, [selectedMemberIds, householdMembers]);
+
+useEffect(() => {
+    ensureHousehold()
+      .then(() => {
+        if (!weekStart) void loadWeek();
+        void loadRules();
+        void loadRecents();
+      })
+      .catch(() => {
+        if (!weekStart) void loadWeek();
+        void loadRules();
+        void loadRecents();
+      });
+  }, [ensureHousehold, loadWeek, loadRules, loadRecents, weekStart]);
+
+  const lastLoadedAt = useRef(0);
+  const sawWeek = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (sawWeek.current && Date.now() - lastLoadedAt.current > 30_000) {
+        void loadWeek();
+      }
+    }, [loadWeek]),
+  );
   useEffect(() => {
-    if (!weekStart) void loadWeek();
-    void loadRules();
-  }, [loadWeek, loadRules, weekStart]);
+    if (weekStart && !busy) {
+      lastLoadedAt.current = Date.now();
+      sawWeek.current = true;
+    }
+  }, [weekStart, busy]);
 
   // Focus today when it falls inside the loaded week, otherwise the week start.
   useEffect(() => {
@@ -153,8 +246,30 @@ export function MealPlanScreen() {
 
   const weekLabel = useMemo(() => {
     if (!weekStart) return '';
-    return `${prettyDate(weekStart)} – ${prettyDate(addDays(weekStart, 6))}`;
+    return `${prettyDate(weekStart)} � ${prettyDate(addDays(weekStart, 6))}`;
   }, [weekStart]);
+
+  const monthLabel = useMemo(() => {
+    if (!weekStart) return '';
+    const d = new Date(`${weekStart}T00:00:00.000Z`);
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  }, [weekStart]);
+
+  const isPastWeek = useMemo(() => {
+    if (!weekStart) return false;
+    return weekStart < today;
+  }, [weekStart, today]);
+
+  const reviewDays = useMemo(() => {
+    if (!week || !isPastWeek) return [];
+    return week.days.map((day) => {
+      const eaten = day.slots.some((s) => s.planned?.state === 'EATEN');
+      const replaced = day.slots.some((s) => s.planned?.state === 'REPLACED');
+      const planned = day.slots.some((s) => s.planned != null);
+      const firstConcept = day.slots.find((s) => s.planned)?.planned?.concept ?? null;
+      return { dateKey: day.dateKey, eaten, replaced, planned, firstConcept };
+    });
+  }, [week, isPastWeek]);
 
   const selectedDay = useMemo(
     () => week?.days.find((day) => day.dateKey === focusedKey) ?? null,
@@ -182,8 +297,10 @@ export function MealPlanScreen() {
     }
   }
 
-  function handleSuggestion(action: (typeof SUGGESTIONS)[number]) {
-    if (action.plan) {
+  function _handleSuggestion(action: (typeof SUGGESTIONS)[number]) {
+    if (action.reuse) {
+      void reuseLastWeek().catch(() => {});
+    } else if (action.plan) {
       void planThisWeek({ strategy }).catch(() => {});
     } else if (action.prompt) {
       void sendIntent(action.prompt).catch(() => {});
@@ -207,45 +324,109 @@ export function MealPlanScreen() {
     pendingIntent &&
     (pendingIntent.status === 'awaiting_confirmation' || pendingIntent.status === 'clarification');
 
-  if (!weekStart) {
+if (!weekStart) {
+    if (error && !busy) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
+          </View>
+          <ErrorBanner error={error} />
+          <Pressable
+            onPress={() => {
+              ensureHousehold()
+                .then(() => loadWeek())
+                .catch(() => loadWeek());
+            }}
+            style={{ marginTop: spacing.md, alignItems: 'center' }}
+          >
+            <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Try again</Text>
+          </Pressable>
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading your food week…</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.loadingScroll}>
+          <Skeleton height={24} width="45%" style={{ marginBottom: spacing.xs }} />
+          <Skeleton height={14} width="30%" style={{ marginBottom: spacing.lg }} />
+          <Skeleton height={64} borderRadius={radius.md} />
+          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
+          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  return (
+return (
     <SafeAreaView style={styles.container}>
+      <FadeInView style={styles.container}>
       <View style={styles.header}>
         <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
-        {busy && <ActivityIndicator size="small" color={colors.primary} />}
+        <View style={styles.headerRight}>
+          {saveStatus !== 'idle' && (
+            <Text
+              style={[styles.saveBadge, saveStatus === 'error' && styles.saveBadgeError]}
+              accessibilityLabel={`Meal plan save status: ${saveStatus}`}
+            >
+              {saveStatus === 'saving'
+                ? 'Saving�'
+                : saveStatus === 'saved'
+                  ? 'Saved'
+                  : 'Not saved'}
+            </Text>
+          )}
+          {busy && <ActivityIndicator size="small" color={colors.primary} />}
+        </View>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.weekContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void loadWeek().finally(() => setRefreshing(false));
+            }}
+            tintColor={colors.textSecondary}
+          />
+        }
       >
         <ErrorBanner error={error} />
 
+        {/* Month header */}
+        {monthLabel ? (
+          <View style={styles.monthHeader}>
+            <Pressable
+              style={styles.monthNavButton}
+              onPress={() => void shiftWeek(-4)}
+              accessibilityLabel="Previous month"
+            >
+              <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
+            </Pressable>
+            <Text style={styles.monthHeaderText}>{monthLabel}</Text>
+            <Pressable
+              style={styles.monthNavButton}
+              onPress={() => void shiftWeek(4)}
+              accessibilityLabel="Next month"
+            >
+              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* Week-strip calendar */}
         <View style={styles.calendarHeader}>
-          <TouchableOpacity
+          <Pressable
             style={styles.weekNavButton}
-            activeOpacity={0.8}
             onPress={() => void shiftWeek(-1)}
             accessibilityLabel="Previous week"
           >
-            <Ionicons name="chevron-back" size={18} color={colors.softViolet} />
-          </TouchableOpacity>
+<Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+          </Pressable>
 
           <View style={styles.calendarStrip}>
             {weekDays.map((key) => {
@@ -254,10 +435,9 @@ export function MealPlanScreen() {
               const isToday = key === today;
               const hasMeals = (plannedCountByDate[key] ?? 0) > 0;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={key}
                   style={[styles.dayCell, selected && styles.dayCellSelected]}
-                  activeOpacity={0.8}
                   onPress={() => {
                     setFocusedKey(key);
                     setExpanded(null);
@@ -281,50 +461,45 @@ export function MealPlanScreen() {
                       <View style={styles.dotBlank} />
                     )}
                   </View>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
 
-          <TouchableOpacity
+          <Pressable
             style={styles.weekNavButton}
-            activeOpacity={0.8}
             onPress={() => void shiftWeek(1)}
             accessibilityLabel="Next week"
           >
-            <Ionicons name="chevron-forward" size={18} color={colors.softViolet} />
-          </TouchableOpacity>
+<Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </Pressable>
         </View>
 
         <View style={styles.weekMetaRow}>
-          <Text style={styles.weekLabel}>{weekLabel}</Text>
+          <View style={styles.weekMetaLeft}>
+            {scopeLabel && (
+              <View style={styles.scopeChip}>
+                <Ionicons name="person" size={11} color={colors.primary} />
+                <Text style={styles.scopeChipText}>for {scopeLabel}</Text>
+              </View>
+            )}
+            <Text style={styles.weekLabel}>{weekLabel}</Text>
+          </View>
           {today < weekStart || today > addDays(weekStart, 6) ? (
-            <TouchableOpacity
-              activeOpacity={0.7}
+            <Pressable
               onPress={() => void loadWeek()}
               style={styles.todayLink}
             >
-              <Text style={styles.todayLinkText}>‹ today ›</Text>
-            </TouchableOpacity>
+              <Text style={styles.todayLinkText}>� today �</Text>
+            </Pressable>
           ) : null}
         </View>
 
-        {/* Toolbar */}
+        {/* Past week summary */}
+        {isPastWeek && reviewDays.length > 0 ? null : null}
+
+        {/* Plan this week button */}
         <View style={styles.toolbarRow}>
-          <View style={styles.strategyRow}>
-            {STRATEGY_OPTIONS.map((s) => (
-              <TouchableOpacity
-                key={s.key}
-                style={[styles.strategyChip, strategy === s.key && styles.strategyChipActive]}
-                activeOpacity={0.8}
-                onPress={() => setStrategy((cur) => (cur === s.key ? 'balance' : s.key))}
-              >
-                <Text style={[styles.strategyText, strategy === s.key && styles.strategyTextActive]}>
-                  {s.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
           <PrimaryButton
             label="Plan this week"
             onPress={() => void planThisWeek({ strategy }).catch(() => {})}
@@ -332,34 +507,6 @@ export function MealPlanScreen() {
             style={styles.planButton}
           />
         </View>
-
-        {/* Suggestion chips */}
-        <View style={styles.quickRow}>
-          {SUGGESTIONS.map((action) => (
-            <TouchableOpacity
-              key={action.label}
-              style={styles.quickChip}
-              activeOpacity={0.8}
-              onPress={() => handleSuggestion(action)}
-            >
-              <Text style={styles.quickChipText}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Rules strip — read-only, managed by talking */}
-        {rules.length > 0 && (
-          <View style={styles.rulesStrip}>
-            {rules.slice(0, 6).map((rule) => (
-              <View key={rule.id} style={styles.ruleChip}>
-                <Ionicons name={ruleIcon(rule)} size={12} color={colors.softCyan} />
-                <Text style={styles.ruleChipText} numberOfLines={1}>
-                  {ruleLabel(rule)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* Focused day */}
         {selectedDay ? (
@@ -372,9 +519,8 @@ export function MealPlanScreen() {
                 expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
               return (
                 <View key={slotKey}>
-                  <TouchableOpacity
+                  <Pressable
                     style={[styles.slotRow, isExpanded && styles.slotRowSelected]}
-                    activeOpacity={0.8}
                     onPress={() => {
                       if (!meal) return;
                       setExpanded(isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey });
@@ -392,72 +538,75 @@ export function MealPlanScreen() {
                       <Text style={styles.slotOpen}>Open</Text>
                     )}
                     {meal && (
-                      <Ionicons name="chevron-down" size={16} color={colors.softViolet} />
+                      <Ionicons name="chevron-down" size={16} color={colors.softAlert} />
                     )}
-                  </TouchableOpacity>
+                  </Pressable>
 
                   {isExpanded && meal && (
-                    <View style={styles.slotActions}>
-                      <TouchableOpacity
-                        style={styles.slotAction}
-                        activeOpacity={0.7}
-                        onPress={() =>
-                          void markActual({
-                            dateKey: selectedDay.dateKey,
-                            mealSlot: slotKey,
-                            ate: true,
-                            concept: meal.concept ?? undefined,
-                          }).catch(() => {})
-                        }
-                      >
-                        <Ionicons name="checkmark" size={14} color={colors.softGreen} />
-                        <Text style={styles.slotActionText}>Cooked it</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.slotAction}
-                        activeOpacity={0.7}
-                        onPress={() =>
-                          void markActual({
-                            dateKey: selectedDay.dateKey,
-                            mealSlot: slotKey,
-                            skipped: true,
-                          }).catch(() => {})
-                        }
-                      >
-                        <Ionicons name="close" size={14} color={colors.softRed} />
-                        <Text style={styles.slotActionText}>Skipped</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.slotAction}
-                        activeOpacity={0.7}
-                        onPress={() =>
-                          void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(() => {})
-                        }
-                      >
-                        <Ionicons name="heart" size={14} color={colors.softPink} />
-                        <Text style={styles.slotActionText}>Loved</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.slotAction}
-                        activeOpacity={0.7}
-                        onPress={() =>
-                          void moveEvent(meal.id, addDays(selectedDay.dateKey, 1), slotKey).catch(
-                            () => {},
-                          )
-                        }
-                      >
-                        <Ionicons name="arrow-forward" size={14} color={colors.softViolet} />
-                        <Text style={styles.slotActionText}>Tomorrow</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.slotAction, styles.slotActionDanger]}
-                        activeOpacity={0.7}
-                        onPress={() => void removeEvent(meal.id).catch(() => {})}
-                      >
-                        <Ionicons name="trash-outline" size={14} color={colors.softRed} />
-                        <Text style={[styles.slotActionText, { color: colors.error }]}>Remove</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <>
+                      <SlotConceptEditor key={meal.id} meal={meal} />
+                      <View style={styles.slotActions}>
+                        <Pressable
+                          style={styles.slotAction}
+                          disabled={busy}
+                          onPress={() =>
+                            void markActual({
+                              dateKey: selectedDay.dateKey,
+                              mealSlot: slotKey,
+                              ate: true,
+                              concept: meal.concept ?? undefined,
+                            }).catch(() => {})
+                          }
+                        >
+                          <Ionicons name="checkmark" size={14} color={colors.softAlert} />
+                          <Text style={styles.slotActionText}>Cooked it</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.slotAction}
+                          disabled={busy}
+                          onPress={() =>
+                            void markActual({
+                              dateKey: selectedDay.dateKey,
+                              mealSlot: slotKey,
+                              skipped: true,
+                            }).catch(() => {})
+                          }
+                        >
+                          <Ionicons name="close" size={14} color={colors.softAlert} />
+                          <Text style={styles.slotActionText}>Skipped</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.slotAction}
+                          disabled={busy}
+                          onPress={() =>
+                            void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(() => {})
+                          }
+                        >
+                          <Ionicons name="heart" size={14} color={colors.softAlert} />
+                          <Text style={styles.slotActionText}>Loved</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.slotAction}
+                          disabled={busy}
+                          onPress={() =>
+                            void moveEvent(meal.id, addDays(selectedDay.dateKey, 1), slotKey).catch(
+                              () => {},
+                            )
+                          }
+                        >
+                          <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
+                          <Text style={styles.slotActionText}>Tomorrow</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.slotAction, styles.slotActionDanger]}
+                          disabled={busy}
+                          onPress={() => void removeEvent(meal.id).catch(() => {})}
+                        >
+                          <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
+                          <Text style={[styles.slotActionText, { color: colors.error }]}>Remove</Text>
+                        </Pressable>
+                      </View>
+                    </>
                   )}
                 </View>
               );
@@ -467,10 +616,10 @@ export function MealPlanScreen() {
 
         {week && week.days.every((day) => day.slots.every((slot) => !slot.planned)) && (
           <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={44} color={colors.softPurple} />
+            <Ionicons name="calendar-outline" size={44} color={colors.softAlert} />
             <Text style={styles.emptyTitle}>No plan yet</Text>
             <Text style={styles.emptySubtitle}>
-              Tap “Plan this week” or tell me below what you feel like eating.
+              Tap �Plan this week� or tell me below what you feel like eating.
             </Text>
           </View>
         )}
@@ -480,14 +629,14 @@ export function MealPlanScreen() {
       {needsAnswer && pendingIntent && (
         <View style={styles.agentCard}>
           <View style={styles.agentHeader}>
-            <Ionicons name="chatbubble-ellipses" size={16} color={colors.softCyan} />
+            <Ionicons name="chatbubble-ellipses" size={16} color={colors.softAlert} />
             <Text style={styles.agentStatus}>{statusLabel(pendingIntent)}</Text>
           </View>
           <Text style={styles.agentBody}>{intentBody(pendingIntent)}</Text>
           <View style={styles.answerRow}>
             <TextInput
               style={styles.answerInput}
-              placeholder="Type yes, no, or a fix…"
+              placeholder="Type yes, no, or a fix�"
               placeholderTextColor={colors.textSecondary}
               value={answer}
               onChangeText={setAnswer}
@@ -507,22 +656,22 @@ export function MealPlanScreen() {
 
       {lastMessage && !pendingIntent && (
         <View style={styles.resultBanner}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.softGreen} />
+          <Ionicons name="checkmark-circle" size={16} color={colors.softAlert} />
           <Text style={styles.resultBannerText} numberOfLines={2}>
             {lastMessage}
           </Text>
         </View>
       )}
 
-      {/* Pinned command bar */}
+{/* Pinned command bar */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.inputBar}
+        style={[styles.inputBar, { paddingBottom: composerBottomPad }]}
       >
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
-            placeholder="Tell me about your food week…"
+            placeholder="Ask about your meals…"
             placeholderTextColor={colors.textSecondary}
             value={input}
             onChangeText={setInput}
@@ -530,9 +679,8 @@ export function MealPlanScreen() {
             returnKeyType="send"
             multiline
           />
-          <TouchableOpacity
+          <Pressable
             style={styles.sendButton}
-            activeOpacity={0.8}
             onPress={() => void handleSend()}
             disabled={!input.trim()}
           >
@@ -541,9 +689,10 @@ export function MealPlanScreen() {
             ) : (
               <Ionicons name="arrow-up" size={20} color={colors.surface} />
             )}
-          </TouchableOpacity>
+</Pressable>
         </View>
       </KeyboardAvoidingView>
+      </FadeInView>
     </SafeAreaView>
   );
 }
@@ -553,15 +702,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: colors.textSecondary,
+  loadingScroll: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: 120,
   },
   header: {
     flexDirection: 'row',
@@ -573,9 +717,67 @@ const styles = StyleSheet.create({
   title: {
     marginBottom: 0,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  saveBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.secondary,
+  },
+  saveBadgeError: {
+    color: colors.error,
+  },
+  weekMetaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  scopeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+scopeChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  recentStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  recentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.success + '10',
+    borderWidth: 1,
+    borderColor: colors.success + '30',
+    borderRadius: 16,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    maxWidth: 180,
+  },
+  recentChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  ruleGroup: {
+    marginBottom: spacing.xs,
+  },
   weekContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: 120,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -583,13 +785,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  weekNavButton: {
+weekNavButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -607,9 +805,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: spacing.sm,
   },
-  dayCellSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+dayCellSelected: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
   },
   dayLetter: {
     fontSize: 10,
@@ -617,8 +815,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
   },
-  dayLetterSelected: {
-    color: 'rgba(255,255,255,0.7)',
+dayLetterSelected: {
+    color: colors.text,
   },
   dayNumber: {
     fontSize: 16,
@@ -626,8 +824,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: 1,
   },
-  dayNumberSelected: {
-    color: colors.surface,
+dayNumberSelected: {
+    color: colors.text,
   },
   dayDotRow: {
     height: 6,
@@ -687,17 +885,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  strategyChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+strategyChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
   },
   strategyText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
   },
-  strategyTextActive: {
-    color: colors.surface,
+strategyTextActive: {
+    color: colors.text,
   },
   planButton: {},
   quickRow: {
@@ -720,24 +918,71 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   rulesStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: spacing.xs,
     marginBottom: spacing.lg,
   },
   ruleChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: spacing.xs,
     backgroundColor: colors.primaryLight,
     borderRadius: 12,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
-    maxWidth: 180,
+    maxWidth: 240,
   },
   ruleChipText: {
     fontSize: 12,
     color: colors.secondary,
+  },
+  ruleDetail: {
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+    marginLeft: spacing.sm,
+    marginTop: spacing.xs,
+    paddingLeft: spacing.sm,
+    gap: spacing.xs,
+  },
+  ruleDetailText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  ruleRemove: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  ruleRemoveText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.error,
+  },
+  conceptEditor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  conceptEditorLabel: {
+    width: 84,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  conceptInput: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    fontSize: 15,
+    color: colors.text,
   },
   dayCard: {
     backgroundColor: colors.surface,
@@ -846,10 +1091,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-  agentStatus: {
+agentStatus: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -915,12 +1160,73 @@ const styles = StyleSheet.create({
     fontSize: 15,
     maxHeight: 110,
   },
-  sendButton: {
+sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+monthNavButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthHeaderText: {
+    ...typography.subhead,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  reviewSection: {
+    marginBottom: spacing.md,
+  },
+  reviewTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.xs,
+  },
+  reviewRow: {
+    gap: spacing.xs,
+  },
+  reviewCard: {
+    width: 64,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  reviewDayName: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  reviewConcept: {
+    fontSize: 10,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 4,
+    height: 28,
+  },
+  reviewDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });

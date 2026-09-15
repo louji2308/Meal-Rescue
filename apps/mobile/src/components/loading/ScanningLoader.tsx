@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tickDone: {
-    color: colors.primary,
+    color: colors.rescueAccent,
   },
   stepText: {
     flex: 1,

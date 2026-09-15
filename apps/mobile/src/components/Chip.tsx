@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { Text } from './AppText';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
@@ -32,18 +32,18 @@ export function Chip({ label, selected, onToggle, style }: ChipProps) {
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       style={[styles.base, selected ? styles.selected : null, style]}
-      activeOpacity={0.7}
+      hitSlop={{ top: 4, bottom: 4 }}
       onPress={onToggle}
     >
       <Animated.View style={[styles.inner, animated]}>
         <Text style={[styles.label, selected ? styles.labelSelected : null]}>{label}</Text>
       </Animated.View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -55,18 +55,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+    minHeight: 36,
   },
   selected: {
     backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
+    borderColor: colors.borderStrong,
   },
   inner: {},
   label: {
     fontSize: 14,
-    color: colors.text,
+    color: colors.textSecondary,
   },
   labelSelected: {
-    color: colors.primary,
+    color: colors.text,
     fontWeight: '600',
   },
 });

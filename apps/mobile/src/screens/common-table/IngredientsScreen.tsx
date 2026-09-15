@@ -1,7 +1,8 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../../components/motion/Pressable';
 
 import { Text } from '../../components/AppText';
 import { TextInput } from '../../components/AppTextInput';
@@ -13,6 +14,7 @@ import { toApiError } from '../../services/api';
 import { convergeMeal } from '../../services/common-table.api';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
+import { FadeInView } from '../../components/motion/FadeInView';
 
 type Effort = 'quick' | 'normal';
 
@@ -78,6 +80,7 @@ export function IngredientsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <FadeInView>
       <ErrorBanner error={error} />
 
       <Text style={styles.intro}>
@@ -102,31 +105,29 @@ export function IngredientsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.label}>Include my Kitchen pantry?</Text>
-        <TouchableOpacity
+        <Pressable
           style={styles.toggleRow}
-          activeOpacity={0.8}
           onPress={() => setUsePantry((v) => !v)}
         >
           <Text style={styles.toggleText}>
             {usePantry ? 'Yes — use what I have' : 'Only what I typed'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.label}>Effort</Text>
         <View style={styles.optionRow}>
           {EFFORT_OPTIONS.map((opt) => (
-            <TouchableOpacity
+            <Pressable
               key={opt.key}
               style={[styles.option, effort === opt.key && styles.optionActive]}
-              activeOpacity={0.8}
               onPress={() => setEffort(opt.key)}
             >
               <Text style={[styles.optionText, effort === opt.key && styles.optionTextActive]}>
                 {opt.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -135,10 +136,9 @@ export function IngredientsScreen() {
         <Text style={styles.label}>Time available</Text>
         <View style={styles.optionRow}>
           {TIME_OPTIONS.map((opt) => (
-            <TouchableOpacity
+            <Pressable
               key={opt.minutes}
               style={[styles.option, timeMinutes === opt.minutes && styles.optionActive]}
-              activeOpacity={0.8}
               onPress={() => setTimeMinutes(opt.minutes)}
             >
               <Text
@@ -146,7 +146,7 @@ export function IngredientsScreen() {
               >
                 {opt.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -158,6 +158,7 @@ export function IngredientsScreen() {
         disabled={memberIds.length === 0}
         style={styles.convergeButton}
       />
+      </FadeInView>
     </ScrollView>
   );
 }
@@ -230,8 +231,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   optionActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
   },
   optionText: {
     fontSize: 13,
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   optionTextActive: {
-    color: colors.surface,
+    color: colors.text,
   },
   convergeButton: {
     marginTop: spacing.md,

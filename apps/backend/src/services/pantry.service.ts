@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { Op } from 'sequelize';
+
 import type {
   PantryDeleteResponse,
   PantryGetResponse,
@@ -15,6 +17,74 @@ import { AppError, ErrorCategory } from '../lib/errors';
 import { CandidateGeneratorService } from './candidate-generator.service';
 
 const EXPIRY_SOON_DAYS = 3;
+
+/**
+ * Small alias table mapping colloquial/free-text names (photo-import output,
+ * manual typos) onto a single canonical ingredient name. Source of truth for
+ * the photo-import merge: "2% Milk", "Whole Milk" and "Milk" all resolve to
+ * "milk" so imports accumulate on one row instead of duplicating.
+ */
+export const CANONICAL_ALIASES: Record<string, string> = {
+  milk: 'milk',
+  'whole milk': 'milk',
+  '2% milk': 'milk',
+  '1% milk': 'milk',
+  'skim milk': 'milk',
+  'low fat milk': 'milk',
+  semi_skimmed: 'milk',
+  yogurt: 'yogurt',
+  yoghurt: 'yogurt',
+  'greek yogurt': 'yogurt',
+  egg: 'egg',
+  eggs: 'egg',
+  rice: 'rice',
+  'white rice': 'rice',
+  'brown rice': 'rice',
+  'basmati rice': 'rice',
+  'jasmine rice': 'rice',
+  'chicken breast': 'chicken breast',
+  'breast of chicken': 'chicken breast',
+  'boneless chicken breast': 'chicken breast',
+  butter: 'butter',
+  'unsalted butter': 'butter',
+  'salted butter': 'butter',
+  tomato: 'tomato',
+  tomatoes: 'tomato',
+  'cherry tomatoes': 'tomato',
+  onion: 'onion',
+  onions: 'onion',
+  'red onion': 'onion',
+  garlic: 'garlic',
+  'garlic clove': 'garlic',
+  'garlic cloves': 'garlic',
+  potato: 'potato',
+  potatoes: 'potato',
+  carrot: 'carrot',
+  carrots: 'carrot',
+  apple: 'apple',
+  apples: 'apple',
+  banana: 'banana',
+  bananas: 'banana',
+  cheese: 'cheese',
+  cheddar: 'cheese',
+  mozzarella: 'cheese',
+  bread: 'bread',
+  'sliced bread': 'bread',
+  pasta: 'pasta',
+  spaghetti: 'pasta',
+  penne: 'pasta',
+};
+
+/** Normalize free-text ingredient names to a stable canonical form. */
+export function canonicalizeIngredientName(raw: string): string {
+  const normalized = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+  return CANONICAL_ALIASES[normalized] ?? normalized;
+}
+
+/** Case-insensitive lookup fragment so canonical names merge onto pre-existing rows regardless of stored casing. */
+function byCanonicalName(name: string): { [Op.iLike]: string } {
+  return { [Op.iLike]: canonicalizeIngredientName(name) };
+}
 
 export class PantryService {
   private readonly models: Db['models'];
@@ -75,18 +145,29 @@ export class PantryService {
     const isLeftover = kind === 'leftover';
     // Leftover rows are addressed by dish name; ingredient_name is mirrored so the
     // unique index, dedup, and intelligence signals still work over a single name.
-    const rowName = (
+    const candidateName = (
       isLeftover && payload.dishName ? payload.dishName : payload.ingredientName
     ).trim();
+    // Pantry items get canonicalized so photo imports ("2% Milk", "milk") merge
+    // onto a single row instead of duplicating. Leftover dish names stay verbatim.
+    const rowName = isLeftover ? candidateName : canonicalizeIngredientName(candidateName);
 
     const existing = await this.models.Pantry.findOne({
-      where: { userId, ingredientName: rowName },
+      where: { userId, ingredientName: byCanonicalName(rowName) },
     });
 
     let row;
     if (existing) {
       const updates: Record<string, unknown> = {};
-      if (payload.quantity !== undefined) updates.quantity = payload.quantity;
+      if (payload.quantity !== undefined) {
+        if (payload.mergeQuantity && payload.quantity !== null && !isLeftover) {
+          const currentQty = (existing.get('quantity') as number | null) ?? null;
+          updates.quantity =
+            currentQty === null ? payload.quantity : currentQty + payload.quantity;
+        } else {
+          updates.quantity = payload.quantity;
+        }
+      }
       if (payload.unit !== undefined) updates.unit = payload.unit;
       if (payload.expiresAt !== undefined)
         updates.expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : null;
@@ -139,24 +220,41 @@ export class PantryService {
     return { success: true, deletedId: itemId };
   }
 
-  async markUsed(userId: UUID, ingredientName: string): Promise<void> {
-    const row = await this.models.Pantry.findOne({ where: { userId, ingredientName } });
-    if (row) {
-      if (row.kind === 'leftover') {
-        const servingsLeft = (row.servings as number | null) ?? 1;
-        if (servingsLeft <= 1) {
-          await row.destroy();
-        } else {
-          await row.update({ servings: servingsLeft - 1, lastUsedAt: new Date() });
-        }
-        return;
+  async markUsed(
+    userId: UUID,
+    ingredientName: string,
+  ): Promise<{ success: true; removed: boolean }> {
+    const row = await this.models.Pantry.findOne({
+      where: { userId, ingredientName: byCanonicalName(ingredientName) },
+    });
+    if (!row) return { success: true, removed: false };
+
+    if (row.kind === 'leftover') {
+      const servingsLeft = (row.servings as number | null) ?? 1;
+      if (servingsLeft <= 1) {
+        await row.destroy();
+        return { success: true, removed: true };
       }
-      const qty = (row.quantity as number | null) ?? 1;
-      await row.update({
-        lastUsedAt: new Date(),
-        quantity: Math.max(0, qty - 1),
-      });
+      await row.update({ servings: servingsLeft - 1, lastUsedAt: new Date() });
+      return { success: true, removed: false };
     }
+
+    const qty = (row.quantity as number | null) ?? null;
+    // Uncounted items (qty null) can't be safely decremented - just touch lastUsedAt.
+    if (qty === null) {
+      await row.update({ lastUsedAt: new Date() });
+      return { success: true, removed: false };
+    }
+    // Whole item consumed - remove it rather than leaving a stale qty=0 row.
+    if (qty <= 1) {
+      await row.destroy();
+      return { success: true, removed: true };
+    }
+    await row.update({
+      lastUsedAt: new Date(),
+      quantity: qty - 1,
+    });
+    return { success: true, removed: false };
   }
 
   private generateSuggestedUses(items: PantryItem[], _userId: UUID): SuggestedUse[] {

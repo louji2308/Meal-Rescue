@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 
-import { loginSchema, registerSchema } from './auth.schemas';
+import { googleLoginSchema, loginSchema, registerSchema } from './auth.schemas';
 import { authService } from './auth.service';
 
 /**
@@ -95,6 +95,51 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         throw parsed.error;
       }
       const tokens = await authService.login(parsed.data);
+      void reply.send(tokens);
+    },
+  );
+
+  app.post(
+    '/google',
+    {
+      schema: {
+        description: 'Sign in with Google authorization code',
+        tags: ['auth'],
+        body: {
+          type: 'object',
+          required: ['code', 'redirectUri'],
+          properties: {
+            code: { type: 'string' },
+            redirectUri: { type: 'string' },
+            codeVerifier: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              accessToken: { type: 'string' },
+              expiresIn: { type: 'string' },
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  email: { type: 'string' },
+                  subscriptionTier: { type: 'string', enum: ['free', 'pro'] },
+                  onboardingCompleted: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = googleLoginSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw parsed.error;
+      }
+      const tokens = await authService.googleLogin(parsed.data);
       void reply.send(tokens);
     },
   );

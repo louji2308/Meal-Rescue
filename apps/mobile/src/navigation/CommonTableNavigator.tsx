@@ -34,6 +34,7 @@ export function CommonTableNavigator() {
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
         headerTitleStyle: { fontFamily: fonts.semiBold, fontSize: 17 },
+        headerTitleAlign: 'center',
         headerShadowVisible: false,
         headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: colors.background },

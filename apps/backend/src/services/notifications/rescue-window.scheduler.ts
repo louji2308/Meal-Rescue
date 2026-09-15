@@ -120,6 +120,10 @@ export async function runRescueWindowTick(db?: Db, now: Date = new Date()): Prom
         title: copy.title,
         body: copy.body,
         deepLink: 'mealrescue://rescue',
+        buttons: [
+          { id: 'make_it', text: 'Make it' },
+          { id: 'later', text: 'Later' },
+        ],
       });
       if (outcome === 'sent' || outcome === 'dry_run') sent += 1;
     } catch (err) {

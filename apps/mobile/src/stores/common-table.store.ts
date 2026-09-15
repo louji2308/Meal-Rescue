@@ -16,6 +16,7 @@ import {
   updateHouseholdMember,
   removeHouseholdMember,
 } from '../services/common-table.api';
+import { removePeoplePhoto } from '../services/people-photos';
 
 const STORAGE_KEY = 'meal-rescue/common-table/active';
 
@@ -57,7 +58,14 @@ export const useCommonTableStore = create<CommonTableState>((set, get) => ({
 
   loadHousehold: async () => {
     const household = await fetchHousehold();
-    set({ household, members: household?.members ?? [] });
+    const members = household?.members ?? [];
+    set((state) => ({
+      household,
+      members,
+      selectedMemberIds: state.selectedMemberIds.filter((id) =>
+        members.some((m) => m.id === id && m.active !== false),
+      ),
+    }));
   },
 
   ensureHousehold: async () => {
@@ -129,6 +137,7 @@ export const useCommonTableStore = create<CommonTableState>((set, get) => ({
 
   removeMember: async (memberId) => {
     await removeHouseholdMember(memberId);
+    await removePeoplePhoto(memberId).catch(() => {});
     // Also drop from selection if it was selected.
     const selected = get().selectedMemberIds.filter((id) => id !== memberId);
     set({ selectedMemberIds: selected });

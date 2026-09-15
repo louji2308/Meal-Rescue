@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 
 import { StepShell } from '../components/decision/StepShell';
@@ -13,11 +14,11 @@ import { useDecisionStore } from '../stores/decision.store';
 import { colors, spacing } from '../theme';
 
 const INTENT_ICON_COLORS: Record<string, string> = {
-  'sparkles-outline': colors.softYellow,
-  'heart-outline': colors.softPink,
-  'leaf-outline': colors.softGreen,
-  'help-circle-outline': colors.softCyan,
-  'flash-outline': colors.softPeach,
+  'sparkles-outline': colors.rescueAccent,
+  'heart-outline': colors.rescueAccent,
+  'leaf-outline': colors.rescueAccent,
+  'help-circle-outline': colors.rescueAccent,
+  'flash-outline': colors.rescueAccent,
 };
 
 /**
@@ -28,13 +29,14 @@ const INTENT_ICON_COLORS: Record<string, string> = {
 export function IntentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<RouteProp<HomeStackParamList, 'Intent'>>();
-  const { analysis } = route.params;
+const { analysis, editedMealText } = route.params;
   const setIntent = useDecisionStore((state) => state.setIntent);
 
   const mealId = analysis.mealId;
   const foods = analysis.detectedFoods.map((food) => food.name);
-  const foodSummary =
-    foods.length > 0
+  const foodSummary = editedMealText && editedMealText.length > 0
+    ? editedMealText
+    : foods.length > 0
       ? foods.length === 1
         ? foods[0]
         : foods.slice(0, -1).join(', ') + ' and ' + foods[foods.length - 1]
@@ -52,12 +54,11 @@ export function IntentScreen() {
 
       <View style={styles.list}>
         {INTENT_OPTIONS.map((option) => (
-          <TouchableOpacity
+          <Pressable
             key={option.intent}
             accessibilityRole="button"
             accessibilityLabel={option.label}
             style={styles.row}
-            activeOpacity={0.7}
             onPress={() => {
               haptics.light();
               const meta = intentCopy(option.intent);
@@ -74,15 +75,15 @@ export function IntentScreen() {
                 // @ts-expect-error Ionicons glyph map is string-typed at runtime
                 name={option.icon}
                 size={22}
-                color={INTENT_ICON_COLORS[option.icon] ?? colors.softViolet}
+                color={INTENT_ICON_COLORS[option.icon] ?? colors.rescueAccent}
               />
             </View>
             <View style={styles.textWrap}>
               <Text style={styles.label}>{option.label}</Text>
               <Text style={styles.caption}>{option.caption}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.softViolet} />
-          </TouchableOpacity>
+            <Ionicons name="chevron-forward" size={20} color={colors.rescueAccent} />
+          </Pressable>
         ))}
       </View>
     </StepShell>
@@ -91,7 +92,7 @@ export function IntentScreen() {
 
 const styles = StyleSheet.create({
   foodBadge: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     borderRadius: 20,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -101,7 +102,7 @@ const styles = StyleSheet.create({
   foodBadgeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.rescueAccent,
   },
   list: {
     gap: spacing.sm,
@@ -120,7 +121,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -138,3 +139,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 });
+

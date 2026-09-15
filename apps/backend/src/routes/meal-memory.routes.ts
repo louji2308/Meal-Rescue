@@ -28,6 +28,7 @@ const planWeekSchema = z
       .optional(),
     strategy: z.enum(['balance', 'easy', 'use_expiring', 'family_favorites']).optional(),
     confirm: z.boolean().optional(),
+    memberIds: z.array(z.string().uuid()).min(1).max(8).optional(),
   })
   .strict();
 
@@ -36,7 +37,21 @@ const weekQuerySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  memberId: z.string().uuid().optional(),
 });
+
+const reuseWeekSchema = z
+  .object({
+    fromWeekStart: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    toWeekStart: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict();
 
 const eventParamSchema = z.object({ eventId: z.string().uuid() });
 
@@ -138,6 +153,33 @@ const feedbackSchema = z
   })
   .strict();
 
+const suggestionsQuerySchema = z
+  .object({
+    weekStart: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    mealSlot: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional(),
+    strategy: z.enum(['balance', 'easy', 'use_expiring', 'family_favorites']).optional(),
+    limit: z.coerce.number().int().min(1).max(20).optional(),
+  })
+  .strict();
+
+const useWhatYouHaveQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(20).optional(),
+  })
+  .strict();
+
+const summaryQuerySchema = z
+  .object({
+    weekStart: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict();
+
 /**
  * Meal Memory routes — the intent-aware household food agent.
  *
@@ -145,6 +187,11 @@ const feedbackSchema = z
  * POST   /api/v1/meal-memory/confirm          resolve a pending intent
  * POST   /api/v1/meal-memory/plan-week        deterministic weekly plan
  * GET    /api/v1/meal-memory/week             calendar grid for a week
+ * POST   /api/v1/meal-memory/reuse-week       copy last week's plan to a week
+ * GET    /api/v1/meal-memory/recent           recently eaten meals
+ * GET    /api/v1/meal-memory/suggestions      %-match smart suggestions for a week
+ * GET    /api/v1/meal-memory/use-what-you-have  meal ideas from on-hand items
+ * GET    /api/v1/meal-memory/summary          weekly intelligence digest
  * GET    /api/v1/meal-memory/meals/:eventId/detail
  * PATCH  /api/v1/meal-memory/meals/:eventId
  * POST   /api/v1/meal-memory/meals/:eventId/move
@@ -154,9 +201,10 @@ const feedbackSchema = z
  * POST   /api/v1/meal-memory/feedback         per-meal rating
  * POST   /api/v1/meal-memory/rules            explicit household rule
  * GET    /api/v1/meal-memory/rules            list active rules
+ * POST   /api/v1/meal-memory/rules/:id/deactivate
  */
 export async function mealMemoryRoutes(app: FastifyInstance): Promise<void> {
-  const { mealMemory, householdMembers, households } = buildServices(app.redis);
+  const { mealMemory, mealIntelligence, householdMembers, households } = buildServices(app.redis);
 
   app.post('/intent', async (request, reply) => {
     const parsed = intentRequestSchema.safeParse(request.body);
@@ -204,9 +252,50 @@ export async function mealMemoryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/week', async (request, reply) => {
     const parsed = weekQuerySchema.safeParse(request.query);
     if (!parsed.success) {
-      throw validationError("Query must be { weekStart?: 'YYYY-MM-DD' }");
+      throw validationError("Query must be { weekStart?: 'YYYY-MM-DD', memberId?: uuid }");
     }
-    const response = await mealMemory.getWeek(request.user.sub, parsed.data.weekStart);
+    const response = await mealMemory.getWeek(
+      request.user.sub,
+      parsed.data.weekStart,
+      parsed.data.memberId,
+    );
+    return reply.send(response);
+  });
+
+  app.post('/reuse-week', async (request, reply) => {
+    const parsed = reuseWeekSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Body must be { fromWeekStart?, toWeekStart?: 'YYYY-MM-DD' }");
+    }
+    const response = await mealMemory.reuseWeek(request.user.sub, parsed.data);
+    return reply.send(response);
+  });
+
+  app.get('/recent', async (request, reply) => {
+    const response = await mealMemory.recentMeals(request.user.sub);
+    return reply.send(response);
+  });
+
+  app.get('/suggestions', async (request, reply) => {
+    const parsed = suggestionsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw validationError('Query must be { weekStart?, mealSlot?, strategy?, limit? }');
+    }
+    const response = await mealIntelligence.suggestions(request.user.sub, parsed.data);
+    return reply.send(response);
+  });
+
+  app.get('/use-what-you-have', async (request, reply) => {
+    const parsed = useWhatYouHaveQuerySchema.safeParse(request.query);
+    if (!parsed.success) throw validationError('Query must be { limit? }');
+    const response = await mealIntelligence.useWhatYouHave(request.user.sub, parsed.data);
+    return reply.send(response);
+  });
+
+  app.get('/summary', async (request, reply) => {
+    const parsed = summaryQuerySchema.safeParse(request.query);
+    if (!parsed.success) throw validationError('Query must be { weekStart?: YYYY-MM-DD }');
+    const response = await mealIntelligence.summary(request.user.sub, parsed.data);
     return reply.send(response);
   });
 
@@ -270,6 +359,15 @@ export async function mealMemoryRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/rules', async (request, reply) => {
     const response = await mealMemory.listRules(request.user.sub);
+    return reply.send(response);
+  });
+
+  app.post('/rules/:ruleId/deactivate', async (request, reply) => {
+    const params = z
+      .object({ ruleId: z.string().uuid() })
+      .safeParse(request.params);
+    if (!params.success) throw validationError('ruleId must be a uuid');
+    const response = await mealMemory.deactivateRule(request.user.sub, params.data.ruleId);
     return reply.send(response);
   });
 

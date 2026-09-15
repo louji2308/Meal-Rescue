@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 
 import { haptics } from '../../services/haptics';
@@ -44,7 +45,7 @@ export function ReversibilityEditor({
           <View key={`${name}-${index}`} style={styles.row}>
             <View style={styles.rowHead}>
               <Text style={styles.rowIngredient}>{name}</Text>
-              <TouchableOpacity
+              <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Remove ${name}`}
                 onPress={() => {
@@ -53,27 +54,26 @@ export function ReversibilityEditor({
                 }}
                 style={styles.remove}
               >
-                <Ionicons name="close" size={18} color={colors.softRed} />
-              </TouchableOpacity>
+                <Ionicons name="close" size={18} color={colors.rescueAccent} />
+              </Pressable>
             </View>
             {suggestions.length > 0 ? (
               <View style={styles.swapWrap}>
                 <Text style={styles.swapLabel}>Swap for:</Text>
                 <View style={styles.swapRow}>
                   {suggestions.map((suggestion) => (
-                    <TouchableOpacity
+                    <Pressable
                       key={suggestion}
                       accessibilityRole="button"
                       accessibilityLabel={`Swap ${name} for ${suggestion}`}
                       style={styles.swapChip}
-                      activeOpacity={0.7}
                       onPress={() => {
                         haptics.light();
                         onReplace(index, suggestion);
                       }}
                     >
                       <Text style={styles.swapChipText}>{suggestion}</Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   ))}
                 </View>
               </View>
@@ -138,13 +138,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     paddingVertical: 4,
     paddingHorizontal: spacing.sm,
   },
   swapChipText: {
     fontSize: 12,
-    color: colors.primary,
+    color: colors.rescueAccent,
     fontWeight: '600',
   },
 });

@@ -7,14 +7,14 @@ import {
 } from 'expo-image-picker';
 import React, { useState } from 'react';
 import {
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
+import { AppImage } from '../components/AppImage';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,10 +29,11 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { toApiError } from '../services/api';
 import { alchemizeLeftovers } from '../services/leftover.api';
 import { colors, spacing, typography } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
 
 /**
- * Leftover Alchemist - "Photograph leftovers â†’ Transform what exists"
- * Photo + description â†’ up to 3 transformations (bowl, wrap, skillet, salad, soup, bake)
+ * Leftover Alchemist - "Photograph leftovers ? Transform what exists"
+ * Photo + description ? up to 3 transformations (bowl, wrap, skillet, salad, soup, bake)
  * Product rule: MAX 3 transformations, ranked by effort (low first)
  */
 export function LeftoverAlchemistScreen() {
@@ -119,15 +120,14 @@ export function LeftoverAlchemistScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.content}>
-          <TouchableOpacity
+          <Pressable
             style={styles.closeButton}
-            activeOpacity={0.8}
             onPress={() => setResults(null)}
             accessibilityRole="button"
             accessibilityLabel="Close results"
           >
-            <Ionicons name="close" size={24} color={colors.softRed} />
-          </TouchableOpacity>
+            <Ionicons name="close" size={24} color={colors.softAlert} />
+          </Pressable>
 
           <Text style={[typography.heading, styles.title]}>Transformations</Text>
           <Text style={styles.subtitle}>Pick a format</Text>
@@ -145,10 +145,9 @@ export function LeftoverAlchemistScreen() {
 
           <View style={styles.results}>
             {results.transformations.map((t: Transformation, idx) => (
-              <TouchableOpacity
+              <Pressable
                 key={`${t.name}-${idx}`}
                 style={styles.transformCard}
-                activeOpacity={0.8}
                 onPress={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
               >
                 <View style={styles.transformHeader}>
@@ -159,7 +158,7 @@ export function LeftoverAlchemistScreen() {
                 </View>
                 <Text style={styles.transformDescription}>{t.description}</Text>
                 <Text style={styles.transformMeta}>
-                  {t.estimatedTimeMinutes} min Â· {t.effort} effort Â· {t.format}
+                  {t.estimatedTimeMinutes} min · {t.effort} effort · {t.format}
                 </Text>
                 <Text style={styles.transformIngredients}>
                   {t.ingredients.slice(0, 4).join(', ')}
@@ -170,7 +169,7 @@ export function LeftoverAlchemistScreen() {
                     <Text style={styles.sectionLabel}>You need</Text>
                     {t.ingredients.map((ing, i) => (
                       <Text key={`ing-${i}`} style={styles.listItem}>
-                        â€¢ {ing}
+                        • {ing}
                       </Text>
                     ))}
                     <Text style={styles.sectionLabel}>Steps</Text>
@@ -181,17 +180,16 @@ export function LeftoverAlchemistScreen() {
                     ))}
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
-          <TouchableOpacity
+          <Pressable
             style={styles.retryButton}
             onPress={() => setResults(null)}
-            activeOpacity={0.8}
           >
             <Text style={styles.retryText}>Try different leftovers</Text>
-          </TouchableOpacity>
+          </Pressable>
         </ScrollView>
       </SafeAreaView>
     );
@@ -203,46 +201,44 @@ export function LeftoverAlchemistScreen() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.content}>
+<ScrollView contentContainerStyle={styles.content}>
+          <FadeInView>
           <Text style={[typography.heading, styles.title]}>Leftover Alchemist</Text>
           <Text style={[typography.body, styles.subtitle]}>
-            Photograph or describe leftovers â†’ I'll suggest transformations
+            Photograph or describe leftovers ? I'll suggest transformations
           </Text>
 
           <ErrorBanner error={error} />
 
           {image ? (
-            <TouchableOpacity
+            <Pressable
               style={styles.photoBoxFilled}
-              activeOpacity={0.8}
               onPress={() => void pickPhoto()}
               accessibilityRole="button"
               accessibilityLabel="Change leftover photo"
             >
-              <Image source={{ uri: image.uri }} style={styles.preview} />
-            </TouchableOpacity>
+              <AppImage source={{ uri: image.uri }} style={styles.preview} />
+            </Pressable>
           ) : (
             <View style={styles.photoActions}>
-              <TouchableOpacity
+              <Pressable
                 style={styles.photoAction}
-                activeOpacity={0.8}
                 onPress={() => void takePhoto()}
                 accessibilityRole="button"
                 accessibilityLabel="Take a photo of leftovers"
               >
-                <Ionicons name="camera" size={28} color={colors.softPeach} />
+                <Ionicons name="camera" size={28} color={colors.softAlert} />
                 <Text style={styles.photoActionText}>Take photo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
                 style={styles.photoAction}
-                activeOpacity={0.8}
                 onPress={() => void pickPhoto()}
                 accessibilityRole="button"
                 accessibilityLabel="Choose a photo from library"
               >
-                <Ionicons name="images" size={28} color={colors.softPurple} />
+                <Ionicons name="images" size={28} color={colors.softAlert} />
                 <Text style={styles.photoActionText}>Choose photo</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           )}
 
@@ -257,14 +253,15 @@ export function LeftoverAlchemistScreen() {
             onChangeText={setDescription}
           />
 
-          {(description.trim() || image) && !busy && (
+{(description.trim() || image) && !busy && (
             <PrimaryButton label="Transform leftovers" onPress={() => void handleSubmit()} />
           )}
           {busy && (
             <View style={styles.analyzing}>
-              <Text style={styles.analyzingText}>Analyzing leftoversâ€¦</Text>
+              <Text style={styles.analyzingText}>Analyzing leftovers…</Text>
             </View>
           )}
+          </FadeInView>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -368,13 +365,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  chip: {
+chip: {
     backgroundColor: colors.primaryLight,
     borderRadius: 16,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontSize: 12,
-    color: colors.primary,
+    color: colors.textSecondary,
     fontWeight: '600',
   },
   results: {
@@ -450,3 +447,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

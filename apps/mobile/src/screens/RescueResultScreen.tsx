@@ -1,7 +1,8 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -23,7 +24,9 @@ import { getAdEligibility } from '../services/ads.api';
 import { hasAdMobAppId, showInterstitialAd } from '../services/ads.service';
 import { ApiError } from '../services/api';
 import { commitDecisionSafe } from '../services/decision.api';
+import { useRescuesStore } from '../stores/rescues.store';
 import { colors, spacing } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
 
 /**
  * RESCUE RESULT (V2 redesign, plan §9 / §13 / §35).
@@ -108,6 +111,11 @@ export function RescueResultScreen({
     const outcome = await commitDecisionSafe(rescueId, userDecision);
     if (outcome.ok) {
       const workingLabel = actionLine(action, additions);
+      useRescuesStore.getState().addRescue({
+        rescueId,
+        recommendation: workingLabel,
+        foods,
+      });
       navigation.navigate('Feedback', { rescueId, recommendation: workingLabel });
     } else {
       setCommitError(outcome.error);
@@ -127,15 +135,17 @@ export function RescueResultScreen({
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <BestMoveCard
-          action={action}
-          candidate={working}
-          foods={foods}
-          isPro={isPro}
-          onDoThis={handleDoThis}
-          busy={committing}
-          onKeepAsIs={handleKeepAsIs}
-        />
+        <FadeInView rise={10}>
+          <BestMoveCard
+            action={action}
+            candidate={working}
+            foods={foods}
+            isPro={isPro}
+            onDoThis={handleDoThis}
+            busy={committing}
+            onKeepAsIs={handleKeepAsIs}
+          />
+        </FadeInView>
 
         <ErrorBanner error={commitError} />
 
@@ -146,19 +156,19 @@ export function RescueResultScreen({
         />
 
         {initial.alternatives.length > 0 && (
+          <FadeInView delay={140}>
           <View style={styles.alternatives}>
             <Text style={styles.alternativesTitle}>Or switch it up</Text>
             {initial.alternatives.slice(0, showMore ? undefined : 3).map((alternative) => {
               const isActive = alternative.candidate.id === chosen.candidate.id;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={alternative.candidate.id}
                   accessibilityRole="button"
                   accessibilityLabel={`Use ${alternative.candidate.additions
                     .map((a) => a.name)
                     .join(' + ')} instead`}
                   style={[styles.altCard, isActive ? styles.altCardActive : null]}
-                  activeOpacity={0.7}
                   onPress={() => {
                     const next = alternative;
                     setChosen(next);
@@ -177,19 +187,20 @@ export function RescueResultScreen({
                       alternative.candidate.estimatedCostLevel,
                     )}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
             {initial.alternatives.length > 3 && !showMore && (
-              <TouchableOpacity
+              <Pressable
                 accessibilityRole="button"
                 onPress={() => setShowMore(true)}
                 style={styles.more}
               >
                 <Text style={styles.moreText}>Show a few more</Text>
-              </TouchableOpacity>
+              </Pressable>
             )}
           </View>
+          </FadeInView>
         )}
 
         <View style={styles.aftercare}>
@@ -231,8 +242,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   altCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.homeTintNeutral,
   },
   altTitle: {
     fontSize: 15,
@@ -249,7 +260,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   moreText: {
-    color: colors.primary,
+    color: colors.rescueAccent,
     fontSize: 14,
     fontWeight: '600',
   },

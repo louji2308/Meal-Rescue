@@ -2,8 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../../components/motion/Pressable';
 
+import { AppImage, prefetchImages } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -14,13 +16,15 @@ import {
   getSharedMeal,
   startCooking as startCookingApi,
 } from '../../services/common-table.api';
+import { loadPeoplePhotos } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing, typography } from '../../theme';
+import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
- * Common Table home â€” the dashboard for the household meal session.
+ * Common Table home — the dashboard for the household meal session.
  * Person selection happens inline here ("Who's eating?"), so the flow is
- * home â†’ ingredients â†’ cook â†’ how did it go.
+ * home ? ingredients ? cook ? how did it go.
  */
 export function CommonTableHomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
@@ -38,13 +42,17 @@ export function CommonTableHomeScreen() {
   const [busy, setBusy] = useState(true);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [photos, setPhotos] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      await hydrate();
+await hydrate();
       await loadHousehold();
+      const loaded = await loadPeoplePhotos();
+      setPhotos(loaded);
+      prefetchImages(Object.values(loaded));
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -91,19 +99,18 @@ export function CommonTableHomeScreen() {
       {busy ? (
         <View style={styles.loadingCenter}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Finding your tableâ€¦</Text>
+          <Text style={styles.loadingText}>Finding your table…</Text>
         </View>
-      ) : (
-        <>
+) : (
+        <FadeInView>
           {/* Table card */}
-          <TouchableOpacity
+          <Pressable
             style={styles.homeCard}
-            activeOpacity={0.8}
             onPress={() => navigation.navigate('Household')}
           >
             <View style={styles.homeCardHeader}>
               <View style={styles.homeCardIcon}>
-                <Ionicons name="people" size={22} color={colors.softViolet} />
+                <Ionicons name="people" size={22} color={colors.softAlert} />
               </View>
               <View style={styles.homeCardText}>
                 <Text style={styles.homeCardTitle}>
@@ -115,15 +122,14 @@ export function CommonTableHomeScreen() {
                     : 'Add the people you cook for'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.softViolet} />
+              <Ionicons name="chevron-forward" size={20} color={colors.softAlert} />
             </View>
-          </TouchableOpacity>
+          </Pressable>
 
           {/* Resume card */}
           {activeId && (activeStatus === 'cooking' || activeStatus === 'split') ? (
-            <TouchableOpacity
+            <Pressable
               style={[styles.homeCard, styles.resumeCard]}
-              activeOpacity={0.8}
               disabled={resumeBusy}
               onPress={() => void handleResume()}
             >
@@ -138,12 +144,12 @@ export function CommonTableHomeScreen() {
                 <View style={styles.homeCardText}>
                   <Text style={styles.resumeTitle}>A meal is in progress</Text>
                   <Text style={styles.resumeSubtitle}>
-                    {activeStatus === 'split' ? 'Branch time â€” continue' : 'Pick up where you left off'}
+                    {activeStatus === 'split' ? 'Branch time — continue' : 'Pick up where you left off'}
                   </Text>
                 </View>
                 <Ionicons name="arrow-forward" size={20} color={colors.surface} />
               </View>
-            </TouchableOpacity>
+            </Pressable>
           ) : null}
 
           {/* CTA */}
@@ -158,38 +164,48 @@ export function CommonTableHomeScreen() {
             style={styles.cta}
           />
 
-          {/* Who's eating â€” tap to select, tap again to unselect */}
+          {/* Who's eating — tap to select, tap again to unselect */}
           {members.length > 0 && (
             <>
               <Text style={[typography.heading, styles.sectionTitle]}>Who's eating?</Text>
               <View style={styles.memberList}>
                 {activeMembers.map((member) => {
                   const isSelected = selected.includes(member.id);
+                  const photo = photos[member.id];
                   return (
-                    <TouchableOpacity
+                    <Pressable
                       key={member.id}
                       style={[styles.memberRow, isSelected && styles.memberRowSelected]}
-                      activeOpacity={0.8}
                       onPress={() => toggleSelected(member.id)}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: isSelected }}
                     >
-                      <View style={[styles.avatar, isSelected && styles.avatarSelected]}>
-                        <Text style={styles.avatarText}>{member.initials}</Text>
+                      <View
+                        style={[
+                          styles.avatar,
+                          isSelected && styles.avatarSelected,
+                          photo && styles.avatarPhoto,
+                        ]}
+                      >
+{photo ? (
+                          <AppImage source={{ uri: photo }} style={styles.avatarImage} />
+                        ) : (
+                          <Text style={styles.avatarText}>{member.initials}</Text>
+                        )}
                       </View>
                       <View style={styles.memberInfo}>
                         <Text style={styles.memberName}>{member.displayName}</Text>
                         <Text style={styles.memberMeta}>
                           {member.ageGroup}
-                          {member.isOwner ? ' Â· you' : ''}
+                          {member.isOwner ? ' · you' : ''}
                         </Text>
                       </View>
                       <Ionicons
                         name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
                         size={22}
-                        color={isSelected ? colors.softGreen : colors.border}
+                        color={isSelected ? colors.softAlert : colors.border}
                       />
-                    </TouchableOpacity>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -200,41 +216,54 @@ export function CommonTableHomeScreen() {
           <Text style={[typography.heading, styles.sectionTitle]}>The people you cook for</Text>
           {activeMembers.length === 0 ? (
             <View style={styles.emptyMembers}>
-              <Ionicons name="person-add-outline" size={32} color={colors.softViolet} />
+              <Ionicons name="person-add-outline" size={32} color={colors.softAlert} />
               <Text style={styles.emptyMembersText}>
                 Add people (and the things to avoid) so we can plan one meal that works for
                 everyone.
               </Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('Household')}
+              <Pressable
+                onPress={() => navigation.navigate('AddPeople')}
               >
-                <Text style={styles.emptyMembersLink}>Add someone â†’</Text>
-              </TouchableOpacity>
+                <Text style={styles.emptyMembersLink}>Add someone ?</Text>
+              </Pressable>
             </View>
           ) : (
-            <View style={styles.memberList}>
-              {activeMembers.map((member) => {
-                return (
-                  <View key={member.id} style={styles.memberRow}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{member.initials}</Text>
-                    </View>
-                    <View style={styles.memberInfo}>
-                      <Text style={styles.memberName}>{member.displayName}</Text>
-                      <Text style={styles.memberMeta}>{member.ageGroup ?? 'adult'}</Text>
-                    </View>
-                    {member.isOwner && (
-                      <View style={styles.ownerBadge}>
-                        <Text style={styles.ownerBadgeText}>You</Text>
+            <>
+              <View style={styles.memberList}>
+                {activeMembers.map((member) => {
+                  const photo = photos[member.id];
+                  return (
+                    <View key={member.id} style={styles.memberRow}>
+                      <View style={[styles.avatar, photo && styles.avatarPhoto]}>
+{photo ? (
+                          <AppImage source={{ uri: photo }} style={styles.avatarImage} />
+                        ) : (
+                          <Text style={styles.avatarText}>{member.initials}</Text>
+                        )}
                       </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
+                      <View style={styles.memberInfo}>
+                        <Text style={styles.memberName}>{member.displayName}</Text>
+                        <Text style={styles.memberMeta}>{member.ageGroup ?? 'adult'}</Text>
+                      </View>
+                      {member.isOwner && (
+                        <View style={styles.ownerBadge}>
+                          <Text style={styles.ownerBadgeText}>You</Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+              <Pressable
+                onPress={() => navigation.navigate('AddPeople')}
+                style={styles.addSomeoneButton}
+              >
+                <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+                <Text style={styles.addSomeoneText}>Add someone +</Text>
+</Pressable>
+            </>
           )}
-        </>
+        </FadeInView>
       )}
     </ScrollView>
   );
@@ -289,9 +318,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  resumeCard: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+resumeCard: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   resumeIcon: {
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -346,8 +375,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
-  memberRowSelected: {
-    borderColor: colors.primary,
+memberRowSelected: {
+    borderColor: colors.borderStrong,
     borderWidth: 2,
     backgroundColor: colors.primaryLight + '44',
   },
@@ -355,15 +384,26 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarPhoto: {
+    backgroundColor: colors.primaryLight,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   avatarSelected: {
     backgroundColor: colors.primaryLight,
   },
-  avatarText: {
-    color: colors.surface,
+avatarText: {
+    color: colors.text,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -392,5 +432,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: colors.secondary,
+  },
+  addSomeoneButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  addSomeoneText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

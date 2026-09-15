@@ -28,7 +28,7 @@ interface RcWebhookEvent {
 
 async function verifySharedSecret(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!env.REVENUECAT_WEBHOOK_SECRET) {
-    throw AppError.internal('REVENUECAT_WEBHOOK_SECRET is not configured');
+    throw AppError.internal('Webhook authentication is not configured');
   }
   const provided = request.headers.authorization ?? '';
   if (!timingSafeEqualStr(provided, `Bearer ${env.REVENUECAT_WEBHOOK_SECRET}`)) {

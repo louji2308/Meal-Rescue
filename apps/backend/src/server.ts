@@ -15,6 +15,11 @@ import {
   startSpoilerAlertScheduler,
   stopSpoilerAlertScheduler,
 } from './services/notifications/spoiler-alert.service';
+import {
+  startPickForMeScheduler,
+  stopPickForMeScheduler,
+} from './services/notifications/pick-for-me.scheduler';
+import { validateOneSignalCredentials } from './services/notifications/notification.service';
 
 /**
  * Process entrypoint: database first, then HTTP, then signals.
@@ -35,10 +40,20 @@ async function main(): Promise<void> {
   // Engagement engine only when OneSignal is actually configured - tests
   // and dry-run dev boots never get a cron timer.
   if (env.ONESIGNAL_APP_ID && env.NODE_ENV !== 'test') {
-    startRescueWindowScheduler();
-    startSpoilerAlertScheduler();
-    startMealMemoryScheduler();
-    app.log.info('Notification schedulers started');
+    const credCheck = await validateOneSignalCredentials();
+    if (credCheck.valid) {
+      app.log.info('OneSignal credentials validated');
+      startRescueWindowScheduler();
+      startSpoilerAlertScheduler();
+      startPickForMeScheduler();
+      startMealMemoryScheduler();
+      app.log.info('Notification schedulers started');
+    } else {
+      app.log.warn(
+        { error: credCheck.error },
+        'OneSignal credential validation failed — schedulers not started',
+      );
+    }
   }
 
   const shutdown = async (signal: string): Promise<void> => {
@@ -46,6 +61,7 @@ async function main(): Promise<void> {
     try {
       await stopRescueWindowScheduler();
       await stopSpoilerAlertScheduler();
+      await stopPickForMeScheduler();
       await stopMealMemoryScheduler();
       await app.close();
       await closeDatabase();

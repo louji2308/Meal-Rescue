@@ -8,7 +8,7 @@ import { env } from '../../config/env';
 import { User } from '../../database/models/user.model';
 import { AppError } from '../../lib/errors';
 import { signAccessToken } from '../../lib/jwt';
-import { LoginInput, RegisterInput } from './auth.schemas';
+import { GoogleLoginInput, LoginInput, RegisterInput } from './auth.schemas';
 
 /**
  * Local email+password auth issuing backend JWTs.
@@ -55,6 +55,80 @@ export class AuthService {
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
       throw AppError.unauthorized('Invalid email or password');
+    }
+
+    return this.issueTokens(user);
+  }
+
+  async googleLogin(input: GoogleLoginInput): Promise<AuthTokens> {
+    if (!env.GOOGLE_WEB_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+      throw AppError.internal('Google OAuth is not configured');
+    }
+
+    // Exchange authorization code for tokens with Google
+    let googleEmail: string;
+    let googleSub: string;
+    try {
+      const tokenParams: Record<string, string> = {
+        code: input.code,
+        client_id: env.GOOGLE_WEB_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: input.redirectUri,
+        grant_type: 'authorization_code',
+      };
+      if (input.codeVerifier) {
+        tokenParams.code_verifier = input.codeVerifier;
+      }
+
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(tokenParams),
+      });
+
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text().catch(() => '');
+        console.error('[auth:google] token exchange failed', {
+          status: tokenRes.status,
+          body: errBody,
+        });
+        throw AppError.unauthorized('Invalid Google authorization code');
+      }
+
+      const tokenData = (await tokenRes.json()) as { id_token?: string };
+      if (!tokenData.id_token) {
+        throw AppError.unauthorized('No ID token returned from Google');
+      }
+
+      // Verify the ID token to get user info
+      const infoRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${tokenData.id_token}`,
+      );
+      if (!infoRes.ok) {
+        throw AppError.unauthorized('Invalid Google token');
+      }
+      const payload = (await infoRes.json()) as { email: string; sub: string };
+      googleEmail = payload.email;
+      googleSub = payload.sub;
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw AppError.unauthorized('Google authentication failed');
+    }
+
+    // Find or create user
+    let user = await User.findOne({ where: { email: googleEmail.toLowerCase() } });
+    if (!user) {
+      user = await User.create({
+        id: randomUUID(),
+        email: googleEmail.toLowerCase(),
+        passwordHash: null,
+        subscriptionTier: 'free',
+        googleId: googleSub,
+        timezone: null,
+        locale: 'en-US',
+      });
+    } else if (!user.googleId) {
+      await user.update({ googleId: googleSub });
     }
 
     return this.issueTokens(user);

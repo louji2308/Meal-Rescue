@@ -17,6 +17,7 @@ const upsertSchema = z.object({
   servings: z.number().int().min(1).max(1000).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   madeAt: z.string().datetime().optional().nullable(),
+  mergeQuantity: z.boolean().optional(),
 });
 
 interface PantryParams {
@@ -64,8 +65,7 @@ export async function pantryRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.user.sub;
     const itemId = request.params.id;
 
-    const { pantry: pantryServiceInner } = buildServices(app.redis);
-    const row = await pantryServiceInner.getPantry(userId);
+    const row = await pantryService.getPantry(userId);
     const item = row.ingredients.find((i) => i.id === itemId);
     if (!item) {
       throw new AppError({
@@ -76,8 +76,12 @@ export async function pantryRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    await pantryServiceInner.markUsed(userId, item.ingredientName);
-    return reply.send({ success: true });
+    const result = await pantryService.markUsed(userId, item.ingredientName);
+    const after = await pantryService.getPantry(userId);
+    const updated = result.removed
+      ? null
+      : (after.ingredients.find((i) => i.id === itemId) ?? null);
+    return reply.send({ ...result, item: updated });
   });
 }
 

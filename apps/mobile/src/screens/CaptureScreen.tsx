@@ -9,14 +9,14 @@ import type {
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
+import { AppImage } from '../components/AppImage';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -211,37 +211,34 @@ export function CaptureScreen() {
           <ErrorBanner error={error} />
 
           {image ? (
-            <TouchableOpacity
+            <Pressable
               style={styles.photoBoxFilled}
-              activeOpacity={0.8}
               onPress={() => void pickPhoto()}
               accessibilityRole="button"
               accessibilityLabel="Change meal photo"
             >
-              <Image source={{ uri: image.uri }} style={styles.preview} />
-            </TouchableOpacity>
+              <AppImage source={{ uri: image.uri }} style={styles.preview} />
+            </Pressable>
           ) : (
             <View style={styles.photoActions}>
-              <TouchableOpacity
+              <Pressable
                 style={styles.photoAction}
-                activeOpacity={0.8}
                 onPress={() => void takePhoto()}
                 accessibilityRole="button"
                 accessibilityLabel="Take a photo of your meal"
               >
-                <Ionicons name="camera" size={28} color={colors.softPeach} />
+                <Ionicons name="camera" size={28} color={colors.rescueAccent} />
                 <Text style={styles.photoActionText}>Take photo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Pressable>
+              <Pressable
                 style={styles.photoAction}
-                activeOpacity={0.8}
                 onPress={() => void pickPhoto()}
                 accessibilityRole="button"
                 accessibilityLabel="Choose a photo from library"
               >
-                <Ionicons name="images" size={28} color={colors.softPurple} />
+                <Ionicons name="images" size={28} color={colors.rescueAccent} />
                 <Text style={styles.photoActionText}>Choose photo</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           )}
 
@@ -260,13 +257,12 @@ export function CaptureScreen() {
             }}
           />
 
-          <TouchableOpacity
+          <Pressable
             style={[
               styles.voiceButton,
               recording && styles.voiceButtonRecording,
               !SPEECH_AVAILABLE && styles.voiceButtonDisabled,
             ]}
-            activeOpacity={0.8}
             disabled={!SPEECH_AVAILABLE}
             onPress={recording ? stopDictation : () => void startDictation()}
             accessibilityRole="button"
@@ -279,9 +275,9 @@ export function CaptureScreen() {
               size={28}
               color={
                 recording
-                  ? colors.softRed
+                  ? colors.rescueAccent
                   : SPEECH_AVAILABLE
-                    ? colors.softPink
+                    ? colors.rescueAccent
                     : colors.textSecondary
               }
             />
@@ -298,14 +294,14 @@ export function CaptureScreen() {
                   ? 'Tap to speak'
                   : 'Voice input unavailable in this build'}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
           {(text.trim() || image) && !busy && (
             <PrimaryButton label="Let's see what we can do" onPress={() => void handleAnalyze()} />
           )}
           {busy && (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <ActivityIndicator size="large" color={colors.rescueAccent} />
             </View>
           )}
         </ScrollView>
@@ -351,7 +347,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   photoActionText: {
-    color: colors.primary,
+    color: colors.rescueAccent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -392,8 +388,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginVertical: spacing.md,
   },
-  voiceButtonRecording: {
-    backgroundColor: '#FDECEA',
+voiceButtonRecording: {
+    backgroundColor: colors.errorSoft,
     borderColor: colors.error,
   },
   voiceButtonDisabled: {
@@ -403,7 +399,7 @@ const styles = StyleSheet.create({
   voiceButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.rescueAccent,
   },
   voiceButtonTextRecording: {
     color: colors.error,
@@ -413,3 +409,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+

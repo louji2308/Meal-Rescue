@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 
 import { getAdEligibility } from '../../services/ads.api';
@@ -42,16 +43,15 @@ export function StaplesShelf({ staples }: StaplesShelfProps) {
       <Text style={styles.label}>Staples that make this work</Text>
       <View style={styles.chipRow}>
         {staples.map((staple) => (
-          <TouchableOpacity
+          <Pressable
             key={staple}
             accessibilityRole="button"
             accessibilityLabel={`Learn about ${staple}`}
             style={styles.chip}
-            activeOpacity={0.8}
             onPress={() => setSelected(staple)}
           >
             <Text style={styles.chipText}>{staple}</Text>
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </View>
 
@@ -70,25 +70,24 @@ export function StaplesShelf({ staples }: StaplesShelfProps) {
                 <Text style={[typography.body, styles.body]}>
                   Keep {selected} on hand and this rescue is always one step away.
                 </Text>
-                <TouchableOpacity
+                <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Find ${selected} in store`}
                   style={styles.storeButton}
-                  activeOpacity={0.85}
                   onPress={() => setSelected(null)}
                 >
                   <Text style={styles.storeButtonText}>Find in store</Text>
-                </TouchableOpacity>
+                </Pressable>
               </>
             )}
-            <TouchableOpacity
+            <Pressable
               accessibilityRole="button"
               accessibilityLabel="Dismiss"
               onPress={() => setSelected(null)}
               style={styles.dismissButton}
             >
               <Text style={styles.dismissText}>Not now</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -154,7 +153,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   storeButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',

@@ -10,6 +10,7 @@ export const PUBLIC_ROUTES = [
   '/docs/',
   '/api/v1/auth/register',
   '/api/v1/auth/login',
+  '/api/v1/auth/google',
   // Server-to-server: authenticates via shared bearer secret, not JWT.
   '/api/v1/webhooks/revenuecat',
 ] as const;

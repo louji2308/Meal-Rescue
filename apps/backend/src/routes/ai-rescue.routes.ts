@@ -8,10 +8,43 @@
  */
 import type { FastifyInstance } from 'fastify';
 
+import { ErrorCategory } from '@meal-rescue/shared-types';
+
+import { AppError } from '../lib/errors';
 import { AiRescueService } from '../services/ai-rescue.service';
 import { buildServices, dbModels } from '../services/composition';
 
 const aiRescue = new AiRescueService();
+
+/** Resolve the verified user id, or null when no token was presented. */
+function authedUserId(request: { user?: { sub?: string } }): string | null {
+  return request.user?.sub ?? null;
+}
+
+async function buildTasteContext(
+  userId: string | null,
+  services: Awaited<ReturnType<typeof buildServices>>,
+): Promise<string | undefined> {
+  if (!userId) return undefined;
+  try {
+    const ctxBuilder = new (
+      await import('../services/rescue-taste-context.service')
+    ).RescueTasteContextBuilder(
+      dbModels,
+      services.tasteSensory,
+      services.tasteTreatment,
+      services.cuisineCompatibility,
+      services.modificationMagnitude,
+      services.tasteExposure,
+      services.tasteEvents,
+    );
+    const ctx = await ctxBuilder.buildContext(userId);
+    return ctxBuilder.formatForPrompt(ctx);
+  } catch {
+    // Taste context is optional — proceed without it
+    return undefined;
+  }
+}
 
 export async function aiRescueRoutes(app: FastifyInstance) {
   const services = buildServices(null);
@@ -26,36 +59,17 @@ export async function aiRescueRoutes(app: FastifyInstance) {
 
     const foods = body.foods as string[] | undefined;
     if (!foods || !Array.isArray(foods) || foods.length === 0) {
-      return reply.status(400).send({
-        success: false,
-        error: { message: 'foods array is required', code: 'VALIDATION_ERROR' },
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'VALIDATION_ERROR',
+        message: 'foods array is required',
+        statusCode: 400,
       });
     }
 
     const timeOfDay = (body.timeOfDay as string) ?? 'afternoon';
 
-    // Build taste context if user is authenticated
-    let tasteContext: string | undefined;
-    const userId = (request as unknown as Record<string, unknown>).userId as string | undefined;
-    if (userId) {
-      try {
-        const ctxBuilder = new (
-          await import('../services/rescue-taste-context.service')
-        ).RescueTasteContextBuilder(
-          dbModels,
-          services.tasteSensory,
-          services.tasteTreatment,
-          services.cuisineCompatibility,
-          services.modificationMagnitude,
-          services.tasteExposure,
-          services.tasteEvents,
-        );
-        const ctx = await ctxBuilder.buildContext(userId);
-        tasteContext = ctxBuilder.formatForPrompt(ctx);
-      } catch {
-        // Taste context is optional — proceed without it
-      }
-    }
+    const tasteContext = await buildTasteContext(authedUserId(request), services);
 
     try {
       const result = await aiRescue.generateRescue({
@@ -71,12 +85,15 @@ export async function aiRescueRoutes(app: FastifyInstance) {
 
       return reply.send({ success: true, data: result });
     } catch (err) {
-      return reply.status(500).send({
-        success: false,
-        error: {
-          message: err instanceof Error ? err.message : 'AI rescue failed',
-          code: 'AI_RESUCE_ERROR',
-        },
+      request.log.error({ err }, 'AI rescue generate failed');
+      throw new AppError({
+        category: ErrorCategory.EXTERNAL_SERVICE_FAILURE,
+        code: 'AI_RESUCE_ERROR',
+        message: 'The AI rescue service is temporarily unavailable',
+        statusCode: 502,
+        recoverable: true,
+        suggestedAction: 'Try again in a few moments',
+        cause: err,
       });
     }
   });
@@ -95,37 +112,15 @@ export async function aiRescueRoutes(app: FastifyInstance) {
     const pushback = body.pushback as string | undefined;
 
     if (!conversation || !originalFoods || !pushback) {
-      return reply.status(400).send({
-        success: false,
-        error: {
-          message: 'conversation, originalFoods, and pushback are required',
-          code: 'VALIDATION_ERROR',
-        },
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'VALIDATION_ERROR',
+        message: 'conversation, originalFoods, and pushback are required',
+        statusCode: 400,
       });
     }
 
-    // Build taste context if user is authenticated
-    let tasteContext: string | undefined;
-    const userId = (request as unknown as Record<string, unknown>).userId as string | undefined;
-    if (userId) {
-      try {
-        const ctxBuilder = new (
-          await import('../services/rescue-taste-context.service')
-        ).RescueTasteContextBuilder(
-          dbModels,
-          services.tasteSensory,
-          services.tasteTreatment,
-          services.cuisineCompatibility,
-          services.modificationMagnitude,
-          services.tasteExposure,
-          services.tasteEvents,
-        );
-        const ctx = await ctxBuilder.buildContext(userId);
-        tasteContext = ctxBuilder.formatForPrompt(ctx);
-      } catch {
-        // Taste context is optional
-      }
-    }
+    const tasteContext = await buildTasteContext(authedUserId(request), services);
 
     try {
       const result = await aiRescue.negotiate({
@@ -137,12 +132,15 @@ export async function aiRescueRoutes(app: FastifyInstance) {
 
       return reply.send({ success: true, data: result });
     } catch (err) {
-      return reply.status(500).send({
-        success: false,
-        error: {
-          message: err instanceof Error ? err.message : 'AI negotiation failed',
-          code: 'AI_NEGOTIATE_ERROR',
-        },
+      request.log.error({ err }, 'AI rescue negotiate failed');
+      throw new AppError({
+        category: ErrorCategory.EXTERNAL_SERVICE_FAILURE,
+        code: 'AI_NEGOTIATE_ERROR',
+        message: 'The AI rescue service is temporarily unavailable',
+        statusCode: 502,
+        recoverable: true,
+        suggestedAction: 'Try again in a few moments',
+        cause: err,
       });
     }
   });

@@ -11,7 +11,7 @@ import Animated, {
 import { colors } from '../../theme';
 
 const PIECE_COUNT = 18;
-const PALETTE = [colors.primary, colors.secondary, '#FFC107', '#4CAF50', '#E91E63'];
+const PALETTE = [colors.softAlert, colors.softWarm, colors.softFresh, colors.softRose, colors.softCool];
 const BURST_MS = 750;
 
 interface PieceSpec {

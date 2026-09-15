@@ -3,7 +3,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../components/PrimaryButton';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { colors, spacing, typography } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
 
 /**
  * REVIEW (plan §33): confirm what was detected before making decisions.
@@ -36,17 +38,26 @@ export function ReviewScreen() {
         : foodNames.slice(0, -1).join(', ') + ' and ' + foodNames[foodNames.length - 1]
       : analysis.detectedIngredients.map((i) => i.name).join(', ') || 'your meal';
 
-  function handleSaveEdit() {
-    // For now, just exit editing mode. The corrected text is passed forward.
+function handleSaveEdit() {
+    // Apply the correction. The corrected text is passed to Intent as an override.
     // A full implementation would re-run meal analysis with the corrected text.
     setEditing(false);
   }
 
-  return (
+  function navigateToIntent() {
+    const params: { analysis: typeof analysis; editedMealText?: string } = { analysis };
+    if (editedText.trim() && editedText.trim() !== mealSummary) {
+      params.editedMealText = editedText.trim();
+    }
+    navigation.navigate('Intent', params);
+  }
+
+return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <FadeInView>
         <View style={styles.hero}>
-          <Ionicons name="restaurant-outline" size={32} color={colors.softGreen} />
+          <Ionicons name="restaurant-outline" size={32} color={colors.rescueAccent} />
           <Text style={[typography.heading, styles.title]}>Here's what I see</Text>
         </View>
 
@@ -62,29 +73,28 @@ export function ReviewScreen() {
               placeholderTextColor={colors.textSecondary}
             />
             <View style={styles.editActions}>
-              <TouchableOpacity style={styles.editCancel} onPress={() => setEditing(false)}>
+              <Pressable style={styles.editCancel} onPress={() => setEditing(false)}>
                 <Text style={styles.editCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.editSave} onPress={handleSaveEdit}>
+              </Pressable>
+              <Pressable style={styles.editSave} onPress={handleSaveEdit}>
                 <Text style={styles.editSaveText}>Save</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         ) : (
-          <TouchableOpacity
+          <Pressable
             style={styles.card}
             onPress={() => {
               setEditedText(mealSummary);
               setEditing(true);
             }}
-            activeOpacity={0.7}
-          >
+            >
             <Text style={styles.mealText}>{mealSummary}</Text>
             <View style={styles.editHint}>
-              <Ionicons name="pencil-outline" size={14} color={colors.softPurple} />
+              <Ionicons name="pencil-outline" size={14} color={colors.rescueAccent} />
               <Text style={styles.editHintText}>Tap to correct</Text>
             </View>
-          </TouchableOpacity>
+          </Pressable>
         )}
 
         {needsConfirm && !editing && (
@@ -101,13 +111,14 @@ export function ReviewScreen() {
           </View>
         )}
 
-        <View style={styles.footer}>
-          <PrimaryButton
-            label="Looks good — let's decide"
-            onPress={() => navigation.navigate('Intent', { analysis })}
-            style={styles.decideButton}
-          />
+<View style={styles.footer}>
+<PrimaryButton
+              label="Looks good — let's decide"
+              onPress={navigateToIntent}
+              style={styles.decideButton}
+            />
         </View>
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );
@@ -155,11 +166,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  editCard: {
+editCard: {
     backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: colors.borderStrong,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
@@ -184,8 +195,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
   },
-  editSave: {
-    backgroundColor: colors.primary,
+editSave: {
+    backgroundColor: colors.text,
     borderRadius: 8,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -210,3 +221,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 });
+

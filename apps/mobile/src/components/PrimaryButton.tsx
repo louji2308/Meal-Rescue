@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, ViewStyle } from 'react-native';
 import { Text } from './AppText';
 import Animated, {
   useAnimatedStyle,
@@ -9,17 +9,26 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { haptics } from '../services/haptics';
-import { colors, spacing } from '../theme';
+import { colors, fonts, radius, spacing, touch } from '../theme';
 import { spring } from '../theme/motion';
 
 interface PrimaryButtonProps {
   label: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'destructive';
   busy?: boolean;
   disabled?: boolean;
   style?: ViewStyle;
 }
+
+const VARIANTS = {
+  primary: { backgroundColor: colors.homeButton, textColor: colors.surface },
+  secondary: { backgroundColor: 'transparent', textColor: colors.text },
+  ghost: { backgroundColor: 'transparent', textColor: colors.text },
+  destructive: { backgroundColor: colors.error, textColor: colors.surface },
+} as const;
+
+const OUTLINED_VARIANTS = new Set(['secondary']);
 
 export function PrimaryButton({
   label,
@@ -29,9 +38,7 @@ export function PrimaryButton({
   disabled = false,
   style,
 }: PrimaryButtonProps) {
-  const isGhost = variant === 'ghost';
-  const backgroundColor = isGhost ? 'transparent' : colors[variant];
-  const textColor = isGhost ? colors.primary : colors.surface;
+  const palette = VARIANTS[variant];
   const pressed = useSharedValue(0);
 
   const animated = useAnimatedStyle(() => ({
@@ -44,11 +51,10 @@ export function PrimaryButton({
   }));
 
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ busy, disabled }}
-      activeOpacity={1}
       disabled={disabled || busy}
       onPressIn={() => {
         if (!disabled && !busy) {
@@ -64,35 +70,41 @@ export function PrimaryButton({
       <Animated.View
         style={[
           styles.base,
-          { backgroundColor },
+          { backgroundColor: palette.backgroundColor },
+          OUTLINED_VARIANTS.has(variant) ? styles.outlined : null,
           disabled || busy ? styles.disabled : null,
           animated,
           style,
         ]}
       >
         {busy ? (
-          <ActivityIndicator color={textColor} />
+          <ActivityIndicator color={palette.textColor} />
         ) : (
-          <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+          <Text style={[styles.label, { color: palette.textColor }]}>{label}</Text>
         )}
       </Animated.View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 28,
+    borderRadius: radius.pill,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: touch.min + 8,
+  },
+  outlined: {
+    borderWidth: 1.5,
+    borderColor: colors.text,
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   label: {
+    fontFamily: fonts.medium,
     fontSize: 16,
     fontWeight: '600',
   },

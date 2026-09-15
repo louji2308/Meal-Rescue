@@ -423,6 +423,8 @@ export interface PlanWeekRequest {
   mealSlots?: MealSlot[];
   strategy?: 'balance' | 'easy' | 'use_expiring' | 'family_favorites';
   confirm?: boolean;
+  /** When a single member is selected, plan ONLY for that member's coverage. */
+  memberIds?: UUID[];
 }
 
 export interface PlanWeekResponse {
@@ -540,4 +542,162 @@ export interface MealMemoryFeedbackResponse {
 
 export interface MealMemoryRulesResponse {
   rules: MealRule[];
+}
+
+export interface MealMemoryReuseWeekRequest {
+  /** Source week to copy (defaults to the week before `toWeekStart`). */
+  fromWeekStart?: string;
+  /** Target week (defaults to the week containing today). Same weekdays are kept. */
+  toWeekStart?: string;
+}
+
+export interface MealMemoryReuseWeekResponse {
+  plan: MealPlan | null;
+  copied: MealEvent[];
+}
+
+export interface MealMemoryRecentsResponse {
+  meals: MealEvent[];
+}
+
+export interface MealMemoryDeactivateRuleResponse {
+  rule: MealRule;
+}
+
+// ---------------------------------------------------------------------------
+// Meal plan intelligence — suggestions, use-what-you-have, weekly summary
+// ---------------------------------------------------------------------------
+//
+// All three features are deterministic first: they are recomputed from the same
+// FoodWorldState the planner uses, so a high-% match is exactly what Plan Week
+// would pick. The AI service may only polish *headline copy afterwards* —
+// ranking and verdicts are reproduced in CI with no API key.
+
+export type MealSuggestionMatchGrade = 'high' | 'medium' | 'low';
+
+export type MealSuggestionReasonKind =
+  | 'affinity'
+  | 'expiry'
+  | 'leftover'
+  | 'effort'
+  | 'favorite'
+  | 'variety'
+  | 'exposure';
+
+export interface MealSuggestionReason {
+  kind: MealSuggestionReasonKind;
+  message: string;
+}
+
+/** An on-hand item a suggested meal would consume. */
+export interface MealSuggestionUsesUp {
+  itemId: UUID;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  kind: 'inventory' | 'expiring' | 'leftover';
+  expiresAt: string | null; // YYYY-MM-DD
+}
+
+export interface MealSuggestion {
+  id: UUID;
+  concept: string;
+  conceptType: 'recipe' | 'leftover';
+  /** 0-100 — how strongly this is a match for the current household + week. */
+  matchPercent: number;
+  matchGrade: MealSuggestionMatchGrade;
+  reasons: MealSuggestionReason[];
+  usesUp: MealSuggestionUsesUp[];
+  /** Calendar positions where this meal ranked as a candidate this week. */
+  fits: SlotKey[];
+  mealRole: MealRole;
+  effort: EffortLevel;
+  prepTimeMinutes: number;
+}
+
+export interface MealIntelligenceContext {
+  openSlots: number;
+  blockedSlots: number;
+  expiringItems: number;
+  leftovers: number;
+  activeConstraints: number;
+}
+
+export interface MealMemorySuggestionsResponse {
+  weekStart: string;
+  mealSlot: MealSlot | null;
+  basedOn: MealIntelligenceContext;
+  suggestions: MealSuggestion[];
+}
+
+export interface MealIdea {
+  id: UUID;
+  concept: string;
+  conceptType: 'recipe' | 'leftover';
+  usesUp: MealSuggestionUsesUp[];
+  estimatedServings: number;
+  effort: EffortLevel;
+  prepTimeMinutes: number;
+  mealRole: MealRole;
+  reasons: MealSuggestionReason[];
+}
+
+export interface MealMemoryUseWhatYouHaveResponse {
+  basedOn: {
+    inventoryCount: number;
+    expiringCount: number;
+    leftoverCount: number;
+    activeConstraints: number;
+  };
+  ideas: MealIdea[];
+}
+
+export interface MealMemoryExpiringItem {
+  name: string;
+  quantity: number;
+  unit: string | null;
+  expiresAt: string;
+  expiresInDays: number;
+}
+
+export interface MealMemoryLeftoverSummary {
+  name: string;
+  servings: number;
+  ageDays: number;
+}
+
+export type MealInsightKind =
+  | 'expiry'
+  | 'leftover'
+  | 'open_slot'
+  | 'favorite'
+  | 'exposure'
+  | 'purchase'
+  | 'engagement'
+  | 'variety';
+
+export interface MealWeeklyInsight {
+  kind: MealInsightKind;
+  message: string;
+}
+
+export interface MealMemorySummaryResponse {
+  weekStart: string;
+  /** Deterministic unless the AI polish layer is enabled. */
+  headline: string;
+  planning: {
+    planned: number;
+    confirmed: number;
+    eaten: number;
+    openSlots: number;
+    blockedSlots: number;
+    coveragePercent: number;
+  };
+  expiringSoon: MealMemoryExpiringItem[];
+  leftovers: MealMemoryLeftoverSummary[];
+  purchaseNeeds: { ingredient: string; reason: string }[];
+  insights: MealWeeklyInsight[];
+  /** The top suggestion for the week, if any exists. */
+  highlight: { concept: string; message: string } | null;
+  engagement: { recordedMeals: number; plannedMeals: number; recordRatio: number };
 }

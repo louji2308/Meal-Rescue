@@ -14,3 +14,7 @@ export function registerAccount({ email, password }: Credentials): Promise<AuthT
 export function loginWithCredentials({ email, password }: Credentials): Promise<AuthTokens> {
   return api.post<AuthTokens>('/api/v1/auth/login', { email, password }).then((res) => res.data);
 }
+
+export function loginWithGoogle(idToken: string): Promise<AuthTokens> {
+  return api.post<AuthTokens>('/api/v1/auth/google', { idToken }).then((res) => res.data);
+}

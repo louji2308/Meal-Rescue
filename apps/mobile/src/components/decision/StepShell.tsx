@@ -4,6 +4,7 @@ import { Text } from '../AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing, typography } from '../../theme';
+import { FadeInView } from '../motion/FadeInView';
 
 /**
  * Shared layout shell for the V2 decision steps (intent / reality / craving).
@@ -28,12 +29,14 @@ export function StepShell({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <FadeInView>
         <View style={styles.header}>
           <Text style={[typography.caption, styles.step]}>{step} of 3 quick questions</Text>
           <Text style={[typography.title, styles.title]}>{title}</Text>
           {subtitle ? <Text style={[typography.body, styles.subtitle]}>{subtitle}</Text> : null}
         </View>
         <View style={styles.body}>{children}</View>
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );

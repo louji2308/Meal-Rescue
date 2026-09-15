@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useRef } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../motion/Pressable';
 import { Text } from '../AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +12,7 @@ import {
   useSatisfactionCheckin,
 } from '../checkins/useSatisfactionCheckin';
 import { aftercareColors } from './tokens';
+import { FadeInView } from '../motion/FadeInView';
 
 /** Route params for SATISFACTION_ROUTE: { rescueId, recommendation }. */
 export interface SatisfactionCheckinParams {
@@ -106,7 +108,7 @@ export function SatisfactionCheckinScreen({
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <Text style={styles.eyebrow}>A quick check-in</Text>
-        <TouchableOpacity
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close check-in"
           onPress={close}
@@ -114,19 +116,20 @@ export function SatisfactionCheckinScreen({
           style={styles.closeButton}
         >
           <Text style={styles.closeText}>Done for now</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[typography.title, styles.question]}>Did that hit the spot?</Text>
         <Text style={styles.context}>For: {recommendation}</Text>
 
+        <FadeInView key={submitted ? 'thanks' : 'options'}>
         {!submitted && (
           <View style={styles.options}>
             {OPTIONS.map((option) => {
               const on = picked.current === option.value;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={option.value}
                   accessibilityRole="button"
                   accessibilityLabel={option.label}
@@ -134,14 +137,13 @@ export function SatisfactionCheckinScreen({
                   disabled={busy}
                   onPress={() => choose(option.value)}
                   style={[styles.option, on && styles.optionOn]}
-                  activeOpacity={0.8}
                 >
                   <Text style={styles.optionEmoji}>{option.emoji}</Text>
                   <View style={styles.optionTextWrap}>
                     <Text style={styles.optionLabel}>{option.label}</Text>
                     <Text style={styles.optionHint}>{option.hint}</Text>
                   </View>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
             {busy && <Text style={styles.note}>Noting that down…</Text>}
@@ -179,32 +181,30 @@ export function SatisfactionCheckinScreen({
                   {reasons.map((reason) => {
                     const on = postedReasons.current.includes(reason);
                     return (
-                      <TouchableOpacity
+                      <Pressable
                         key={reason}
                         accessibilityRole="button"
                         accessibilityLabel={reason}
                         accessibilityState={{ selected: on }}
                         onPress={() => picked.current && addReason(picked.current, reason)}
                         style={[styles.reasonChip, on && styles.reasonChipOn]}
-                        activeOpacity={0.7}
                       >
                         <Text style={[styles.reasonText, on && styles.reasonTextOn]}>{reason}</Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     );
                   })}
                 </View>
               </View>
             )}
 
-            <TouchableOpacity
+            <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close check-in"
               onPress={close}
               style={styles.done}
-              activeOpacity={0.7}
             >
               <Text style={styles.doneText}>Back to my meal</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         )}
 
@@ -213,17 +213,17 @@ export function SatisfactionCheckinScreen({
             <Text style={styles.errorText}>
               Couldn’t save that just now. No big deal — it didn’t go anywhere.
             </Text>
-            <TouchableOpacity
+            <Pressable
               accessibilityRole="button"
               accessibilityLabel="Try again"
               onPress={() => picked.current && submit(picked.current, postedReasons.current)}
               style={styles.retry}
-              activeOpacity={0.7}
             >
               <Text style={styles.retryText}>Try again</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         )}
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );
@@ -379,8 +379,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   reasonChipOn: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.homeTintNeutral,
+    borderColor: colors.borderStrong,
   },
   reasonText: {
     fontSize: 14,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   reasonTextOn: {
-    color: colors.surface,
+    color: colors.text,
   },
   done: {
     alignSelf: 'center',
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   doneText: {
-    color: colors.primary,
+    color: colors.rescueAccent,
     fontSize: 15,
     fontWeight: '600',
   },

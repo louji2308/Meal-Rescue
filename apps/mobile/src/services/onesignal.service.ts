@@ -16,6 +16,14 @@ import type { NotificationClickEvent } from 'react-native-onesignal';
  * the config plugin).
  */
 
+export type NotificationActionButton = 'make_it' | 'later' | 'not_tonight';
+
+export interface ActionButtonPayload {
+  actionId: NotificationActionButton;
+  deepLink?: string;
+  kind?: string;
+}
+
 let _oneSignal: typeof import('react-native-onesignal').OneSignal | null = null;
 
 function getOneSignal(): typeof import('react-native-onesignal').OneSignal | null {
@@ -97,6 +105,85 @@ export function hasOneSignalAppId(): boolean {
   return Boolean(process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID);
 }
 
+/** Parsed result of a mealrescue:// deep link. */
+export interface ParsedDeepLink {
+  route: string;
+  params?: Record<string, string>;
+}
+
+const _DEEP_LINK_HOSTS = new Set(['rescue', 'pantry', 'home']);
+
+/**
+ * Parses a mealrescue:// deep link into a route and optional params.
+ *
+ * Supported forms:
+ *   mealrescue://rescue           → home tab
+ *   mealrescue://pantry           → kitchen tab
+ *   mealrescue://home             → home tab
+ *   mealrescue://rescue?dish=X    → home tab with dish param
+ *   mealrescue://rescue/dish=X    → home tab with dish param (trailing slash variant)
+ *
+ * Returns null for unrecognized schemes or hosts.
+ */
+export function parseDeepLink(url: string): ParsedDeepLink | null {
+  try {
+    const normalized = url.trim();
+    if (!normalized.startsWith('mealrescue://')) return null;
+
+    const afterScheme = normalized.slice('mealrescue://'.length);
+    // Strip trailing slashes and fragments
+    const cleaned = afterScheme.replace(/[/#?].*$/, '');
+    const host = cleaned.toLowerCase();
+
+    // Extract query string if present
+    const qIndex = afterScheme.indexOf('?');
+    const params: Record<string, string> = {};
+    if (qIndex !== -1) {
+      const qs = afterScheme.slice(qIndex + 1).replace(/[#/].*$/, '');
+      qs.split('&').forEach((pair) => {
+        const [k, v] = pair.split('=');
+        if (k) {
+          try {
+            params[decodeURIComponent(k)] = decodeURIComponent(v ?? '');
+          } catch {
+            params[k] = v ?? '';
+          }
+        }
+      });
+    }
+
+    // Also handle path-style params: mealrescue://rescue/dish=X
+    const slashIndex = afterScheme.indexOf('/');
+    if (slashIndex !== -1 && qIndex === -1) {
+      const pathSegment = afterScheme.slice(slashIndex + 1).replace(/[#?/].*$/, '');
+      const eqIndex = pathSegment.indexOf('=');
+      if (eqIndex !== -1) {
+        const k = pathSegment.slice(0, eqIndex);
+        const v = pathSegment.slice(eqIndex + 1);
+        try {
+          params[decodeURIComponent(k)] = decodeURIComponent(v);
+        } catch {
+          params[k] = v;
+        }
+      }
+    }
+
+    if (host === 'rescue' || host === 'home') {
+      const route = 'Tabs' as const;
+      const result: ParsedDeepLink = { route };
+      if (params.dish) result.params = { dish: params.dish };
+      return result;
+    }
+    if (host === 'pantry') {
+      return { route: 'Tabs' };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Payload carried by an aftercare (satisfaction check-in) notification. */
 export interface AftercareNotificationPayload {
   rescueId: string;
@@ -138,6 +225,79 @@ function aftercarePayloadFromClick(
   });
 }
 
+/** A push as captured from the SDK's newest event first, for the inbox. */
+export interface IncomingPush {
+  id: string;
+  title: string;
+  body: string;
+  kind: string;
+  deepLink?: string;
+}
+
+function readIncomingPush(notification: unknown): IncomingPush | null {
+  if (!notification || typeof notification !== 'object') return null;
+  const n = notification as Record<string, unknown>;
+  const title = typeof n.title === 'string' ? n.title : '';
+  const body = typeof n.body === 'string' ? n.body : '';
+  if (!title && !body) return null;
+  const id =
+    typeof n.notificationId === 'string'
+      ? n.notificationId
+      : typeof n.id === 'string'
+        ? n.id
+        : `push-${Date.now()}`;
+  const additionalData = isRecord(n.additionalData) ? n.additionalData : {};
+  const kind = typeof additionalData.kind === 'string' ? additionalData.kind : 'push';
+  const deepLink =
+    typeof additionalData.deepLink === 'string' && additionalData.deepLink.length > 0
+      ? additionalData.deepLink
+      : undefined;
+  return { id, title, body, kind, deepLink };
+}
+
+/**
+ * Records every incoming push (delivered and opened) so the inbox can show
+ * them without inventing anything. Subscribes to both foreground display and
+ * click; the store dedupes the same push surfacing twice. Returns a single
+ * unsubscribe for both.
+ */
+export function onIncomingPush(
+  handler: (push: IncomingPush) => void,
+): () => void {
+  if (!hasOneSignalAppId()) return () => undefined;
+  const os = getOneSignal();
+  if (!os) return () => undefined;
+
+  const notifications = os.Notifications;
+
+  const handleForeground = (event: {
+    getNotification?: () => unknown;
+    notification?: unknown;
+  }) => {
+    let raw: unknown = null;
+    try {
+      raw = typeof event.getNotification === 'function' ? event.getNotification() : event.notification;
+    } catch {
+      raw = event.notification ?? null;
+    }
+    const push = readIncomingPush(raw);
+    if (push) handler(push);
+  };
+
+  const handleClick = (event: { notification?: unknown }) => {
+    const push = readIncomingPush(event.notification);
+    if (push) handler(push);
+  };
+
+  notifications.addEventListener('foregroundWillDisplay', handleForeground);
+  notifications.addEventListener('click', handleClick);
+
+  return () => {
+    notifications.removeEventListener('foregroundWillDisplay', handleForeground);
+    notifications.removeEventListener('click', handleClick);
+  };
+}
+
 /**
  * Aftercare notification-open listener.
  *
@@ -156,6 +316,43 @@ export function onAftercareNotificationClick(
     const payload = aftercarePayloadFromClick(event);
     if (payload) handler(payload);
   };
+  os.Notifications.addEventListener('click', listener);
+  return () => os.Notifications.removeEventListener('click', listener);
+}
+
+/**
+ * Action button click handler.
+ *
+ * When a user taps an action button (Make it, Later, Not tonight),
+ * this listener receives the action ID and the notification's additionalData.
+ * Returns an unsubscribe function.
+ */
+export function onActionButtonClick(
+  handler: (payload: ActionButtonPayload) => void,
+): () => void {
+  if (!hasOneSignalAppId()) return () => undefined;
+  const os = getOneSignal();
+  if (!os) return () => undefined;
+
+  const listener = (event: NotificationClickEvent) => {
+    const additionalData = event.notification?.additionalData;
+    if (!additionalData || typeof additionalData !== 'object') return;
+
+    // OneSignal passes actionId on the event when a button is clicked
+    const actionId = (event as { actionId?: string }).actionId;
+    if (!actionId) return;
+
+    const validActions: NotificationActionButton[] = ['make_it', 'later', 'not_tonight'];
+    if (!validActions.includes(actionId as NotificationActionButton)) return;
+
+    const data = additionalData as Record<string, unknown>;
+    handler({
+      actionId: actionId as NotificationActionButton,
+      deepLink: typeof data.deepLink === 'string' ? data.deepLink : undefined,
+      kind: typeof data.kind === 'string' ? data.kind : undefined,
+    });
+  };
+
   os.Notifications.addEventListener('click', listener);
   return () => os.Notifications.removeEventListener('click', listener);
 }

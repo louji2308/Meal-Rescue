@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable } from '../../components/motion/Pressable';
 
 import { Text } from '../../components/AppText';
 import { TextInput } from '../../components/AppTextInput';
@@ -14,6 +15,7 @@ import { toApiError } from '../../services/api';
 import { completeMeal, submitMealFeedback } from '../../services/common-table.api';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
+import { FadeInView } from '../../components/motion/FadeInView';
 
 type PersonChoice = 'loved' | 'worked' | 'not_really' | 'skipped';
 
@@ -32,7 +34,7 @@ const OVERALL_OPTIONS: { key: 'loved' | 'worked' | 'not_really'; label: string; 
 ];
 
 /**
- * How Did It Go? â€” step 3. One row per person (Loved it / It worked /
+ * How Did It Go? — step 3. One row per person (Loved it / It worked /
  * Not really / Skipped) plus an overall rating and an optional note. Saves
  * the finish ledger, then the taste feedback, then closes the loop.
  */
@@ -104,7 +106,7 @@ export function HowDidItGoScreen() {
   if (done) {
     return (
       <View style={styles.doneCenter}>
-        <Ionicons name="checkmark-circle" size={56} color={colors.softGreen} />
+        <Ionicons name="checkmark-circle" size={56} color={colors.softAlert} />
         <Text style={styles.doneTitle}>Meal recorded!</Text>
         <Text style={styles.doneText}>
           We saved what worked so the next table planning starts smarter.
@@ -121,17 +123,17 @@ export function HowDidItGoScreen() {
     );
   }
 
-  return (
+return (
     <ScrollView contentContainerStyle={styles.content}>
+      <FadeInView>
       <ErrorBanner error={error} />
 
       <Text style={styles.labelPremium}>How did the meal go overall?</Text>
       <View style={styles.ratingRow}>
         {OVERALL_OPTIONS.map((opt) => (
-          <TouchableOpacity
+          <Pressable
             key={opt.key}
             style={[styles.ratingChip, overall === opt.key && styles.ratingChipActive]}
-            activeOpacity={0.8}
             onPress={() => setOverall(opt.key)}
             accessibilityRole="radio"
             accessibilityState={{ selected: overall === opt.key }}
@@ -144,7 +146,7 @@ export function HowDidItGoScreen() {
             <Text style={[styles.ratingText, overall === opt.key && styles.ratingTextActive]}>
               {opt.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </View>
 
@@ -169,10 +171,9 @@ export function HowDidItGoScreen() {
                   </View>
                   <View style={styles.memberRatings}>
                     {PERSON_OPTIONS.map((opt) => (
-                      <TouchableOpacity
+                      <Pressable
                         key={opt.key}
                         style={[styles.miniChip, choice === opt.key && styles.miniChipActive]}
-                        activeOpacity={0.8}
                         onPress={() => {
                           if (choice === opt.key) {
                             const next: Record<string, PersonChoice> = { ...personChoices };
@@ -198,7 +199,7 @@ export function HowDidItGoScreen() {
                         >
                           {opt.label}
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     ))}
                   </View>
                 </View>
@@ -223,8 +224,9 @@ export function HowDidItGoScreen() {
         onPress={() => void handleSaveAndLearn()}
         busy={busy}
         disabled={!overall}
-        style={styles.submitButton}
+style={styles.submitButton}
       />
+      </FadeInView>
     </ScrollView>
   );
 }
@@ -289,17 +291,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  ratingChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+ratingChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.borderStrong,
   },
   ratingText: {
     fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '600',
   },
-  ratingTextActive: {
-    color: colors.surface,
+ratingTextActive: {
+    color: colors.text,
   },
   memberList: {
     gap: spacing.sm,
@@ -317,16 +319,18 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.sm,
   },
-  avatar: {
+avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: colors.surface,
+    color: colors.text,
     fontSize: 14,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -361,9 +365,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
   },
-  miniChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+miniChipActive: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   miniChipText: {
     fontSize: 12,

@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import Constants from 'expo-constants';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Linking,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,16 +20,19 @@ import type { PersonalizationInsight, PreferenceLearned } from '@meal-rescue/sha
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { Skeleton } from '../components/Skeleton';
+import { FadeInView } from '../components/motion/FadeInView';
 import { PawStamp } from '../components/mascot/PawStamp';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { getLearnedPreferences, getPersonalizationInsights } from '../services/preference.api';
 import { getTasteBundle } from '../services/taste.api';
 import { useAuthStore } from '../stores/auth.store';
+import { useCommonTableStore } from '../stores/common-table.store';
 import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
 
-const APK_VERSION = '0.1.0';
+const APK_VERSION = Constants.expoConfig?.version ?? Constants.nativeApplicationVersion ?? '0.1.0';
 const NOTIFICATIONS_KEY = 'meal-rescue/notifications-enabled';
 const SUPPORT_EMAIL = 'support@mealrescue.app';
 
@@ -39,31 +44,26 @@ export function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const household = useCommonTableStore((state) => state.household);
+  const members = useCommonTableStore((state) => state.members);
+  const loadHousehold = useCommonTableStore((state) => state.loadHousehold);
 
   const [preferences, setPreferences] = useState<PreferenceLearned[]>([]);
   const [insights, setInsights] = useState<PersonalizationInsight[]>([]);
   const [tasteCount, setTasteCount] = useState(0);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [notificationsOn, setNotificationsOn] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
   const tier = useMonetization((state) => state.tier);
   const rescueCredits = useMonetization((state) => state.rescueCredits);
   const refresh = useMonetization((state) => state.refresh);
   const isEffectivePro = tier === 'pro' || user?.subscriptionTier === 'pro';
+  const lastLoadedAt = useRef(0);
 
-  useEffect(() => {
-    loadProfile();
-    void refresh();
-    AsyncStorage.getItem(NOTIFICATIONS_KEY).then((val) => {
-      if (val !== null) setNotificationsOn(val === 'true');
-    });
-  }, [refresh]);
-
-  async function handleToggleNotifications(next: boolean) {
-    setNotificationsOn(next);
-    await AsyncStorage.setItem(NOTIFICATIONS_KEY, String(next));
-  }
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
+    if (mode === 'refresh') setRefreshing(true);
+    if (mode === 'initial' && !lastLoadedAt.current) setProfileLoading(true);
     try {
       const [prefs, ins, bundle] = await Promise.all([
         getLearnedPreferences(),
@@ -75,9 +75,38 @@ export function ProfileScreen() {
       if (bundle) {
         setTasteCount(bundle.journal.length + (bundle.memories?.length ?? 0));
       }
+      lastLoadedAt.current = Date.now();
+      setError(null);
     } catch (err) {
       setError(toApiError(err));
+    } finally {
+      setProfileLoading(false);
+      setRefreshing(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void loadProfile();
+    void loadHousehold().catch((err) => {
+      console.warn('[ProfileScreen] household load failed:', err);
+    });
+    void refresh();
+    AsyncStorage.getItem(NOTIFICATIONS_KEY).then((val) => {
+      if (val !== null) setNotificationsOn(val === 'true');
+    });
+  }, [refresh, loadHousehold]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Date.now() - lastLoadedAt.current > 60_000) {
+        void loadProfile('background');
+      }
+    }, [loadProfile]),
+  );
+
+  async function handleToggleNotifications(next: boolean) {
+    setNotificationsOn(next);
+    await AsyncStorage.setItem(NOTIFICATIONS_KEY, String(next));
   }
 
   const confidenceColor = (score: number) => {
@@ -103,9 +132,23 @@ export function ProfileScreen() {
     }
   };
 
-  return (
+return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      {profileLoading ? (
+        <ScrollView contentContainerStyle={styles.content}>
+          <Skeleton height={20} width="55%" style={{ marginBottom: spacing.sm }} />
+          <Skeleton height={14} width="35%" />
+          <Skeleton height={64} borderRadius={12} style={{ marginTop: spacing.lg }} />
+          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
+        </ScrollView>
+      ) : (
+      <FadeInView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void loadProfile('refresh')} tintColor={colors.textSecondary} />
+        }
+      >
         <View style={styles.identity}>
           <Text style={[typography.heading, styles.email]}>{user?.email}</Text>
           <View style={[styles.tierRow, styles.tier]}>
@@ -113,19 +156,18 @@ export function ProfileScreen() {
             <Text style={typography.caption}>
               {isEffectivePro
                 ? 'Pro plan'
-                : `Free plan Â· 3 rescues/day${rescueCredits > 0 ? ` Â· +${rescueCredits} bonus` : ''}`}
+                : `Free plan · 3 rescues/day${rescueCredits > 0 ? ` · +${rescueCredits} bonus` : ''}`}
             </Text>
           </View>
         </View>
 
         {tier === 'free' && (
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Upgrade to Meal Rescue Pro"
             onPress={() => navigation.navigate('Paywall')}
             style={styles.proRow}
-            activeOpacity={0.7}
-          >
+            >
             <View style={styles.proLeft}>
               <PawStamp size={24} rotation={0} />
               <View>
@@ -137,18 +179,43 @@ export function ProfileScreen() {
                 </Text>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.softViolet} />
-          </TouchableOpacity>
+            <Ionicons name="chevron-forward" size={20} color={colors.homeInk} />
+          </Pressable>
         )}
 
         <View style={styles.section}>
           <View style={styles.sectionTitle}>
-            <Ionicons name="settings-outline" size={20} color={colors.softViolet} />
+            <Ionicons name="people-outline" size={20} color={colors.homeInk} />
+            <Text style={styles.sectionTitleText}>Common Table</Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Common Table — add the people you cook for"
+            onPress={() => navigation.navigate('CommonTableStack')}
+            style={styles.settingRow}
+            >
+            <Ionicons name="restaurant-outline" size={22} color={colors.homeInk} />
+            <View style={styles.settingLabel}>
+              <Text style={styles.settingTitle}>Add your partner</Text>
+              <Text style={styles.settingSub}>
+                {household
+                  ? `One meal for everyone · ${members.length} at the table`
+                  : 'Add the people you cook for to plan one meal together'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.homeInk} />
+          </Pressable>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionTitle}>
+            <Ionicons name="settings-outline" size={20} color={colors.homeInk} />
             <Text style={styles.sectionTitleText}>Settings</Text>
           </View>
 
           <View style={styles.settingRow}>
-            <Ionicons name="notifications-outline" size={22} color={colors.softPink} />
+            <Ionicons name="notifications-outline" size={22} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Reminders</Text>
               <Text style={styles.settingSub}>Rescue reminders and smart nudges</Text>
@@ -157,48 +224,46 @@ export function ProfileScreen() {
               accessibilityLabel="Toggle reminders"
               value={notificationsOn}
               onValueChange={(v) => void handleToggleNotifications(v)}
-              trackColor={{ true: colors.primary, false: colors.border }}
+              trackColor={{ true: colors.kitchenPillActive, false: colors.border }}
               thumbColor={colors.surface}
             />
           </View>
 
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Contact support"
             onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
             style={styles.settingRow}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="mail-outline" size={22} color={colors.softPurple} />
+            >
+            <Ionicons name="mail-outline" size={22} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Support</Text>
               <Text style={styles.settingSub}>{SUPPORT_EMAIL}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.softViolet} />
-          </TouchableOpacity>
+            <Ionicons name="chevron-forward" size={18} color={colors.homeInk} />
+          </Pressable>
 
           <View style={styles.settingRow}>
-            <Ionicons name="information-circle-outline" size={22} color={colors.softCyan} />
+            <Ionicons name="information-circle-outline" size={22} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>About Meal Rescue</Text>
               <Text style={styles.settingSub}>Version {APK_VERSION}</Text>
             </View>
           </View>
 
-          <TouchableOpacity
+          <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open taste journal"
             onPress={() => navigation.navigate('TasteJournal')}
             style={styles.settingRow}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="book-outline" size={22} color={colors.softPeach} />
+            >
+            <Ionicons name="book-outline" size={22} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Taste Journal</Text>
               <Text style={styles.settingSub}>What Meal Rescue remembers about you</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.softViolet} />
-          </TouchableOpacity>
+            <Ionicons name="chevron-forward" size={18} color={colors.homeInk} />
+          </Pressable>
         </View>
 
         <ErrorBanner error={error} />
@@ -206,7 +271,7 @@ export function ProfileScreen() {
         {insights.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitle}>
-              <Ionicons name="sparkles-outline" size={20} color={colors.softYellow} />
+              <Ionicons name="sparkles-outline" size={20} color={colors.homeInk} />
               <Text style={styles.sectionTitleText}>What Meal Rescue has learned</Text>
             </View>
             {insights.map((insight, i) => (
@@ -215,7 +280,7 @@ export function ProfileScreen() {
                   name={typeIcon(insight.type)}
                   size={24}
                   style={styles.insightIcon}
-                  color={colors.softViolet}
+                  color={colors.homeInk}
                 />
                 <View style={styles.insightContent}>
                   <Text style={styles.insightDesc}>{insight.description}</Text>
@@ -238,7 +303,7 @@ export function ProfileScreen() {
         {preferences.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitle}>
-              <Ionicons name="stats-chart-outline" size={20} color={colors.softGreen} />
+              <Ionicons name="stats-chart-outline" size={20} color={colors.homeInk} />
               <Text style={styles.sectionTitleText}>Learned preferences</Text>
             </View>
             {preferences.map((pref, i) => (
@@ -248,7 +313,7 @@ export function ProfileScreen() {
                 <Text
                   style={[styles.prefConfidence, { color: confidenceColor(pref.confidenceScore) }]}
                 >
-                  {Math.round(pref.confidenceScore * 100)}% confidence Â· {pref.observationCount}{' '}
+                  {Math.round(pref.confidenceScore * 100)}% confidence · {pref.observationCount}{' '}
                   observations
                 </Text>
               </View>
@@ -261,7 +326,7 @@ export function ProfileScreen() {
             <Ionicons
               name="sparkles-outline"
               size={48}
-              color={colors.softPurple}
+              color={colors.homeInk}
               style={styles.emptyIcon}
             />
             <Text style={styles.emptyText}>No learnings yet</Text>
@@ -272,12 +337,14 @@ export function ProfileScreen() {
         )}
 
         <PrimaryButton
-          label="Sign out"
+label="Sign out"
           variant="ghost"
           onPress={clearSession}
           style={styles.signOut}
         />
       </ScrollView>
+      </FadeInView>
+      )}
     </SafeAreaView>
   );
 }
@@ -290,6 +357,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.lg,
+    paddingBottom: 120,
   },
   identity: {
     alignItems: 'center',
@@ -444,3 +512,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
 });
+

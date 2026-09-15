@@ -382,3 +382,28 @@ function dateKeyForLocal(): string {
 function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
+
+/**
+ * Narrow a household Situation Model to one member's coverage. Household-wide
+ * events (memberIds null) stay visible; events stamped for other members only
+ * are hidden so a single-member view never leaks the whole household plan.
+ * Pure and exported so coverage-scope behaviour is unit-testable.
+ */
+export function narrowCoverageForMember(
+  world: FoodWorldState,
+  memberId: UUID | null,
+): FoodWorldState {
+  if (!memberId) return world;
+  const includes = (event: MealEvent): boolean =>
+    event.memberIds == null || event.memberIds.includes(memberId);
+  const planned = world.plannedMeals.filter(includes);
+  return {
+    ...world,
+    plannedMeals: planned,
+    actualMeals: world.actualMeals.filter(includes),
+    recentMeals: world.recentMeals.filter(includes),
+    openSlots: planned
+      .filter((m) => m.slotStatus === 'OPEN' && m.dateKey)
+      .map((m) => ({ dateKey: m.dateKey!, mealSlot: m.mealSlot })),
+  };
+}

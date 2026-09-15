@@ -23,6 +23,22 @@ type PurchasesApi = typeof import('react-native-purchases').default;
 
 let _purchasesModule: PurchasesApi | null | undefined;
 
+/** Active API key for the current platform, or undefined when unavailable. */
+function platformAPIKey(): string | undefined {
+  const apiKey =
+    Platform.OS === 'android'
+      ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY
+      : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
+  if (!apiKey) return undefined;
+  // RevenueCat `test_` keys only work in Simulated Store mode, which RevenueCat
+  // enables for debug/dev builds. Shipping a test key in a release build makes
+  // the SDK show a "Wrong API Key" dialog and force-close the app. Treat it as
+  // unconfigured outside __DEV__ so the release app stays usable with the
+  // paywall's static (purchase-disabled) fallback.
+  if (apiKey.startsWith('test_') && !__DEV__) return undefined;
+  return apiKey;
+}
+
 function getPurchases(): PurchasesApi | null {
   if (_purchasesModule !== undefined) return _purchasesModule;
   try {
@@ -36,10 +52,7 @@ function getPurchases(): PurchasesApi | null {
 }
 
 export function hasRevenueCatKeys(): boolean {
-  if (Platform.OS === 'android') {
-    return Boolean(process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY);
-  }
-  return Boolean(process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY);
+  return Boolean(platformAPIKey());
 }
 
 export function isRevenueCatConfigured(): boolean {
@@ -51,13 +64,11 @@ export function configurePurchasesIfReady(appUserId?: string): void {
     return;
   }
   try {
-    const apiKey =
-      Platform.OS === 'android'
-        ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY
-        : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
+    const apiKey = platformAPIKey();
+    if (!apiKey) return;
     const purchases = getPurchases();
     if (!purchases) return;
-    purchases.configure({ apiKey: apiKey!, appUserID: appUserId });
+    purchases.configure({ apiKey, appUserID: appUserId });
     configured = true;
   } catch {
     // Configuration failures (missing native module in Expo Go, bad key

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable } from './motion/Pressable';
 import { Text } from './AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -36,12 +37,12 @@ export function RescueCard({
       <View style={styles.card}>
         <View style={styles.header}>
           <View style={styles.badge}>
-            <Ionicons name="help-buoy" size={20} color={colors.softCyan} />
+            <Ionicons name="help-buoy" size={20} color={colors.rescueAccent} />
             <Text style={styles.badgeText}>Meal Rescue</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel="Close">
-            <Ionicons name="close" size={24} color={colors.softRed} />
-          </TouchableOpacity>
+          <Pressable onPress={onClose} style={styles.closeBtn} accessibilityLabel="Close" hitSlop={8}>
+            <Ionicons name="close" size={24} color={colors.rescueAccent} />
+          </Pressable>
         </View>
 
         <Text style={styles.mealLabel}>Your meal</Text>
@@ -59,11 +60,11 @@ export function RescueCard({
 
         <View style={styles.meta}>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={16} color={colors.softCyan} />
+            <Ionicons name="time-outline" size={16} color={colors.rescueAccent} />
             <Text>{timeMinutes} min</Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="flash-outline" size={16} color={colors.softYellow} />
+            <Ionicons name="flash-outline" size={16} color={colors.rescueAccent} />
             <Text>Extra effort: {effort}</Text>
           </View>
         </View>
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.rescueAccent,
   },
   closeBtn: {
     padding: spacing.xs,
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   rescueText: {
     fontSize: 18,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.rescueAccent,
     marginBottom: spacing.md,
   },
   whyLabel: {
@@ -161,3 +162,4 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
 });
+

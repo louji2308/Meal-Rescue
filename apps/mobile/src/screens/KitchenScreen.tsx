@@ -1,42 +1,38 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
+  Image,
   KeyboardAvoidingView,
+  Pressable,
   Modal,
   Platform,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { Skeleton } from '../components/Skeleton';
 import { toApiError } from '../services/api';
 import {
   type KitchenDashboard,
   type KitchenItem,
-  type KitchenSignal,
-  type KitchenOpportunity,
-  type WhatCanIMakeIdea,
   getKitchenDashboard,
   identifyKitchenFood,
-  whatCanIMake,
   upsertKitchenItem,
   deleteKitchenItem,
   markKitchenItemUsed,
 } from '../services/kitchen.api';
 import { colors, spacing, typography } from '../theme';
+import EMPTY_KITCHEN from '../../assets/empty-kitchen.png';
 
-type ViewMode = 'explore' | 'manage';
 type AddKind = 'pantry' | 'leftover';
 
 const STATE_COLORS: Record<string, string> = {
@@ -55,7 +51,7 @@ const STATE_LABELS: Record<string, string> = {
   gone: 'Gone',
 };
 
-const SIGNAL_ICONS: Record<string, string> = {
+const _SIGNAL_ICONS: Record<string, string> = {
   use_first: 'alert-circle',
   almost_a_meal: 'restaurant',
   expiring_soon: 'time',
@@ -63,7 +59,7 @@ const SIGNAL_ICONS: Record<string, string> = {
   unused_long: 'hourglass',
 };
 
-const SIGNAL_COLORS: Record<string, string> = {
+const _SIGNAL_COLORS: Record<string, string> = {
   use_first: colors.softRed,
   almost_a_meal: colors.softGreen,
   expiring_soon: colors.softCyan,
@@ -72,14 +68,9 @@ const SIGNAL_COLORS: Record<string, string> = {
 };
 
 export function KitchenScreen() {
-  const [view, setView] = useState<ViewMode>('explore');
   const [dashboard, setDashboard] = useState<KitchenDashboard | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
-
-  // Horizontal pager (Explore = page 0, Manage = page 1)
-  const pagerRef = useRef<ScrollView>(null);
-  const [pageWidth, setPageWidth] = useState(() => Dimensions.get('window').width);
 
   // Camera
   const [identifyBusy, setIdentifyBusy] = useState(false);
@@ -95,15 +86,6 @@ export function KitchenScreen() {
   const [newNotes, setNewNotes] = useState('');
   const [newMade, setNewMade] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
-
-  // What can I make
-  const [showMakeMode, setShowMakeMode] = useState(false);
-  const [makeIdeas, setMakeIdeas] = useState<WhatCanIMakeIdea[]>([]);
-  const [makeBusy, setMakeBusy] = useState(false);
-  const [makeExpandedIdx, setMakeExpandedIdx] = useState<number | null>(null);
-
-  // Opportunity expansion
-  const [expandedOpportunity, setExpandedOpportunity] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setBusy(true);
@@ -121,17 +103,6 @@ export function KitchenScreen() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
-
-  // --- Pager helpers ---
-  const goToPage = (page: number) => {
-    setView(page === 0 ? 'explore' : 'manage');
-    pagerRef.current?.scrollTo({ x: page * pageWidth, animated: true });
-  };
-
-  const onPagerScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const page = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
-    setView(page >= 1 ? 'manage' : 'explore');
-  };
 
   // --- Relative date parser ("today", "yesterday", "in 2 days", "3 days ago") ---
   function parseRelativeDate(input: string): Date | null {
@@ -307,54 +278,11 @@ export function KitchenScreen() {
     }
   }
 
-  // --- What can I make? ---
-  async function handleWhatCanIMake() {
-    setMakeBusy(true);
-    setShowMakeMode(true);
-    try {
-      const response = await whatCanIMake();
-      setMakeIdeas(response.ideas);
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setMakeBusy(false);
-    }
-  }
-
-  // --- Signal priority badge ---
-  function signalBadge(priority: string) {
-    const badgeColor =
-      priority === 'urgent'
-        ? colors.error
-        : priority === 'high'
-          ? '#F59E0B'
-          : priority === 'medium'
-            ? colors.secondary
-            : colors.textSecondary;
-    return (
-      <View style={[styles.signalBadge, { backgroundColor: badgeColor }]}>
-        <Text style={styles.signalBadgeText}>{priority}</Text>
-      </View>
-    );
-  }
-
-  // --- Effort badge ---
-  function effortBadge(effort: string) {
-    const badgeColor =
-      effort === 'low' ? colors.success : effort === 'medium' ? '#F59E0B' : colors.error;
-    return (
-      <View style={[styles.effortBadge, { backgroundColor: badgeColor }]}>
-        <Text style={styles.effortBadgeText}>{effort}</Text>
-      </View>
-    );
-  }
-
   // --- Item card ---
   function renderItem({ item }: { item: KitchenItem }) {
     return (
-      <TouchableOpacity
+      <Pressable
         style={styles.itemCard}
-        activeOpacity={0.7}
         onPress={() => handleMarkUsed(item)}
         onLongPress={() => handleDeleteItem(item)}
       >
@@ -388,16 +316,15 @@ export function KitchenScreen() {
             </Text>
           </View>
         )}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
 
   // --- Leftover card ---
   function renderLeftover({ item }: { item: KitchenItem }) {
     return (
-      <TouchableOpacity
+      <Pressable
         style={[styles.itemCard, styles.leftoverCard]}
-        activeOpacity={0.7}
         onPress={() => handleMarkUsed(item)}
         onLongPress={() => handleDeleteItem(item)}
       >
@@ -419,136 +346,7 @@ export function KitchenScreen() {
           <Text style={styles.itemHint}>{item.stateReason}</Text>
         </View>
         {item.notes ? <Text style={styles.leftoverNotes}>{item.notes}</Text> : null}
-      </TouchableOpacity>
-    );
-  }
-
-  // --- Signal card ---
-  function renderSignal(signal: KitchenSignal) {
-    const iconName = SIGNAL_ICONS[signal.type] ?? 'information-circle';
-    return (
-      <TouchableOpacity
-        key={signal.id}
-        style={styles.signalCard}
-        activeOpacity={0.8}
-        onPress={() => {
-          if (signal.actionPayload === 'what-can-i-make') {
-            handleWhatCanIMake();
-          }
-        }}
-      >
-        <View style={styles.signalHeader}>
-          <Ionicons name={iconName as any} size={20} color={SIGNAL_COLORS[signal.type] ?? colors.softViolet} />
-          <Text style={styles.signalTitle}>{signal.title}</Text>
-          {signalBadge(signal.priority)}
-        </View>
-        <Text style={styles.signalDescription}>{signal.description}</Text>
-        <View style={styles.signalItems}>
-          {signal.items.slice(0, 4).map((name, i) => (
-            <View key={`${signal.id}-${i}`} style={styles.signalItemChip}>
-              <Text style={styles.signalItemText}>{name}</Text>
-            </View>
-          ))}
-          {signal.items.length > 4 && (
-            <Text style={styles.signalMore}>+{signal.items.length - 4} more</Text>
-          )}
-        </View>
-        {signal.actionLabel && (
-          <TouchableOpacity style={styles.signalAction} activeOpacity={0.7}>
-            <Text style={styles.signalActionText}>{signal.actionLabel} →</Text>
-          </TouchableOpacity>
-        )}
-      </TouchableOpacity>
-    );
-  }
-
-  // --- Opportunity card ---
-  function renderOpportunity(opp: KitchenOpportunity) {
-    const isExpanded = expandedOpportunity === opp.id;
-    return (
-      <TouchableOpacity
-        key={opp.id}
-        style={styles.oppCard}
-        activeOpacity={0.8}
-        onPress={() => setExpandedOpportunity(isExpanded ? null : opp.id)}
-      >
-        <View style={styles.oppHeader}>
-          <Text style={styles.oppName}>{opp.name}</Text>
-          {effortBadge(opp.effort)}
-        </View>
-        <Text style={styles.oppDescription}>{opp.description}</Text>
-        <Text style={styles.oppWhy}>{opp.whyGood}</Text>
-        {isExpanded && (
-          <View style={styles.oppDetail}>
-            <Text style={styles.oppIngredients}>
-              {opp.ingredients.join(', ')}
-            </Text>
-            <Text style={styles.oppTime}>~{opp.estimatedMinutes} min</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }
-
-  // --- Make mode (What can I make?) ---
-  function renderMakeMode() {
-    return (
-      <View style={styles.makeSection}>
-        <View style={styles.makeHeader}>
-          <Ionicons name="bulb" size={20} color={colors.softYellow} />
-          <Text style={styles.makeTitle}>What can I make?</Text>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => {
-              setShowMakeMode(false);
-              setMakeIdeas([]);
-            }}
-          >
-            <Ionicons name="close" size={20} color={colors.softRed} />
-          </TouchableOpacity>
-        </View>
-        {makeBusy ? (
-          <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.lg }} />
-        ) : makeIdeas.length === 0 ? (
-          <Text style={styles.makeEmpty}>
-            Add some ingredients to your kitchen and I'll suggest what to make.
-          </Text>
-        ) : (
-          makeIdeas.map((idea, idx) => (
-            <TouchableOpacity
-              key={`${idea.name}-${idx}`}
-              style={styles.makeCard}
-              activeOpacity={0.8}
-              onPress={() => setMakeExpandedIdx(makeExpandedIdx === idx ? null : idx)}
-            >
-              <View style={styles.makeCardHeader}>
-                <Text style={styles.makeCardName}>{idea.name}</Text>
-                <View style={styles.makeCardMeta}>
-                  {effortBadge(idea.effort)}
-                  <Text style={styles.makeCardTime}>~{idea.estimatedMinutes} min</Text>
-                </View>
-              </View>
-              <Text style={styles.makeCardDesc}>{idea.description}</Text>
-              {makeExpandedIdx === idx && (
-                <View style={styles.makeCardDetail}>
-                  <Text style={styles.makeCardLabel}>Uses:</Text>
-                  <Text style={styles.makeCardIngredients}>
-                    {idea.ingredients.join(', ')}
-                  </Text>
-                  {idea.missingEssentials.length > 0 && (
-                    <>
-                      <Text style={styles.makeCardLabel}>You might need:</Text>
-                      <Text style={styles.makeCardIngredients}>
-                        {idea.missingEssentials.join(', ')}
-                      </Text>
-                    </>
-                  )}
-                </View>
-              )}
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
+      </Pressable>
     );
   }
 
@@ -566,32 +364,29 @@ export function KitchenScreen() {
           style={styles.sheetRoot}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <TouchableOpacity
+          <Pressable
             style={styles.sheetScrim}
-            activeOpacity={1}
             onPress={() => setShowAdd(false)}
           />
           <View style={styles.sheet}>
             <SafeAreaView edges={['bottom']} style={styles.sheetSafe}>
               <View style={styles.formHeader}>
                 <Text style={styles.formTitle}>Add to Kitchen</Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
+                <Pressable
                   onPress={() => setShowAdd(false)}
                   accessibilityRole="button"
                   accessibilityLabel="Close form"
                 >
                   <Ionicons name="close" size={20} color={colors.softRed} />
-                </TouchableOpacity>
+                </Pressable>
               </View>
 
               {/* Kind toggle */}
               <View style={styles.kindToggle}>
                 {(['pantry', 'leftover'] as AddKind[]).map((kind) => (
-                  <TouchableOpacity
+                  <Pressable
                     key={kind}
                     style={[styles.kindButton, addKind === kind && styles.kindButtonActive]}
-                    activeOpacity={0.8}
                     onPress={() => setAddKind(kind)}
                   >
                     <Text
@@ -599,7 +394,7 @@ export function KitchenScreen() {
                     >
                       {kind === 'pantry' ? 'Pantry item' : 'Leftover dish'}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
 
@@ -707,89 +502,14 @@ export function KitchenScreen() {
   if (busy && !dashboard) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading your kitchen…</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.exploreContent}>
+          <Skeleton height={20} width="55%" style={{ marginBottom: spacing.sm }} />
+          <Skeleton height={14} width="35%" style={{ marginBottom: spacing.lg }} />
+          <Skeleton height={64} borderRadius={12} />
+          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
+          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
+        </ScrollView>
       </SafeAreaView>
-    );
-  }
-
-  // --- Explore view ---
-  function renderExplore() {
-    if (!dashboard) return null;
-    const { signals, opportunities, stats, items } = dashboard;
-    const hasContent = signals.length > 0 || opportunities.length > 0 || items.length > 0;
-
-    return (
-      <ScrollView contentContainerStyle={styles.exploreContent}>
-        <ErrorBanner error={error} />
-
-        {/* Stats bar */}
-        {stats.totalItems > 0 && (
-          <View style={styles.statsBar}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.totalItems}</Text>
-              <Text style={styles.statLabel}>Items</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statNumber, stats.expiringCount > 0 && { color: colors.error }]}>
-                {stats.expiringCount}
-              </Text>
-              <Text style={styles.statLabel}>Expiring</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.freshCount}</Text>
-              <Text style={styles.statLabel}>Fresh</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.leftoverCount}</Text>
-              <Text style={styles.statLabel}>Leftovers</Text>
-            </View>
-          </View>
-        )}
-
-        {/* What can I make? button */}
-        {items.length > 0 && (
-          <TouchableOpacity
-            style={styles.makeButton}
-            activeOpacity={0.8}
-            onPress={() => void handleWhatCanIMake()}
-          >
-            <Ionicons name="bulb" size={20} color={colors.surface} />
-            <Text style={styles.makeButtonText}>What can I make?</Text>
-          </TouchableOpacity>
-        )}
-
-        {showMakeMode && renderMakeMode()}
-
-        {/* Signals */}
-        {signals.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Kitchen Signals</Text>
-            {signals.map(renderSignal)}
-          </View>
-        )}
-
-        {/* Opportunities */}
-        {opportunities.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Kitchen Opportunities</Text>
-            {opportunities.map(renderOpportunity)}
-          </View>
-        )}
-
-        {/* Empty state */}
-        {!hasContent && (
-          <View style={styles.emptyState}>
-            <Ionicons name="restaurant-outline" size={48} color={colors.softGreen} />
-            <Text style={styles.emptyTitle}>Your kitchen is quiet</Text>
-            <Text style={styles.emptySubtitle}>
-              Add ingredients and I'll help you make the most of what you have.
-            </Text>
-          </View>
-        )}
-      </ScrollView>
     );
   }
 
@@ -799,7 +519,6 @@ export function KitchenScreen() {
     const { items } = dashboard;
     const leftovers = items.filter((i) => i.kind === 'leftover');
     const activeItems = items.filter((i) => i.kind !== 'leftover' && i.state !== 'gone');
-    const hasAnything = leftovers.length > 0 || activeItems.length > 0;
 
     return (
       <ScrollView
@@ -811,7 +530,7 @@ export function KitchenScreen() {
         <ErrorBanner error={error} />
 
         {/* Leftovers section */}
-        {leftovers.length > 0 && (
+        {leftovers.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Leftovers</Text>
             <View style={styles.list}>
@@ -821,22 +540,40 @@ export function KitchenScreen() {
             </View>
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>In your kitchen</Text>
           </>
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>Leftovers</Text>
+            <View style={styles.emptyState}>
+              <Image source={EMPTY_KITCHEN} style={styles.emptyMascot} resizeMode="contain" />
+              <Text style={styles.emptyTitle}>No leftovers yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Scan or add cooked food so we can help rescue it before it's wasted.
+              </Text>
+            </View>
+          </>
         )}
 
         {/* Pantry items */}
-        {!hasAnything ? (
+        {activeItems.length > 0 ? (
+          <View style={styles.list}>
+            {activeItems.map((item) => (
+              <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
+            ))}
+          </View>
+        ) : leftovers.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="file-tray-outline" size={48} color={colors.softPurple} />
-            <Text style={styles.emptyTitle}>Nothing here yet</Text>
+            <Image source={EMPTY_KITCHEN} style={styles.emptyMascotLarge} resizeMode="contain" />
+            <Text style={styles.emptyTitle}>No items yet</Text>
             <Text style={styles.emptySubtitle}>
               Tap + to add ingredients or snap a photo to identify food.
             </Text>
           </View>
         ) : (
-          <View style={styles.list}>
-            {activeItems.map((item) => (
-              <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
-            ))}
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Pantry is empty</Text>
+            <Text style={styles.emptySubtitle}>
+              Tap + to add ingredients or snap a photo to identify food.
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -849,9 +586,8 @@ export function KitchenScreen() {
       <View style={styles.header}>
         <Text style={[typography.heading, styles.title]}>Kitchen</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity
+          <Pressable
             style={styles.cameraButton}
-            activeOpacity={0.8}
             onPress={() => void handleCameraPick('camera')}
             disabled={identifyBusy}
           >
@@ -860,70 +596,29 @@ export function KitchenScreen() {
             ) : (
               <Ionicons name="camera" size={20} color={colors.softPeach} />
             )}
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Pressable>
+          <Pressable
             style={styles.cameraButton}
-            activeOpacity={0.8}
             onPress={() => void handleCameraPick('library')}
             disabled={identifyBusy}
           >
             <Ionicons name="images" size={20} color={colors.softPurple} />
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
 
-      {/* Explore / Manage tabs */}
-      <View style={styles.toggle}>
-        <TouchableOpacity
-          style={[styles.toggleButton, view === 'explore' && styles.toggleActive]}
-          activeOpacity={0.8}
-          onPress={() => goToPage(0)}
-        >
-          <Text
-            style={[styles.toggleText, view === 'explore' && styles.toggleTextActive]}
-          >
-            Explore
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleButton, view === 'manage' && styles.toggleActive]}
-          activeOpacity={0.8}
-          onPress={() => goToPage(1)}
-        >
-          <Text
-            style={[styles.toggleText, view === 'manage' && styles.toggleTextActive]}
-          >
-            Manage
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Pager */}
-      <ScrollView
-        ref={pagerRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        style={styles.pager}
-        onLayout={(e) => setPageWidth(e.nativeEvent.layout.width)}
-        onMomentumScrollEnd={onPagerScrollEnd}
-      >
-        <View style={{ width: pageWidth }}>{renderExplore()}</View>
-        <View style={{ width: pageWidth }}>{renderManage()}</View>
-      </ScrollView>
+      {/* Manage view (only view) */}
+      {renderManage()}
 
       {/* Floating add button */}
-      {view === 'manage' && (
-        <TouchableOpacity
-          style={styles.fab}
-          activeOpacity={0.85}
-          onPress={openAddForm}
-          accessibilityRole="button"
-          accessibilityLabel="Add to kitchen"
-        >
-          <Ionicons name="add" size={30} color={colors.surface} />
-        </TouchableOpacity>
-      )}
+      <Pressable
+        style={styles.fab}
+        onPress={openAddForm}
+        accessibilityRole="button"
+        accessibilityLabel="Add to kitchen"
+      >
+        <Ionicons name="add" size={30} color="#FFFFFF" />
+      </Pressable>
 
       {/* Add bottom sheet */}
       {renderAddSheet()}
@@ -996,34 +691,24 @@ const styles = StyleSheet.create({
   },
   exploreContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: 120,
   },
   manageContent: {
     flex: 1,
   },
   manageScrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl * 2,
-  },
-  loadingCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    fontSize: 14,
+    paddingBottom: 120,
   },
   // Floating action button
   fab: {
     position: 'absolute',
-    bottom: spacing.xl,
+    bottom: 96,
     right: spacing.xl,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.homeInk,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1287,6 +972,16 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl * 2,
     gap: spacing.sm,
   },
+  emptyMascot: {
+    width: 120,
+    height: 120,
+    marginBottom: spacing.sm,
+  },
+  emptyMascotLarge: {
+    width: 180,
+    height: 180,
+    marginBottom: spacing.md,
+  },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -1297,6 +992,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     maxWidth: 280,
+  },
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 20,
+    marginTop: spacing.sm,
+  },
+  emptyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.surface,
   },
   // Bottom sheet
   sheetRoot: {

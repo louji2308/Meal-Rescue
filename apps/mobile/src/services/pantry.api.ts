@@ -28,7 +28,15 @@ export async function deletePantryItem(itemId: string): Promise<PantryDeleteResp
   return res.data;
 }
 
-export async function markPantryItemUsed(itemId: string): Promise<{ success: boolean }> {
-  const res = await api.post<{ success: boolean }>(`/api/v1/pantry/${itemId}/use`);
+export interface MarkUsedResult {
+  success: true;
+  /** True when the item hit its last unit/serving and the row was removed. */
+  removed: boolean;
+  /** Post-use state, or null when the row was removed. */
+  item: PantryItem | null;
+}
+
+export async function markPantryItemUsed(itemId: string): Promise<MarkUsedResult> {
+  const res = await api.post<MarkUsedResult>(`/api/v1/pantry/${itemId}/use`);
   return res.data;
 }

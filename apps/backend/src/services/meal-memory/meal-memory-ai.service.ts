@@ -21,7 +21,7 @@ const intentPolishSchema = z.object({
   mealConcept: z.string().nullable(),
   mealSlot: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).nullable().optional(),
   ingredient: z.string().nullable().optional(),
-  targetDate: z.string().nullable().optional(),
+  targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 
 const planPolishSchema = z.object({
@@ -68,10 +68,10 @@ export class MealMemoryAiService {
           data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.5 ? 'MEDIUM' : 'LOW',
         entities: {
           ...resolution.entities,
-          mealConcept: pick(data.mealConcept, resolution.entities.mealConcept),
+          mealConcept: pick(sanitizeText(data.mealConcept), resolution.entities.mealConcept),
           mealSlot: pick(data.mealSlot ?? null, resolution.entities.mealSlot),
-          ingredient: pick(data.ingredient ?? null, resolution.entities.ingredient),
-          targetDate: pick(data.targetDate ?? null, resolution.entities.targetDate),
+          ingredient: pick(sanitizeText(data.ingredient), resolution.entities.ingredient),
+          targetDate: pick(sanitizeDateKey(data.targetDate), resolution.entities.targetDate),
         },
       };
     } catch {
@@ -113,4 +113,29 @@ export class MealMemoryAiService {
 
 function pick<T>(candidate: T | null | undefined, fallback: T | null): T | null {
   return candidate == null || candidate === '' ? fallback : candidate;
+}
+
+function sanitizeText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 160 || /\s{3,}/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function sanitizeDateKey(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parts = value.split('-').map(Number);
+  const year = parts[0] ?? NaN;
+  const month = parts[1] ?? NaN;
+  const day = parts[2] ?? NaN;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const check = new Date(Date.UTC(year, month - 1, day));
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return value;
 }

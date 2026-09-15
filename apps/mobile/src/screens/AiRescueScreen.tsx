@@ -7,9 +7,9 @@ import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import {
 } from '../services/ai-rescue.api';
 import { useDayPhase } from '../hooks/useDayPhase';
 import { colors, spacing, typography } from '../theme';
+import { FadeInView } from '../components/motion/FadeInView';
 
 /**
  * AIRescueScreen — the new rescue experience.
@@ -30,6 +31,18 @@ import { colors, spacing, typography } from '../theme';
  * One screen. AI thinks first, shows its best guess, user pushes back if needed.
  * No forms, no questionnaires. Just food → AI → conversation → best move.
  */
+
+/** Strip markdown formatting to plain text for clean rendering */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')  // bold
+    .replace(/\*(.*?)\*/g, '$1')      // italic
+    .replace(/`(.*?)`/g, '$1')        // inline code
+    .replace(/#{1,6}\s/g, '')         // headings
+    .replace(/^\s*[-*+]\s/gm, '• ')   // list bullets
+    .replace(/^\s*\d+\.\s/gm, (m) => m.trim() + ' ') // numbered lists
+    .trim();
+}
 export function AiRescueScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<RouteProp<HomeStackParamList, 'AiRescue'>>();
@@ -62,6 +75,11 @@ export function AiRescueScreen() {
     if (result || !busy) return;
     void loadRescue();
   }, []);
+
+  // Auto-scroll when result appears or conversation updates
+  useEffect(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
+  }, [result, conversation]);
 
   async function loadRescue() {
     setBusy(true);
@@ -102,7 +120,6 @@ export function AiRescueScreen() {
       setError(toApiError(err));
     } finally {
       setNegotiating(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }
 
@@ -125,16 +142,17 @@ export function AiRescueScreen() {
       >
         {/* Header */}
         <View style={styles.hero}>
-          <Ionicons name="bulb" size={28} color={colors.softYellow} />
-          <Text style={[typography.heading, styles.title]}>Here's what I'd do</Text>
+          <Ionicons name="bulb" size={28} color={colors.rescueAccent} />
+          <Text style={[typography.heading, styles.title]}>Your best rescue</Text>
           <Text style={styles.foodTag}>{foodSummary}</Text>
         </View>
 
         {/* Loading state */}
         {busy && !result && (
           <View style={styles.loadingCenter}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Thinking about your meal…</Text>
+            <Ionicons name="earth" size={36} color={colors.rescueAccent} />
+            <ActivityIndicator size="small" color={colors.rescueAccent} style={{ marginTop: spacing.sm }} />
+            <Text style={styles.loadingText}>Finding best rescues for your food…</Text>
           </View>
         )}
 
@@ -142,24 +160,24 @@ export function AiRescueScreen() {
         {error && (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{error.message}</Text>
-            <TouchableOpacity onPress={() => void loadRescue()}>
+            <Pressable onPress={() => void loadRescue()}>
               <Text style={styles.retryText}>Try again</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         )}
 
         {/* AI Result */}
-        {result && (
-          <>
+{result && (
+          <FadeInView>
             {/* Best Move Card */}
             <View style={styles.bestMoveCard}>
               <Text style={styles.bestMoveLabel}>YOUR BEST MOVE</Text>
-              <Text style={styles.bestMoveText}>{result.bestMove}</Text>
-              <Text style={styles.reasoning}>{result.reasoning}</Text>
+              <Text style={styles.bestMoveText}>{stripMarkdown(result.bestMove)}</Text>
+              <Text style={styles.reasoning}>{stripMarkdown(result.reasoning)}</Text>
 
               <View style={styles.metaRow}>
                 <View style={styles.metaChip}>
-                  <Ionicons name="time-outline" size={14} color={colors.softCyan} />
+                  <Ionicons name="time-outline" size={14} color={colors.rescueAccent} />
                   <Text style={styles.metaText}>~{result.timeMinutes} min</Text>
                 </View>
                 <View style={styles.metaChip}>
@@ -174,10 +192,10 @@ export function AiRescueScreen() {
                     size={14}
                     color={
                       result.effort === 'low'
-                        ? colors.softYellow
+                        ? colors.rescueAccent
                         : result.effort === 'medium'
-                          ? colors.softRed
-                          : colors.softCyan
+                          ? colors.rescueAccent
+                          : colors.rescueAccent
                     }
                   />
                   <Text style={styles.metaText}>{result.effort} effort</Text>
@@ -216,13 +234,12 @@ export function AiRescueScreen() {
             )}
 
             {/* Action Buttons */}
-            <TouchableOpacity
+            <Pressable
               style={styles.doThisBtn}
-              activeOpacity={0.8}
               onPress={handleAccept}
             >
               <Text style={styles.doThisText}>Do this</Text>
-            </TouchableOpacity>
+            </Pressable>
 
             {/* Pushback Section */}
             <View style={styles.negotiateSection}>
@@ -231,15 +248,14 @@ export function AiRescueScreen() {
               {/* Quick pushback chips */}
               <View style={styles.pushbackChips}>
                 {quickPushbacks.map((chip) => (
-                  <TouchableOpacity
+                  <Pressable
                     key={chip}
                     style={styles.pushbackChip}
-                    activeOpacity={0.7}
                     onPress={() => void handleNegotiate(chip)}
                     disabled={negotiating}
                   >
                     <Text style={styles.pushbackChipText}>{chip}</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
 
@@ -254,7 +270,7 @@ export function AiRescueScreen() {
                   onSubmitEditing={() => void handleNegotiate(pushbackText)}
                   returnKeyType="send"
                 />
-                <TouchableOpacity
+                <Pressable
                   style={[styles.sendBtn, (!pushbackText.trim() || negotiating) && styles.sendBtnDisabled]}
                   onPress={() => void handleNegotiate(pushbackText)}
                   disabled={!pushbackText.trim() || negotiating}
@@ -264,7 +280,7 @@ export function AiRescueScreen() {
                   ) : (
                     <Ionicons name="arrow-forward" size={18} color={colors.surface} />
                   )}
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
 
@@ -273,15 +289,14 @@ export function AiRescueScreen() {
               <View style={styles.alternativesSection}>
                 <Text style={styles.alternativesTitle}>Other options I considered</Text>
                 {result.alternatives.map((alt, idx) => (
-                  <TouchableOpacity
+                  <Pressable
                     key={`${alt.name}-${idx}`}
                     style={styles.altCard}
-                    activeOpacity={0.7}
                     onPress={() => void handleNegotiate(`Tell me more about: ${alt.name}`)}
                   >
                     <Text style={styles.altName}>{alt.name}</Text>
                     <Text style={styles.altReasoning}>{alt.reasoning}</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
             )}
@@ -304,13 +319,13 @@ export function AiRescueScreen() {
                         msg.role === 'user' ? styles.historyTextUser : styles.historyTextAi,
                       ]}
                     >
-                      {msg.content}
+                      {msg.role === 'user' ? msg.content : stripMarkdown(msg.content)}
                     </Text>
                   </View>
                 ))}
               </View>
-            )}
-          </>
+)}
+          </FadeInView>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -322,11 +337,11 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, padding: spacing.lg, paddingBottom: spacing.xl * 2 },
   hero: { alignItems: 'center', marginBottom: spacing.xl, gap: spacing.sm },
   title: { textAlign: 'center' },
-  foodTag: {
+foodTag: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.primary,
-    backgroundColor: colors.primaryLight,
+    color: colors.textSecondary,
+    backgroundColor: colors.homeTintNeutral,
     borderRadius: 20,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -335,11 +350,11 @@ const styles = StyleSheet.create({
   loadingText: { color: colors.textSecondary, fontSize: 14 },
 
   // Best Move
-  bestMoveCard: {
+bestMoveCard: {
     backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: colors.borderStrong,
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
@@ -353,7 +368,7 @@ const styles = StyleSheet.create({
   bestMoveText: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.rescueAccent,
     lineHeight: 26,
     marginBottom: spacing.sm,
   },
@@ -390,16 +405,16 @@ const styles = StyleSheet.create({
   },
   keptChipText: { fontSize: 13, color: colors.success, fontWeight: '600' },
   addedChip: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     borderRadius: 14,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
-  addedChipText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  addedChipText: { fontSize: 13, color: colors.rescueAccent, fontWeight: '600' },
 
   // Do This
-  doThisBtn: {
-    backgroundColor: colors.primary,
+doThisBtn: {
+    backgroundColor: colors.text,
     borderRadius: 14,
     paddingVertical: spacing.md,
     alignItems: 'center',
@@ -436,11 +451,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     fontSize: 14,
   },
-  sendBtn: {
+sendBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -481,10 +496,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     maxWidth: '85%',
   },
-  historyUser: { backgroundColor: colors.primaryLight, alignSelf: 'flex-end' },
+  historyUser: { backgroundColor: colors.homeTintNeutral, alignSelf: 'flex-end' },
   historyAi: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignSelf: 'flex-start' },
   historyText: { fontSize: 14, lineHeight: 20 },
-  historyTextUser: { color: colors.primary },
+  historyTextUser: { color: colors.rescueAccent },
   historyTextAi: { color: colors.text },
 
   // Error
@@ -497,5 +512,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   errorText: { color: colors.error, fontSize: 14, textAlign: 'center' },
-  retryText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  retryText: { color: colors.rescueAccent, fontSize: 14, fontWeight: '600' },
 });
+
