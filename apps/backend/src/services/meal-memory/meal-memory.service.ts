@@ -367,6 +367,19 @@ export class MealMemoryService {
     };
   }
 
+  async generateMealInstructions(
+    userId: UUID,
+    eventId: UUID,
+    concept: string,
+    ingredients?: string[],
+    mealSlot?: string,
+  ): Promise<{ cookingInstructions: string[]; ingredients: string[]; tips: string[] }> {
+    if (!this.aiService) {
+      return { cookingInstructions: [], ingredients: ingredients ?? [], tips: [] };
+    }
+    return this.aiService.generateMealInstructions(concept, ingredients, mealSlot);
+  }
+
   async updateMeal(
     userId: UUID,
     eventId: UUID,

@@ -101,8 +101,17 @@ export class CommonTableService {
       shoppingAllowed: request.shoppingAllowed ?? false,
     });
 
+    // Try AI-first: let the model generate the entire meal plan from scratch.
     let plan: SharedMealPlan | null = null;
-    if (convergence.winner) {
+    plan = await this.ai.planMeal(
+      contexts,
+      ingredients,
+      request.effort ?? 'normal',
+      request.timeMinutes,
+    );
+
+    // AI failed or produced an unsafe plan — fall back to deterministic engine.
+    if (!plan && convergence.winner) {
       plan = toSharedMealPlan(convergence.winner);
       plan = await this.ai.polish(plan);
     }

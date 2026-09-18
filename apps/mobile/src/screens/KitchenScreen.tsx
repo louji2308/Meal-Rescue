@@ -529,8 +529,8 @@ export function KitchenScreen() {
       >
         <ErrorBanner error={error} />
 
-        {/* Leftovers section */}
-        {leftovers.length > 0 ? (
+        {/* Leftovers section — only shown when there are leftovers */}
+        {leftovers.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Leftovers</Text>
             <View style={styles.list}>
@@ -539,17 +539,6 @@ export function KitchenScreen() {
               ))}
             </View>
             <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>In your kitchen</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>Leftovers</Text>
-            <View style={styles.emptyState}>
-              <Image source={EMPTY_KITCHEN} style={styles.emptyMascot} resizeMode="contain" />
-              <Text style={styles.emptyTitle}>No leftovers yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Scan or add cooked food so we can help rescue it before it's wasted.
-              </Text>
-            </View>
           </>
         )}
 
@@ -560,17 +549,17 @@ export function KitchenScreen() {
               <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
             ))}
           </View>
-        ) : leftovers.length === 0 ? (
+        ) : leftovers.length > 0 ? (
           <View style={styles.emptyState}>
-            <Image source={EMPTY_KITCHEN} style={styles.emptyMascotLarge} resizeMode="contain" />
-            <Text style={styles.emptyTitle}>No items yet</Text>
+            <Text style={styles.emptyTitle}>Pantry is empty</Text>
             <Text style={styles.emptySubtitle}>
               Tap + to add ingredients or snap a photo to identify food.
             </Text>
           </View>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Pantry is empty</Text>
+            <Image source={EMPTY_KITCHEN} style={styles.emptyMascotLarge} resizeMode="contain" />
+            <Text style={styles.emptyTitle}>No items yet</Text>
             <Text style={styles.emptySubtitle}>
               Tap + to add ingredients or snap a photo to identify food.
             </Text>
@@ -969,8 +958,8 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: {
     alignItems: 'center',
-    paddingTop: spacing.xl * 2,
-    gap: spacing.sm,
+    paddingTop: spacing.xl * 3,
+    gap: spacing.md,
   },
   emptyMascot: {
     width: 120,
@@ -978,20 +967,21 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   emptyMascotLarge: {
-    width: 180,
-    height: 180,
+    width: 260,
+    height: 260,
     marginBottom: spacing.md,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textSecondary,
     textAlign: 'center',
-    maxWidth: 280,
+    maxWidth: 300,
+    lineHeight: 22,
   },
   emptyButton: {
     flexDirection: 'row',

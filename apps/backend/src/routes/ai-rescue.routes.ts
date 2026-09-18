@@ -6,10 +6,13 @@
  *
  * v2: personalized with taste context
  */
+import { randomUUID } from 'node:crypto';
+
 import type { FastifyInstance } from 'fastify';
 
 import { ErrorCategory } from '@meal-rescue/shared-types';
 
+import { Rescue } from '../database/models/rescue.model';
 import { AppError } from '../lib/errors';
 import { AiRescueService } from '../services/ai-rescue.service';
 import { buildServices, dbModels } from '../services/composition';
@@ -83,7 +86,38 @@ export async function aiRescueRoutes(app: FastifyInstance) {
         tasteContext,
       });
 
-      return reply.send({ success: true, data: result });
+      // Persist a Rescue record so feedback can reference a real DB row.
+      const rescueId = randomUUID();
+      const userId = authedUserId(request);
+      if (userId) {
+        await Rescue.create({
+          id: rescueId,
+          mealId: randomUUID(), // placeholder — AI rescue has no Meal record
+          userId,
+          originalMeal: { foods },
+          detectedIngredients: (body.ingredients as string[] | undefined) ?? [],
+          constraints: {},
+          candidatesGenerated: { feasible: 1, rankedCount: 1 },
+          selectedRecommendation: {
+            candidate: {
+              id: 'ai-best',
+              actionType: 'RESCUE',
+              additions: result.whatYouAdded.map((name) => ({ name })),
+              substitutions: [],
+              estimatedMinutes: result.timeMinutes,
+              estimatedCostLevel: 'low',
+            },
+            reasoning: result.reasoning,
+            score: 1,
+          },
+          reasoning: result.reasoning,
+          userDecision: 'pending',
+          processingTimeMs: 0,
+          modelVersion: 'ai-rescue:v1',
+        });
+      }
+
+      return reply.send({ success: true, data: { ...result, rescueId } });
     } catch (err) {
       request.log.error({ err }, 'AI rescue generate failed');
       throw new AppError({

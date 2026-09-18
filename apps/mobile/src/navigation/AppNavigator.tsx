@@ -44,6 +44,7 @@ import { RealityScreen } from '../screens/RealityScreen';
 import { RescueLoadingScreen } from '../screens/RescueLoadingScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
+import { DishDetailScreen } from '../screens/DishDetailScreen';
 import { TasteJournalScreen } from '../screens/TasteJournalScreen';
 import { syncSubscription } from '../services/ads.api';
 import { useAuthStore } from '../stores/auth.store';
@@ -220,6 +221,17 @@ const styles = StyleSheet.create({
 export type HomeStackParamList = {
   HomeMain: undefined;
   Capture: undefined;
+  DishDetail: {
+    eventId: string;
+    concept: string;
+    mealSlot: string;
+    dateKey: string;
+    timeMinutes?: number;
+    effort?: 'low' | 'medium' | 'high';
+    cookingInstructions?: string[];
+    ingredients?: string[];
+    tips?: string[];
+  };
   AiRescue: { foods: string[]; ingredients?: string[] };
   Review: { analysis: MealAnalysisResponse };
   Intent: { analysis: MealAnalysisResponse; editedMealText?: string };
@@ -268,6 +280,7 @@ function HomeStack() {
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen name="Capture" component={CaptureScreen} />
+      <Stack.Screen name="DishDetail" component={DishDetailScreen} />
       <Stack.Screen name="AiRescue" component={AiRescueScreen} />
       <Stack.Screen name="Review" component={ReviewScreen} />
       <Stack.Screen name="Intent" component={IntentScreen} />

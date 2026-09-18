@@ -284,10 +284,6 @@ export class PlanningEngine {
       },
     });
     const previousIds = previous.map((row) => row.id);
-    await this.models.MealEvent.update(
-      { planId: null },
-      { where: { planId: { [Op.in]: previousIds } } },
-    );
     await this.models.MealEvent.destroy({
       where: { planId: { [Op.in]: previousIds }, kind: 'plan' },
     });

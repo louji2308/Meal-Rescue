@@ -109,6 +109,47 @@ export class MealMemoryAiService {
       return result;
     }
   }
+
+  async generateMealInstructions(
+    concept: string,
+    ingredients?: string[],
+    mealSlot?: string,
+  ): Promise<{ cookingInstructions: string[]; ingredients: string[]; tips: string[] }> {
+    if (!this.enabled) {
+      return { cookingInstructions: [], ingredients: ingredients ?? [], tips: [] };
+    }
+
+    const instructionsSchema = z.object({
+      cookingInstructions: z.array(z.string().min(5).max(300)).min(3).max(12),
+      ingredients: z.array(z.string().min(1).max(100)).min(1).max(30),
+      tips: z.array(z.string().min(5).max(200)).min(1).max(5),
+    });
+
+    try {
+      const { data } = await this.llm.completeJson({
+        systemPrompt:
+          'You are a home cooking assistant. Given a dish name and optional ingredients, ' +
+          'provide clear, step-by-step cooking instructions. Keep instructions concise and actionable. ' +
+          'Include practical tips for best results. Aim for a home cook level — not too technical.',
+        userContent: {
+          dish: concept,
+          knownIngredients: ingredients ?? [],
+          mealSlot: mealSlot ?? 'dinner',
+        },
+        schema: instructionsSchema,
+        modelName: 'meal-instructions',
+        maxTokens: 800,
+      });
+
+      return {
+        cookingInstructions: data.cookingInstructions,
+        ingredients: data.ingredients.length > 0 ? data.ingredients : (ingredients ?? []),
+        tips: data.tips,
+      };
+    } catch {
+      return { cookingInstructions: [], ingredients: ingredients ?? [], tips: [] };
+    }
+  }
 }
 
 function pick<T>(candidate: T | null | undefined, fallback: T | null): T | null {

@@ -1,6 +1,7 @@
 import { api } from './api';
 
 export interface AiRescueData {
+  rescueId: string;
   bestMove: string;
   reasoning: string;
   timeMinutes: number;

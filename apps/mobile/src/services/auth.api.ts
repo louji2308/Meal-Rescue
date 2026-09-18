@@ -7,6 +7,10 @@ interface Credentials {
   password: string;
 }
 
+export function checkEmail(email: string): Promise<{ exists: boolean }> {
+  return api.post<{ exists: boolean }>('/api/v1/auth/check-email', { email }).then((res) => res.data);
+}
+
 export function registerAccount({ email, password }: Credentials): Promise<AuthTokens> {
   return api.post<AuthTokens>('/api/v1/auth/register', { email, password }).then((res) => res.data);
 }

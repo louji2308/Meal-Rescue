@@ -28,7 +28,11 @@ import { BricolageGrotesque_700Bold } from '@expo-google-fonts/bricolage-grotesq
 // internet) via console.error, which LogBox surfaces as red banners that also
 // intercept touches. These are expected in local dev - the wrapper already
 // degrades to safe no-ops - so silence the SDK's own noise here.
-LogBox.ignoreLogs(['[RevenueCat]']);
+LogBox.ignoreLogs([
+  '[RevenueCat]',
+  "TurboModuleRegistry.getEnforcing(...): 'OneSignal'",
+  "TurboModuleRegistry.getEnforcing(...): 'RNGoogleMobileAdsModule'",
+]);
 
 import { navigationRef } from './src/components/aftercare/navigation';
 import { colors } from './src/theme';

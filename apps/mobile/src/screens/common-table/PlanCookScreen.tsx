@@ -38,21 +38,41 @@ export function PlanCookScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20;
+    const POLL_INTERVAL = 3000;
+
     if (!sharedMealId) return;
     setBusy(true);
     setError(null);
-    getSharedMeal(sharedMealId)
-      .then((fetched) => {
+
+    async function fetchMeal() {
+      try {
+        const fetched = await getSharedMeal(sharedMealId!);
         if (cancelled) return;
-        setMeal(fetched);
-        setResult(fetched);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(toApiError(err));
-      })
-      .finally(() => {
-        if (!cancelled) setBusy(false);
-      });
+        if (fetched.converged && fetched.plan) {
+          setMeal(fetched);
+          setResult(fetched);
+          setBusy(false);
+          return;
+        }
+        attempts++;
+        if (attempts < MAX_ATTEMPTS) {
+          setTimeout(() => { void fetchMeal(); }, POLL_INTERVAL);
+        } else {
+          setMeal(fetched);
+          setResult(fetched);
+          setBusy(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(toApiError(err));
+          setBusy(false);
+        }
+      }
+    }
+
+    void fetchMeal();
     return () => {
       cancelled = true;
     };
@@ -99,7 +119,16 @@ export function PlanCookScreen() {
     return (
       <View style={styles.loadingCenter}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Setting up the cook…</Text>
+        <Text style={styles.loadingText}>Finding the right meal for your table…</Text>
+      </View>
+    );
+  }
+
+  if (busy && meal && (!meal.converged || !meal.plan)) {
+    return (
+      <View style={styles.loadingCenter}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Almost there — the AI is still thinking…</Text>
       </View>
     );
   }
@@ -107,7 +136,7 @@ export function PlanCookScreen() {
   if (!meal?.converged || !meal.plan) {
     return (
       <View style={styles.loadingCenter}>
-        <Text style={styles.loadingText}>This meal couldn't be loaded.</Text>
+        <Text style={styles.loadingText}>This meal couldn't be loaded. Please try again.</Text>
       </View>
     );
   }

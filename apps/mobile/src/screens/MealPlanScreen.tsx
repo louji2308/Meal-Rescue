@@ -1,4 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -18,17 +19,17 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import type {
   MealEvent,
   MealMemoryIntentResponse,
-  MealRule,
   MealSlot,
 } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, spacing, typography } from '../theme';
 import { useMealMemoryStore } from '../stores/meal-memory.store';
 import { useCommonTableStore } from '../stores/common-table.store';
+import { MealPlanLoading, WeeklyOverview } from '../components/meal-plan';
+import type { HomeStackParamList } from '../navigation/AppNavigator';
 
 const SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -40,20 +41,6 @@ const SLOT_LABELS: Record<MealSlot, string> = {
 const SLOT_ORDER: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 const WEEKDAY_LETTERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const _STRATEGY_OPTIONS: { key: 'balance' | 'easy' | 'use_expiring'; label: string }[] = [
-  { key: 'balance', label: 'Balanced' },
-  { key: 'easy', label: 'Easy' },
-  { key: 'use_expiring', label: 'Use expiry' },
-];
-
-const SUGGESTIONS: { label: string; prompt?: string; plan?: boolean; reuse?: boolean }[] = [
-  { plan: true, label: 'Plan this week' },
-  { label: 'Plan next week', prompt: 'plan next week' },
-  { label: "What's for dinner?", prompt: 'what are we doing for dinner?' },
-  { label: "We're out Tuesday", prompt: "we're out next tuesday" },
-  { reuse: true, label: 'Reuse last week' },
-];
 
 function addDays(dateKey: string, days: number): string {
   const d = new Date(`${dateKey}T00:00:00.000Z`);
@@ -96,37 +83,6 @@ function intentBody(intent: MealMemoryIntentResponse | null): string {
   return intent.resolution.rawText;
 }
 
-function _ruleIcon(rule: MealRule): keyof typeof Ionicons.glyphMap {
-  if (rule.instructionType === 'BLOCK_SLOT' || rule.instructionType === 'KEEP_OUT') {
-    return 'close-circle-outline';
-  }
-  if (rule.instructionType === 'HOLD_INGREDIENT' || rule.instructionType === 'RESERVE_INGREDIENT') {
-    return 'lock-closed-outline';
-  }
-  if (rule.instructionType === 'KEEP_OPEN') {
-    return 'hand-left-outline';
-  }
-  return 'document-text-outline';
-}
-
-function _ruleLabel(rule: MealRule): string {
-  if (rule.ingredient) return `no ${rule.ingredient}`;
-  if (rule.mealSlot) return `keep ${rule.mealSlot} open`;
-  if (rule.note) return rule.note;
-  return 'active rule';
-}
-
-function _ruleDetail(rule: MealRule): string {
-  const parts: string[] = [];
-  if (rule.ingredient) parts.push(`No ${rule.ingredient}`);
-  if (rule.mealSlot) parts.push(`Keep ${SLOT_LABELS[rule.mealSlot]} open`);
-  if (rule.note) parts.push(rule.note);
-  if (parts.length === 0) {
-    parts.push(rule.instructionType.toLowerCase().replaceAll('_', ' '));
-  }
-  return parts.join(' � ');
-}
-
 /**
  * Inline renaming of a planned meal's concept. Every change flows through the
  * store's debounced autosave so typing stays local-first and a failed save
@@ -162,22 +118,20 @@ export function MealPlanScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 14);
   const composerBottomPad = bottomInset + 86 - insets.bottom + spacing.sm;
-  const [strategy, _setStrategy] = useState<'balance' | 'easy' | 'use_expiring'>('balance');
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const [strategy] = useState<'balance' | 'easy' | 'use_expiring'>('balance');
   const [input, setInput] = useState('');
   const [answer, setAnswer] = useState('');
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<{ dateKey: string; mealSlot: MealSlot } | null>(null);
-  const [_expandedRuleId, _setExpandedRuleId] = useState<string | null>(null);
 
   const week = useMealMemoryStore((s) => s.week);
   const weekStart = useMealMemoryStore((s) => s.weekStart);
   const pendingIntent = useMealMemoryStore((s) => s.pendingIntent);
-  const _rules = useMealMemoryStore((s) => s.rules);
   const lastMessage = useMealMemoryStore((s) => s.lastMessage);
-const busy = useMealMemoryStore((s) => s.busy);
+  const busy = useMealMemoryStore((s) => s.busy);
   const error = useMealMemoryStore((s) => s.error);
   const saveStatus = useMealMemoryStore((s) => s.saveStatus);
-  const _recentMeals = useMealMemoryStore((s) => s.recentMeals);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadWeek = useMealMemoryStore((s) => s.loadWeek);
@@ -192,7 +146,6 @@ const busy = useMealMemoryStore((s) => s.busy);
   const feedBack = useMealMemoryStore((s) => s.feedBack);
   const reuseLastWeek = useMealMemoryStore((s) => s.reuseLastWeek);
   const loadRecents = useMealMemoryStore((s) => s.loadRecents);
-  const _deactivateRule = useMealMemoryStore((s) => s.deactivateRule);
 
 const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
   const householdMembers = useCommonTableStore((s) => s.members);
@@ -297,16 +250,6 @@ useEffect(() => {
     }
   }
 
-  function _handleSuggestion(action: (typeof SUGGESTIONS)[number]) {
-    if (action.reuse) {
-      void reuseLastWeek().catch(() => {});
-    } else if (action.plan) {
-      void planThisWeek({ strategy }).catch(() => {});
-    } else if (action.prompt) {
-      void sendIntent(action.prompt).catch(() => {});
-    }
-  }
-
   const weekDays = useMemo(() => {
     if (!weekStart) return [];
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -347,13 +290,7 @@ if (!weekStart) {
     }
     return (
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.loadingScroll}>
-          <Skeleton height={24} width="45%" style={{ marginBottom: spacing.xs }} />
-          <Skeleton height={14} width="30%" style={{ marginBottom: spacing.lg }} />
-          <Skeleton height={64} borderRadius={radius.md} />
-          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
-          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
-        </ScrollView>
+        <MealPlanLoading visible={true} />
       </SafeAreaView>
     );
   }
@@ -490,10 +427,25 @@ return (
               onPress={() => void loadWeek()}
               style={styles.todayLink}
             >
-              <Text style={styles.todayLinkText}>� today �</Text>
+              <Text style={styles.todayLinkText}>← today →</Text>
             </Pressable>
           ) : null}
         </View>
+
+        {week && !busy && (
+          <WeeklyOverview
+            days={week.days}
+            todayKey={today}
+            focusedKey={focusedKey ?? ''}
+            onSelectDay={(key) => {
+              setFocusedKey(key);
+              setExpanded(null);
+            }}
+            onSelectMeal={(eventId, concept, mealSlot, dateKey) => {
+              navigation.navigate('DishDetail', { eventId, concept, mealSlot, dateKey });
+            }}
+          />
+        )}
 
         {/* Past week summary */}
         {isPastWeek && reviewDays.length > 0 ? null : null}
@@ -523,6 +475,15 @@ return (
                     style={[styles.slotRow, isExpanded && styles.slotRowSelected]}
                     onPress={() => {
                       if (!meal) return;
+                      navigation.navigate('DishDetail', {
+                        eventId: meal.id,
+                        concept: meal.concept ?? '',
+                        mealSlot: slotKey,
+                        dateKey: selectedDay.dateKey,
+                      });
+                    }}
+                    onLongPress={() => {
+                      if (!meal) return;
                       setExpanded(isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey });
                     }}
                   >
@@ -538,7 +499,7 @@ return (
                       <Text style={styles.slotOpen}>Open</Text>
                     )}
                     {meal && (
-                      <Ionicons name="chevron-down" size={16} color={colors.softAlert} />
+                      <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
                     )}
                   </Pressable>
 

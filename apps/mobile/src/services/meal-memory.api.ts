@@ -139,3 +139,16 @@ export async function postFeedback(
   const res = await api.post<MealMemoryFeedbackResponse>('/api/v1/meal-memory/feedback', input);
   return res.data;
 }
+
+export async function getMealInstructions(
+  eventId: string,
+  concept: string,
+  ingredients?: string[],
+  mealSlot?: string,
+): Promise<{ cookingInstructions: string[]; ingredients: string[]; tips: string[] }> {
+  const res = await api.post<{ cookingInstructions: string[]; ingredients: string[]; tips: string[] }>(
+    `/api/v1/meal-memory/meals/${eventId}/instructions`,
+    { concept, ingredients, mealSlot },
+  );
+  return res.data;
+}

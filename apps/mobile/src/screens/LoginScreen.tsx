@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
@@ -16,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { toApiError } from '../services/api';
-import { loginWithCredentials, registerAccount } from '../services/auth.api';
+import { checkEmail, loginWithCredentials, registerAccount } from '../services/auth.api';
 import { signInWithGoogle } from '../services/google-auth';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
@@ -68,16 +69,35 @@ const googleStyles = StyleSheet.create({
   },
 });
 
+type EmailStep = 'email' | 'password';
+
 export function LoginScreen() {
   const setSession = useAuthStore((state) => state.setSession);
   const [emailModalVisible, setEmailModalVisible] = useState(false);
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [step, setStep] = useState<EmailStep>('email');
+  const [isNewUser, setIsNewUser] = useState<boolean | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
 
-  const isRegister = mode === 'register';
+  function openEmailModal() {
+    setStep('email');
+    setIsNewUser(null);
+    setEmail('');
+    setPassword('');
+    setError(null);
+    setEmailModalVisible(true);
+  }
+
+  function closeEmailModal() {
+    setEmailModalVisible(false);
+    setStep('email');
+    setIsNewUser(null);
+    setEmail('');
+    setPassword('');
+    setError(null);
+  }
 
   async function handleGoogleSignIn() {
     setBusy(true);
@@ -94,14 +114,33 @@ export function LoginScreen() {
     }
   }
 
-  async function handleEmailSubmit() {
+  async function handleEmailContinue() {
+    if (!email.includes('@')) return;
     setError(null);
     setBusy(true);
     try {
-      const tokens = isRegister
-        ? await registerAccount({ email: email.trim(), password })
-        : await loginWithCredentials({ email: email.trim(), password });
-      setSession(tokens.accessToken, tokens.user);
+      const result = await checkEmail(email.trim());
+      setIsNewUser(!result.exists);
+      setStep('password');
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePasswordSubmit() {
+    if (password.length < 4) return;
+    setError(null);
+    setBusy(true);
+    try {
+      if (isNewUser) {
+        const tokens = await registerAccount({ email: email.trim(), password });
+        setSession(tokens.accessToken, tokens.user);
+      } else {
+        const tokens = await loginWithCredentials({ email: email.trim(), password });
+        setSession(tokens.accessToken, tokens.user);
+      }
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -144,7 +183,7 @@ export function LoginScreen() {
 
             <Pressable
               style={styles.emailButton}
-              onPress={() => setEmailModalVisible(true)}
+              onPress={openEmailModal}
               scaleTo={0.97}
             >
               <Text style={styles.emailButtonText}>Use Email</Text>
@@ -164,7 +203,7 @@ export function LoginScreen() {
         visible={emailModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setEmailModalVisible(false)}
+        onRequestClose={closeEmailModal}
       >
         <SafeAreaView style={styles.modalContainer}>
           <KeyboardAvoidingView
@@ -173,17 +212,14 @@ export function LoginScreen() {
           >
             <View style={styles.modalHeader}>
               <Pressable
-                onPress={() => {
-                  setEmailModalVisible(false);
-                  setError(null);
-                }}
+                onPress={closeEmailModal}
                 style={styles.modalCloseBtn}
                 scaleTo={1}
               >
                 <Text style={styles.modalCloseText}>Cancel</Text>
               </Pressable>
               <Text style={styles.modalTitle}>
-                {isRegister ? 'Create Account' : 'Sign In'}
+                {step === 'email' ? 'Get Started' : isNewUser ? 'Create Account' : 'Welcome Back'}
               </Text>
               <View style={styles.modalCloseBtn} />
             </View>
@@ -191,56 +227,90 @@ export function LoginScreen() {
             <View style={styles.modalBody}>
               <ErrorBanner error={error} />
 
-              <TextInput
-                accessibilityLabel="Email"
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor={colors.textSecondary}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
-              <TextInput
-                accessibilityLabel="Password"
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry
-                autoComplete={isRegister ? 'new-password' : 'password'}
-                value={password}
-                onChangeText={setPassword}
-              />
-              {isRegister && (
-                <Text style={styles.passwordHint}>
-                  Password must be at least 8 characters, with a letter and a number.
-                </Text>
+              <View style={styles.modalMascotWrap}>
+                <Image
+                  source={require('../../assets/mascot.png')}
+                  style={styles.modalMascot}
+                  resizeMode="contain"
+                />
+              </View>
+
+              {step === 'email' && (
+                <>
+                  <TextInput
+                    accessibilityLabel="Email"
+                    style={styles.input}
+                    placeholder="Enter your email"
+                    placeholderTextColor={colors.textSecondary}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoFocus
+                  />
+
+                  <PrimaryButton
+                    label="Continue"
+                    onPress={() => void handleEmailContinue()}
+                    busy={busy}
+                    disabled={!email.includes('@')}
+                    style={styles.submit}
+                  />
+                </>
               )}
 
-              <PrimaryButton
-                label={isRegister ? 'Create account' : 'Sign in'}
-                onPress={() => void handleEmailSubmit()}
-                busy={busy}
-                disabled={!email.includes('@') || password.length === 0 || (isRegister && password.length < 8)}
-                style={styles.submit}
-              />
+              {step === 'password' && (
+                <>
+                  <Text style={styles.emailHint}>
+                    {isNewUser
+                      ? `Creating account for ${email}`
+                      : `Signing in as ${email}`}
+                  </Text>
 
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setMode(isRegister ? 'login' : 'register');
-                  setError(null);
-                }}
-                style={styles.toggle}
-                scaleTo={1}
-              >
-                <Text style={styles.toggleText}>
-                  {isRegister
-                    ? 'Already have an account? Sign in'
-                    : "Don't have an account? Create one"}
-                </Text>
-              </Pressable>
+                  <TextInput
+                    accessibilityLabel="Password"
+                    style={styles.input}
+                    placeholder={isNewUser ? 'Create a password (8+ chars)' : 'Enter your password'}
+                    placeholderTextColor={colors.textSecondary}
+                    secureTextEntry
+                    autoComplete={isNewUser ? 'new-password' : 'password'}
+                    value={password}
+                    onChangeText={setPassword}
+                    autoFocus
+                  />
+
+                  {isNewUser && (
+                    <Text style={styles.passwordHint}>
+                      At least 8 characters with a letter and a number.
+                    </Text>
+                  )}
+
+                  <PrimaryButton
+                    label={isNewUser ? 'Create account' : 'Sign in'}
+                    onPress={() => void handlePasswordSubmit()}
+                    busy={busy}
+                    disabled={
+                      isNewUser
+                        ? password.length < 8
+                        : password.length === 0
+                    }
+                    style={styles.submit}
+                  />
+
+                  <Pressable
+                    onPress={() => {
+                      setStep('email');
+                      setPassword('');
+                      setError(null);
+                    }}
+                    style={styles.changeEmail}
+                    scaleTo={1}
+                  >
+                    <Text style={styles.changeEmailText}>Use a different email</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
@@ -351,7 +421,7 @@ const styles = StyleSheet.create({
   modalCloseText: {
     fontFamily: fonts.regular,
     fontSize: 16,
-    color: colors.primary,
+    color: colors.textSecondary,
   },
   modalTitle: {
     fontFamily: fonts.semiBold,
@@ -363,6 +433,20 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     justifyContent: 'center',
   },
+  modalMascotWrap: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalMascot: {
+    width: 100,
+    height: 100,
+  },
+  emailHint: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -371,6 +455,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: 16,
+    color: colors.text,
     marginBottom: spacing.md,
   },
   passwordHint: {
@@ -382,12 +467,13 @@ const styles = StyleSheet.create({
   submit: {
     marginTop: spacing.sm,
   },
-  toggle: {
+  changeEmail: {
     alignItems: 'center',
     padding: spacing.md,
+    marginTop: spacing.sm,
   },
-  toggleText: {
-    color: colors.primary,
+  changeEmailText: {
+    color: colors.textSecondary,
     fontSize: 14,
   },
 });

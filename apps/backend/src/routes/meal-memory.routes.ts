@@ -306,6 +306,25 @@ export async function mealMemoryRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(response);
   });
 
+  app.post('/meals/:eventId/instructions', async (request, reply) => {
+    const params = eventParamSchema.safeParse(request.params);
+    if (!params.success) throw validationError('eventId must be a uuid');
+    const body = z.object({
+      concept: z.string().min(1).max(200),
+      ingredients: z.array(z.string()).optional(),
+      mealSlot: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional(),
+    }).safeParse(request.body);
+    if (!body.success) throw validationError('Body must be { concept, ingredients?, mealSlot? }');
+    const response = await mealMemory.generateMealInstructions(
+      request.user.sub,
+      params.data.eventId,
+      body.data.concept,
+      body.data.ingredients,
+      body.data.mealSlot,
+    );
+    return reply.send(response);
+  });
+
   app.patch('/meals/:eventId', async (request, reply) => {
     const params = eventParamSchema.safeParse(request.params);
     const body = updateMealSchema.safeParse(request.body);
