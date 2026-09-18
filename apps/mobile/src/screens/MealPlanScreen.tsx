@@ -1,6 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,25 +11,21 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
-import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type {
-  MealEvent,
-  MealMemoryIntentResponse,
-  MealSlot,
-} from '@meal-rescue/shared-types';
+import type { MealEvent, MealMemoryIntentResponse, MealSlot } from '@meal-rescue/shared-types';
 
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { MealPlanLoading } from '../components/meal-plan';
 import { FadeInView } from '../components/motion/FadeInView';
-import { colors, spacing, typography } from '../theme';
-import { useMealMemoryStore } from '../stores/meal-memory.store';
-import { useCommonTableStore } from '../stores/common-table.store';
-import { MealPlanLoading, WeeklyOverview } from '../components/meal-plan';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
+import { useCommonTableStore } from '../stores/common-table.store';
+import { useMealMemoryStore } from '../stores/meal-memory.store';
+import { colors, spacing, typography } from '../theme';
 
 const SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -40,7 +36,8 @@ const SLOT_LABELS: Record<MealSlot, string> = {
 
 const SLOT_ORDER: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-const WEEKDAY_LETTERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_ITEM_WIDTH = 56;
+const MONTH_ITEM_WIDTH = 72;
 
 function addDays(dateKey: string, days: number): string {
   const d = new Date(`${dateKey}T00:00:00.000Z`);
@@ -58,8 +55,19 @@ function dayNumber(dateKey: string): number {
 }
 
 function todayKey(): string {
-  // Backend calendar backbone is UTC-based, so match it exactly.
   return new Date().toISOString().slice(0, 10);
+}
+
+function localeWeekday(dateKey: string): string {
+  const d = new Date(`${dateKey}T00:00:00.000Z`);
+  return d.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
+}
+
+function getMountainStyle(distance: number) {
+  if (distance === 0) return { scale: 1, opacity: 1, isCenter: true };
+  if (distance === 1) return { scale: 0.82, opacity: 0.65, isCenter: false };
+  if (distance === 2) return { scale: 0.68, opacity: 0.4, isCenter: false };
+  return { scale: 0.55, opacity: 0.2, isCenter: false };
 }
 
 function statusLabel(intent: MealMemoryIntentResponse | null): string {
@@ -83,11 +91,6 @@ function intentBody(intent: MealMemoryIntentResponse | null): string {
   return intent.resolution.rawText;
 }
 
-/**
- * Inline renaming of a planned meal's concept. Every change flows through the
- * store's debounced autosave so typing stays local-first and a failed save
- * rolls the grid back instead of leaving wrong text on screen.
- */
 function SlotConceptEditor({ meal }: { meal: MealEvent }) {
   const autosaveUpdateEvent = useMealMemoryStore((s) => s.autosaveUpdateEvent);
   const [value, setValue] = useState(meal.concept ?? '');
@@ -109,17 +112,11 @@ function SlotConceptEditor({ meal }: { meal: MealEvent }) {
   );
 }
 
-/**
- * Meal Plan � one screen, no sub-tabs. Week-strip calendar on top, a focused
- * day's four slots below, a read-only rules strip, and a pinned command bar
- * so the agent is always a tap away. Rules are managed by talking.
- */
 export function MealPlanScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 14);
   const composerBottomPad = bottomInset + 86 - insets.bottom + spacing.sm;
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-  const [strategy] = useState<'balance' | 'easy' | 'use_expiring'>('balance');
   const [input, setInput] = useState('');
   const [answer, setAnswer] = useState('');
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
@@ -139,19 +136,19 @@ export function MealPlanScreen() {
   const shiftWeek = useMealMemoryStore((s) => s.shiftWeek);
   const sendIntent = useMealMemoryStore((s) => s.sendIntent);
   const answerIntent = useMealMemoryStore((s) => s.answerIntent);
-  const planThisWeek = useMealMemoryStore((s) => s.planThisWeek);
   const moveEvent = useMealMemoryStore((s) => s.moveEvent);
   const removeEvent = useMealMemoryStore((s) => s.removeEvent);
   const markActual = useMealMemoryStore((s) => s.markActual);
   const feedBack = useMealMemoryStore((s) => s.feedBack);
-  const reuseLastWeek = useMealMemoryStore((s) => s.reuseLastWeek);
   const loadRecents = useMealMemoryStore((s) => s.loadRecents);
 
-const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
+  const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
   const householdMembers = useCommonTableStore((s) => s.members);
   const ensureHousehold = useCommonTableStore((s) => s.ensureHousehold);
 
   const today = todayKey();
+  const dayScrollRef = useRef<ScrollView>(null);
+  const monthScrollRef = useRef<ScrollView>(null);
 
   const scopeLabel = useMemo(() => {
     if (selectedMemberIds.length !== 1) return null;
@@ -159,7 +156,7 @@ const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
     return householdMembers.find((m) => m.id === id)?.displayName ?? null;
   }, [selectedMemberIds, householdMembers]);
 
-useEffect(() => {
+  useEffect(() => {
     ensureHousehold()
       .then(() => {
         if (!weekStart) void loadWeek();
@@ -189,7 +186,6 @@ useEffect(() => {
     }
   }, [weekStart, busy]);
 
-  // Focus today when it falls inside the loaded week, otherwise the week start.
   useEffect(() => {
     if (!weekStart) return;
     if (!focusedKey || focusedKey < weekStart || focusedKey > addDays(weekStart, 6)) {
@@ -197,37 +193,60 @@ useEffect(() => {
     }
   }, [weekStart]);
 
-  const weekLabel = useMemo(() => {
-    if (!weekStart) return '';
-    return `${prettyDate(weekStart)} � ${prettyDate(addDays(weekStart, 6))}`;
+  const weekDays = useMemo(() => {
+    if (!weekStart) return [];
+    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
 
-  const monthLabel = useMemo(() => {
-    if (!weekStart) return '';
-    const d = new Date(`${weekStart}T00:00:00.000Z`);
-    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  }, [weekStart]);
-
-  const isPastWeek = useMemo(() => {
-    if (!weekStart) return false;
-    return weekStart < today;
-  }, [weekStart, today]);
-
-  const reviewDays = useMemo(() => {
-    if (!week || !isPastWeek) return [];
-    return week.days.map((day) => {
-      const eaten = day.slots.some((s) => s.planned?.state === 'EATEN');
-      const replaced = day.slots.some((s) => s.planned?.state === 'REPLACED');
-      const planned = day.slots.some((s) => s.planned != null);
-      const firstConcept = day.slots.find((s) => s.planned)?.planned?.concept ?? null;
-      return { dateKey: day.dateKey, eaten, replaced, planned, firstConcept };
-    });
-  }, [week, isPastWeek]);
+  const focusedDayIndex = useMemo(() => {
+    if (!focusedKey || !weekStart) return 0;
+    const idx = weekDays.indexOf(focusedKey);
+    return idx >= 0 ? idx : 0;
+  }, [focusedKey, weekDays, weekStart]);
 
   const selectedDay = useMemo(
     () => week?.days.find((day) => day.dateKey === focusedKey) ?? null,
     [week, focusedKey],
   );
+
+  useEffect(() => {
+    if (dayScrollRef.current && weekDays.length > 0) {
+      const offset = focusedDayIndex * DAY_ITEM_WIDTH;
+      dayScrollRef.current.scrollTo({ x: offset, animated: true });
+    }
+  }, [focusedDayIndex, weekDays]);
+
+  const months = useMemo(() => {
+    if (!weekStart) return [];
+    const result: { key: string; label: string; year: string; monthOffset: number }[] = [];
+    const baseDate = new Date(`${weekStart}T00:00:00.000Z`);
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(baseDate);
+      d.setUTCMonth(d.getUTCMonth() + i);
+      const isoMonth = d.toISOString().slice(0, 7);
+      result.push({
+        key: isoMonth,
+        label: d.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }),
+        year: d.getUTCFullYear().toString(),
+        monthOffset: i,
+      });
+    }
+    return result;
+  }, [weekStart]);
+
+  const selectedMonthIndex = useMemo(() => {
+    if (!weekStart) return 6;
+    const currentMonth = weekStart.slice(0, 7);
+    const idx = months.findIndex((m) => m.key === currentMonth);
+    return idx >= 0 ? idx : 6;
+  }, [weekStart, months]);
+
+  useEffect(() => {
+    if (monthScrollRef.current && months.length > 0) {
+      const offset = selectedMonthIndex * MONTH_ITEM_WIDTH;
+      monthScrollRef.current.scrollTo({ x: offset, animated: true });
+    }
+  }, [selectedMonthIndex, months]);
 
   async function handleSend() {
     const text = input.trim();
@@ -250,11 +269,6 @@ useEffect(() => {
     }
   }
 
-  const weekDays = useMemo(() => {
-    if (!weekStart) return [];
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  }, [weekStart]);
-
   const plannedCountByDate = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const day of week?.days ?? []) {
@@ -267,7 +281,7 @@ useEffect(() => {
     pendingIntent &&
     (pendingIntent.status === 'awaiting_confirmation' || pendingIntent.status === 'clarification');
 
-if (!weekStart) {
+  if (!weekStart) {
     if (error && !busy) {
       return (
         <SafeAreaView style={styles.container}>
@@ -283,7 +297,9 @@ if (!weekStart) {
             }}
             style={{ marginTop: spacing.md, alignItems: 'center' }}
           >
-            <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Try again</Text>
+            <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>
+              Try again
+            </Text>
           </Pressable>
         </SafeAreaView>
       );
@@ -295,364 +311,431 @@ if (!weekStart) {
     );
   }
 
-return (
+  const handleDayMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+    const contentOffset = e.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffset / DAY_ITEM_WIDTH);
+    const clamped = Math.max(0, Math.min(index, weekDays.length - 1));
+    const newKey = weekDays[clamped];
+    if (newKey && newKey !== focusedKey) {
+      setFocusedKey(newKey);
+      setExpanded(null);
+    }
+  };
+
+  const handleMonthMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+    const contentOffset = e.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffset / MONTH_ITEM_WIDTH);
+    const clamped = Math.max(0, Math.min(index, months.length - 1));
+    const selectedMonth = months[clamped];
+    if (selectedMonth && selectedMonth.monthOffset !== 0) {
+      void shiftWeek(selectedMonth.monthOffset * 4);
+    }
+  };
+
+  return (
     <SafeAreaView style={styles.container}>
       <FadeInView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
-        <View style={styles.headerRight}>
-          {saveStatus !== 'idle' && (
-            <Text
-              style={[styles.saveBadge, saveStatus === 'error' && styles.saveBadgeError]}
-              accessibilityLabel={`Meal plan save status: ${saveStatus}`}
-            >
-              {saveStatus === 'saving'
-                ? 'Saving�'
-                : saveStatus === 'saved'
-                  ? 'Saved'
-                  : 'Not saved'}
-            </Text>
-          )}
-          {busy && <ActivityIndicator size="small" color={colors.primary} />}
+        <View style={styles.header}>
+          <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
+          <View style={styles.headerRight}>
+            {saveStatus !== 'idle' && (
+              <Text
+                style={[styles.saveBadge, saveStatus === 'error' && styles.saveBadgeError]}
+                accessibilityLabel={`Meal plan save status: ${saveStatus}`}
+              >
+                {saveStatus === 'saving'
+                  ? 'Saving…'
+                  : saveStatus === 'saved'
+                    ? 'Saved'
+                    : 'Not saved'}
+              </Text>
+            )}
+            {busy && <ActivityIndicator size="small" color={colors.primary} />}
+          </View>
         </View>
-      </View>
 
-      <ScrollView
-        contentContainerStyle={styles.weekContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              void loadWeek().finally(() => setRefreshing(false));
-            }}
-            tintColor={colors.textSecondary}
-          />
-        }
-      >
-        <ErrorBanner error={error} />
+        <ScrollView
+          contentContainerStyle={styles.weekContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void loadWeek().finally(() => setRefreshing(false));
+              }}
+              tintColor={colors.textSecondary}
+            />
+          }
+        >
+          <ErrorBanner error={error} />
 
-        {/* Month header */}
-        {monthLabel ? (
-          <View style={styles.monthHeader}>
+          {/* Month carousel */}
+          <View style={styles.carouselWithArrows}>
             <Pressable
-              style={styles.monthNavButton}
+              style={styles.carouselArrow}
               onPress={() => void shiftWeek(-4)}
               accessibilityLabel="Previous month"
             >
-              <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
+              <Ionicons name="chevron-back" size={20} color={colors.textSecondary} />
             </Pressable>
-            <Text style={styles.monthHeaderText}>{monthLabel}</Text>
+            <View style={styles.carouselSection}>
+              <ScrollView
+                ref={monthScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={MONTH_ITEM_WIDTH}
+                decelerationRate="fast"
+                onMomentumScrollEnd={handleMonthMomentumScrollEnd}
+                contentContainerStyle={styles.carouselContent}
+              >
+                {months.map((month, index) => {
+                  const distance = Math.abs(index - selectedMonthIndex);
+                  const style = getMountainStyle(distance);
+                  const isCurrentMonth = month.monthOffset === 0;
+                  return (
+                    <Pressable
+                      key={month.key}
+                      style={[
+                        styles.monthItem,
+                        {
+                          width: MONTH_ITEM_WIDTH,
+                          opacity: style.opacity,
+                          transform: [{ scale: style.scale }],
+                        },
+                        isCurrentMonth && styles.monthItemSelected,
+                      ]}
+                      onPress={() => {
+                        if (month.monthOffset !== 0) {
+                          void shiftWeek(month.monthOffset * 4);
+                        }
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.monthLabel,
+                          isCurrentMonth && styles.monthLabelSelected,
+                          { fontSize: isCurrentMonth ? 18 : 14 },
+                        ]}
+                      >
+                        {month.label}
+                      </Text>
+                      <Text style={[styles.monthYear, isCurrentMonth && styles.monthYearSelected]}>
+                        {month.year}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
             <Pressable
-              style={styles.monthNavButton}
+              style={styles.carouselArrow}
               onPress={() => void shiftWeek(4)}
               accessibilityLabel="Next month"
             >
-              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </Pressable>
           </View>
-        ) : null}
 
-        {/* Week-strip calendar */}
-        <View style={styles.calendarHeader}>
-          <Pressable
-            style={styles.weekNavButton}
-            onPress={() => void shiftWeek(-1)}
-            accessibilityLabel="Previous week"
-          >
-<Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
-          </Pressable>
-
-          <View style={styles.calendarStrip}>
-            {weekDays.map((key) => {
-              const index = weekDays.indexOf(key);
-              const selected = key === focusedKey;
-              const isToday = key === today;
-              const hasMeals = (plannedCountByDate[key] ?? 0) > 0;
-              return (
-                <Pressable
-                  key={key}
-                  style={[styles.dayCell, selected && styles.dayCellSelected]}
-                  onPress={() => {
-                    setFocusedKey(key);
-                    setExpanded(null);
-                  }}
-                  accessibilityLabel={`${WEEKDAY_LETTERS[index]} ${dayNumber(key)}`}
-                >
-                  <Text
-                    style={[styles.dayLetter, selected && styles.dayLetterSelected]}
-                  >
-                    {WEEKDAY_LETTERS[index]}
-                  </Text>
-                  <Text style={[styles.dayNumber, selected && styles.dayNumberSelected]}>
-                    {dayNumber(key)}
-                  </Text>
-                  <View style={styles.dayDotRow}>
-                    {isToday ? (
-                      <View style={[styles.dayDot, styles.dotToday]} />
-                    ) : hasMeals ? (
-                      <View style={styles.dayDot} />
-                    ) : (
-                      <View style={styles.dotBlank} />
-                    )}
-                  </View>
-                </Pressable>
-              );
-            })}
+          {/* Day carousel */}
+          <View style={styles.carouselWithArrows}>
+            <Pressable
+              style={styles.carouselArrow}
+              onPress={() => {
+                if (focusedDayIndex > 0) {
+                  setFocusedKey(weekDays[focusedDayIndex - 1]);
+                  setExpanded(null);
+                } else {
+                  void shiftWeek(-1);
+                }
+              }}
+              accessibilityLabel="Previous day"
+            >
+              <Ionicons name="chevron-back" size={20} color={colors.textSecondary} />
+            </Pressable>
+            <View style={styles.carouselSection}>
+              <ScrollView
+                ref={dayScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={DAY_ITEM_WIDTH}
+                decelerationRate="fast"
+                onMomentumScrollEnd={handleDayMomentumScrollEnd}
+                contentContainerStyle={styles.carouselContent}
+              >
+                {weekDays.map((key, index) => {
+                  const distance = Math.abs(index - focusedDayIndex);
+                  const style = getMountainStyle(distance);
+                  const isToday = key === today;
+                  const isSelected = key === focusedKey;
+                  const hasMeals = (plannedCountByDate[key] ?? 0) > 0;
+                  return (
+                    <Pressable
+                      key={key}
+                      style={[
+                        styles.dayItem,
+                        {
+                          width: DAY_ITEM_WIDTH,
+                          opacity: style.opacity,
+                          transform: [{ scale: style.scale }],
+                        },
+                        isSelected && styles.dayItemSelected,
+                      ]}
+                      onPress={() => {
+                        setFocusedKey(key);
+                        setExpanded(null);
+                      }}
+                      accessibilityLabel={`${localeWeekday(key)} ${dayNumber(key)}`}
+                    >
+                      <Text style={[styles.dayWeekday, isSelected && styles.dayWeekdaySelected]}>
+                        {localeWeekday(key)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.dayNumber,
+                          isSelected && styles.dayNumberSelected,
+                          { fontSize: isSelected ? 26 : 16 },
+                        ]}
+                      >
+                        {dayNumber(key)}
+                      </Text>
+                      <View style={styles.dayDotRow}>
+                        <View
+                          style={[
+                            styles.dayDot,
+                            isToday && styles.dotToday,
+                            hasMeals && !isToday && styles.dotPlanned,
+                            !isToday && !hasMeals && styles.dotEmpty,
+                          ]}
+                        />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+            <Pressable
+              style={styles.carouselArrow}
+              onPress={() => {
+                if (focusedDayIndex < weekDays.length - 1) {
+                  setFocusedKey(weekDays[focusedDayIndex + 1]);
+                  setExpanded(null);
+                } else {
+                  void shiftWeek(1);
+                }
+              }}
+              accessibilityLabel="Next day"
+            >
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </Pressable>
           </View>
 
-          <Pressable
-            style={styles.weekNavButton}
-            onPress={() => void shiftWeek(1)}
-            accessibilityLabel="Next week"
-          >
-<Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-          </Pressable>
-        </View>
-
-        <View style={styles.weekMetaRow}>
-          <View style={styles.weekMetaLeft}>
-            {scopeLabel && (
+          {/* Week meta */}
+          {scopeLabel && (
+            <View style={styles.scopeRow}>
               <View style={styles.scopeChip}>
                 <Ionicons name="person" size={11} color={colors.primary} />
                 <Text style={styles.scopeChipText}>for {scopeLabel}</Text>
               </View>
-            )}
-            <Text style={styles.weekLabel}>{weekLabel}</Text>
-          </View>
-          {today < weekStart || today > addDays(weekStart, 6) ? (
-            <Pressable
-              onPress={() => void loadWeek()}
-              style={styles.todayLink}
-            >
-              <Text style={styles.todayLinkText}>← today →</Text>
-            </Pressable>
-          ) : null}
-        </View>
+            </View>
+          )}
 
-        {week && !busy && (
-          <WeeklyOverview
-            days={week.days}
-            todayKey={today}
-            focusedKey={focusedKey ?? ''}
-            onSelectDay={(key) => {
-              setFocusedKey(key);
-              setExpanded(null);
-            }}
-            onSelectMeal={(eventId, concept, mealSlot, dateKey) => {
-              navigation.navigate('DishDetail', { eventId, concept, mealSlot, dateKey });
-            }}
-          />
+          {/* Selected day plan */}
+          {selectedDay ? (
+            <View style={styles.dayCard}>
+              <Text style={styles.dayCardLabel}>{prettyDate(selectedDay.dateKey)}</Text>
+              {SLOT_ORDER.map((slotKey) => {
+                const slot = selectedDay.slots.find((s) => s.mealSlot === slotKey);
+                const meal = slot?.planned ?? null;
+                const isExpanded =
+                  expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
+                return (
+                  <View key={slotKey}>
+                    <Pressable
+                      style={[
+                        styles.slotRow,
+                        isExpanded && styles.slotRowSelected,
+                        !meal && styles.slotRowEmpty,
+                      ]}
+                      onPress={() => {
+                        if (!meal) return;
+                        navigation.navigate('DishDetail', {
+                          eventId: meal.id,
+                          concept: meal.concept ?? '',
+                          mealSlot: slotKey,
+                          dateKey: selectedDay.dateKey,
+                        });
+                      }}
+                      onLongPress={() => {
+                        if (!meal) return;
+                        setExpanded(
+                          isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey },
+                        );
+                      }}
+                    >
+                      <Text style={[styles.slotLabel, !meal && styles.slotLabelEmpty]}>
+                        {SLOT_LABELS[slotKey]}
+                      </Text>
+                      {meal ? (
+                        <View style={styles.slotMeal}>
+                          <Text style={styles.slotConcept}>{meal.concept ?? 'Planned meal'}</Text>
+                          <Text style={styles.slotMeta}>
+                            {meal.mealRole?.replaceAll('_', ' ') ?? ''}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.slotOpen}>Nothing planned</Text>
+                      )}
+                      {meal && (
+                        <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
+                      )}
+                    </Pressable>
+
+                    {isExpanded && meal && (
+                      <>
+                        <SlotConceptEditor key={meal.id} meal={meal} />
+                        <View style={styles.slotActions}>
+                          <Pressable
+                            style={styles.slotAction}
+                            disabled={busy}
+                            onPress={() =>
+                              void markActual({
+                                dateKey: selectedDay.dateKey,
+                                mealSlot: slotKey,
+                                ate: true,
+                                concept: meal.concept ?? undefined,
+                              }).catch(() => {})
+                            }
+                          >
+                            <Ionicons name="checkmark" size={14} color={colors.softAlert} />
+                            <Text style={styles.slotActionText}>Cooked it</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.slotAction}
+                            disabled={busy}
+                            onPress={() =>
+                              void markActual({
+                                dateKey: selectedDay.dateKey,
+                                mealSlot: slotKey,
+                                skipped: true,
+                              }).catch(() => {})
+                            }
+                          >
+                            <Ionicons name="close" size={14} color={colors.softAlert} />
+                            <Text style={styles.slotActionText}>Skipped</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.slotAction}
+                            disabled={busy}
+                            onPress={() =>
+                              void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(
+                                () => {},
+                              )
+                            }
+                          >
+                            <Ionicons name="heart" size={14} color={colors.softAlert} />
+                            <Text style={styles.slotActionText}>Loved</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.slotAction}
+                            disabled={busy}
+                            onPress={() =>
+                              void moveEvent(
+                                meal.id,
+                                addDays(selectedDay.dateKey, 1),
+                                slotKey,
+                              ).catch(() => {})
+                            }
+                          >
+                            <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
+                            <Text style={styles.slotActionText}>Tomorrow</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[styles.slotAction, styles.slotActionDanger]}
+                            disabled={busy}
+                            onPress={() => void removeEvent(meal.id).catch(() => {})}
+                          >
+                            <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
+                            <Text style={[styles.slotActionText, { color: colors.error }]}>
+                              Remove
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </ScrollView>
+
+        {needsAnswer && pendingIntent && (
+          <View style={styles.agentCard}>
+            <View style={styles.agentHeader}>
+              <Ionicons name="chatbubble-ellipses" size={16} color={colors.softAlert} />
+              <Text style={styles.agentStatus}>{statusLabel(pendingIntent)}</Text>
+            </View>
+            <Text style={styles.agentBody}>{intentBody(pendingIntent)}</Text>
+            <View style={styles.answerRow}>
+              <TextInput
+                style={styles.answerInput}
+                placeholder="Type yes, no, or a fix…"
+                placeholderTextColor={colors.textSecondary}
+                value={answer}
+                onChangeText={setAnswer}
+                onSubmitEditing={() => void handleConfirm()}
+                returnKeyType="send"
+              />
+              <PrimaryButton
+                label="Send"
+                onPress={() => void handleConfirm()}
+                busy={busy}
+                disabled={!answer.trim()}
+                style={styles.answerButton}
+              />
+            </View>
+          </View>
         )}
 
-        {/* Past week summary */}
-        {isPastWeek && reviewDays.length > 0 ? null : null}
-
-        {/* Plan this week button */}
-        <View style={styles.toolbarRow}>
-          <PrimaryButton
-            label="Plan this week"
-            onPress={() => void planThisWeek({ strategy }).catch(() => {})}
-            busy={busy}
-            style={styles.planButton}
-          />
-        </View>
-
-        {/* Focused day */}
-        {selectedDay ? (
-          <View style={styles.dayCard}>
-            <Text style={styles.dayLabel}>{prettyDate(selectedDay.dateKey)}</Text>
-            {SLOT_ORDER.map((slotKey) => {
-              const slot = selectedDay.slots.find((s) => s.mealSlot === slotKey);
-              const meal = slot?.planned ?? null;
-              const isExpanded =
-                expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
-              return (
-                <View key={slotKey}>
-                  <Pressable
-                    style={[styles.slotRow, isExpanded && styles.slotRowSelected]}
-                    onPress={() => {
-                      if (!meal) return;
-                      navigation.navigate('DishDetail', {
-                        eventId: meal.id,
-                        concept: meal.concept ?? '',
-                        mealSlot: slotKey,
-                        dateKey: selectedDay.dateKey,
-                      });
-                    }}
-                    onLongPress={() => {
-                      if (!meal) return;
-                      setExpanded(isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey });
-                    }}
-                  >
-                    <Text style={styles.slotLabel}>{SLOT_LABELS[slotKey]}</Text>
-                    {meal ? (
-                      <View style={styles.slotMeal}>
-                        <Text style={styles.slotConcept}>{meal.concept ?? 'Planned meal'}</Text>
-                        <Text style={styles.slotMeta}>
-                          {meal.mealRole?.replaceAll('_', ' ') ?? ''}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.slotOpen}>Open</Text>
-                    )}
-                    {meal && (
-                      <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
-                    )}
-                  </Pressable>
-
-                  {isExpanded && meal && (
-                    <>
-                      <SlotConceptEditor key={meal.id} meal={meal} />
-                      <View style={styles.slotActions}>
-                        <Pressable
-                          style={styles.slotAction}
-                          disabled={busy}
-                          onPress={() =>
-                            void markActual({
-                              dateKey: selectedDay.dateKey,
-                              mealSlot: slotKey,
-                              ate: true,
-                              concept: meal.concept ?? undefined,
-                            }).catch(() => {})
-                          }
-                        >
-                          <Ionicons name="checkmark" size={14} color={colors.softAlert} />
-                          <Text style={styles.slotActionText}>Cooked it</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.slotAction}
-                          disabled={busy}
-                          onPress={() =>
-                            void markActual({
-                              dateKey: selectedDay.dateKey,
-                              mealSlot: slotKey,
-                              skipped: true,
-                            }).catch(() => {})
-                          }
-                        >
-                          <Ionicons name="close" size={14} color={colors.softAlert} />
-                          <Text style={styles.slotActionText}>Skipped</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.slotAction}
-                          disabled={busy}
-                          onPress={() =>
-                            void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(() => {})
-                          }
-                        >
-                          <Ionicons name="heart" size={14} color={colors.softAlert} />
-                          <Text style={styles.slotActionText}>Loved</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.slotAction}
-                          disabled={busy}
-                          onPress={() =>
-                            void moveEvent(meal.id, addDays(selectedDay.dateKey, 1), slotKey).catch(
-                              () => {},
-                            )
-                          }
-                        >
-                          <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
-                          <Text style={styles.slotActionText}>Tomorrow</Text>
-                        </Pressable>
-                        <Pressable
-                          style={[styles.slotAction, styles.slotActionDanger]}
-                          disabled={busy}
-                          onPress={() => void removeEvent(meal.id).catch(() => {})}
-                        >
-                          <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
-                          <Text style={[styles.slotActionText, { color: colors.error }]}>Remove</Text>
-                        </Pressable>
-                      </View>
-                    </>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {week && week.days.every((day) => day.slots.every((slot) => !slot.planned)) && (
-          <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={44} color={colors.softAlert} />
-            <Text style={styles.emptyTitle}>No plan yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Tap �Plan this week� or tell me below what you feel like eating.
+        {lastMessage && !pendingIntent && (
+          <View style={styles.resultBanner}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.softAlert} />
+            <Text style={styles.resultBannerText} numberOfLines={2}>
+              {lastMessage}
             </Text>
           </View>
         )}
-      </ScrollView>
 
-      {/* Result / answer banner sits above the command bar */}
-      {needsAnswer && pendingIntent && (
-        <View style={styles.agentCard}>
-          <View style={styles.agentHeader}>
-            <Ionicons name="chatbubble-ellipses" size={16} color={colors.softAlert} />
-            <Text style={styles.agentStatus}>{statusLabel(pendingIntent)}</Text>
-          </View>
-          <Text style={styles.agentBody}>{intentBody(pendingIntent)}</Text>
-          <View style={styles.answerRow}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.inputBar, { paddingBottom: composerBottomPad }]}
+        >
+          <View style={styles.inputRow}>
             <TextInput
-              style={styles.answerInput}
-              placeholder="Type yes, no, or a fix�"
+              style={styles.input}
+              placeholder="Help me to plan for tomorrow..."
               placeholderTextColor={colors.textSecondary}
-              value={answer}
-              onChangeText={setAnswer}
-              onSubmitEditing={() => void handleConfirm()}
+              value={input}
+              onChangeText={setInput}
+              onSubmitEditing={() => void handleSend()}
               returnKeyType="send"
+              multiline
             />
-            <PrimaryButton
-              label="Send"
-              onPress={() => void handleConfirm()}
-              busy={busy}
-              disabled={!answer.trim()}
-              style={styles.answerButton}
-            />
+            <Pressable
+              style={styles.sendButton}
+              onPress={() => void handleSend()}
+              disabled={!input.trim()}
+            >
+              {busy ? (
+                <ActivityIndicator size="small" color={colors.surface} />
+              ) : (
+                <Ionicons name="arrow-up" size={22} color={colors.surface} />
+              )}
+            </Pressable>
           </View>
-        </View>
-      )}
-
-      {lastMessage && !pendingIntent && (
-        <View style={styles.resultBanner}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.softAlert} />
-          <Text style={styles.resultBannerText} numberOfLines={2}>
-            {lastMessage}
-          </Text>
-        </View>
-      )}
-
-{/* Pinned command bar */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={[styles.inputBar, { paddingBottom: composerBottomPad }]}
-      >
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="Ask about your meals…"
-            placeholderTextColor={colors.textSecondary}
-            value={input}
-            onChangeText={setInput}
-            onSubmitEditing={() => void handleSend()}
-            returnKeyType="send"
-            multiline
-          />
-          <Pressable
-            style={styles.sendButton}
-            onPress={() => void handleSend()}
-            disabled={!input.trim()}
-          >
-            {busy ? (
-              <ActivityIndicator size="small" color={colors.surface} />
-            ) : (
-              <Ionicons name="arrow-up" size={20} color={colors.surface} />
-            )}
-</Pressable>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
       </FadeInView>
     </SafeAreaView>
   );
@@ -662,11 +745,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  loadingScroll: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 120,
   },
   header: {
     flexDirection: 'row',
@@ -691,10 +769,110 @@ const styles = StyleSheet.create({
   saveBadgeError: {
     color: colors.error,
   },
-  weekMetaLeft: {
+  weekContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 120,
+  },
+  carouselWithArrows: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  carouselArrow: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carouselSection: {
+    flex: 1,
+  },
+  carouselContent: {
+    paddingHorizontal: spacing.xl,
+  },
+  monthItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: 14,
+    marginHorizontal: 4,
+  },
+  monthItemSelected: {
+    backgroundColor: colors.primaryLight,
+  },
+  monthLabel: {
+    fontWeight: '700',
+    color: colors.text,
+  },
+  monthLabelSelected: {
+    fontWeight: '800',
+    color: colors.text,
+  },
+  monthYear: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  monthYearSelected: {
+    color: colors.text,
+  },
+  dayItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 14,
+    marginHorizontal: 4,
+  },
+  dayItemSelected: {
+    backgroundColor: colors.primaryLight,
+  },
+  dayWeekday: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  dayWeekdaySelected: {
+    color: colors.text,
+  },
+  dayNumber: {
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 2,
+  },
+  dayNumberSelected: {
+    color: colors.text,
+  },
+  dayDotRow: {
+    height: 8,
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  dotToday: {
+    backgroundColor: colors.secondary,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotPlanned: {
+    backgroundColor: colors.secondary,
+    opacity: 0.5,
+  },
+  dotEmpty: {
+    backgroundColor: colors.border,
+    opacity: 0.4,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
   scopeChip: {
     flexDirection: 'row',
@@ -705,267 +883,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-scopeChipText: {
+  scopeChipText: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
   },
-  recentStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  recentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.success + '10',
-    borderWidth: 1,
-    borderColor: colors.success + '30',
-    borderRadius: 16,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    maxWidth: 180,
-  },
-  recentChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  ruleGroup: {
-    marginBottom: spacing.xs,
-  },
-  weekContent: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: 120,
-  },
-  calendarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-weekNavButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarStrip: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  dayCell: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-  },
-dayCellSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.borderStrong,
-  },
-  dayLetter: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-  },
-dayLetterSelected: {
-    color: colors.text,
-  },
-  dayNumber: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.text,
-    marginTop: 1,
-  },
-dayNumberSelected: {
-    color: colors.text,
-  },
-  dayDotRow: {
-    height: 6,
-    marginTop: 2,
-  },
-  dayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.secondary,
-  },
-  dotToday: {
-    backgroundColor: colors.primary,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  dotBlank: {
-    width: 5,
-    height: 5,
-  },
-  weekMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  weekLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  todayLink: {
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
-    borderRadius: 8,
-    backgroundColor: colors.primaryLight,
-  },
-  todayLinkText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  toolbarRow: {
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  strategyRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  strategyChip: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-strategyChipActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.borderStrong,
-  },
-  strategyText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-strategyTextActive: {
-    color: colors.text,
-  },
-  planButton: {},
-  quickRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  quickChip: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  quickChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  rulesStrip: {
-    flexDirection: 'column',
-    gap: spacing.xs,
-    marginBottom: spacing.lg,
-  },
-  ruleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: spacing.xs,
-    backgroundColor: colors.primaryLight,
-    borderRadius: 12,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    maxWidth: 240,
-  },
-  ruleChipText: {
-    fontSize: 12,
-    color: colors.secondary,
-  },
-  ruleDetail: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.border,
-    marginLeft: spacing.sm,
-    marginTop: spacing.xs,
-    paddingLeft: spacing.sm,
-    gap: spacing.xs,
-  },
-  ruleDetailText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  ruleRemove: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingVertical: 2,
-  },
-  ruleRemoveText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.error,
-  },
-  conceptEditor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  conceptEditorLabel: {
-    width: 84,
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  conceptInput: {
-    flex: 1,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    fontSize: 15,
-    color: colors.text,
-  },
   dayCard: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    padding: spacing.lg,
     marginBottom: spacing.sm,
   },
-  dayLabel: {
-    fontSize: 13,
+  dayCardLabel: {
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.md,
   },
   slotRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
@@ -973,28 +916,34 @@ strategyTextActive: {
     backgroundColor: colors.background,
     borderRadius: 8,
   },
+  slotRowEmpty: {
+    opacity: 0.45,
+  },
   slotLabel: {
-    width: 84,
-    fontSize: 13,
+    width: 88,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
+  },
+  slotLabelEmpty: {
+    color: colors.border,
   },
   slotMeal: {
     flex: 1,
   },
   slotConcept: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
   },
   slotMeta: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textSecondary,
     textTransform: 'capitalize',
   },
   slotOpen: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textSecondary,
     fontStyle: 'italic',
   },
@@ -1021,21 +970,28 @@ strategyTextActive: {
     fontWeight: '600',
     color: colors.text,
   },
-  emptyState: {
+  conceptEditor: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: spacing.xl,
     gap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  emptySubtitle: {
-    fontSize: 14,
+  conceptEditorLabel: {
+    width: 84,
+    fontSize: 12,
+    fontWeight: '600',
     color: colors.textSecondary,
-    textAlign: 'center',
-    maxWidth: 280,
+  },
+  conceptInput: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    fontSize: 15,
+    color: colors.text,
   },
   agentCard: {
     backgroundColor: colors.surface,
@@ -1052,7 +1008,7 @@ strategyTextActive: {
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-agentStatus: {
+  agentStatus: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.textSecondary,
@@ -1102,7 +1058,7 @@ agentStatus: {
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
   inputRow: {
@@ -1115,79 +1071,19 @@ agentStatus: {
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
-    maxHeight: 110,
+    borderRadius: 22,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    maxHeight: 120,
+    lineHeight: 22,
   },
-sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  monthHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-monthNavButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monthHeaderText: {
-    ...typography.subhead,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  reviewSection: {
-    marginBottom: spacing.md,
-  },
-  reviewTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
-  },
-  reviewRow: {
-    gap: spacing.xs,
-  },
-  reviewCard: {
-    width: 64,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-  },
-  reviewDayName: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  reviewConcept: {
-    fontSize: 10,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 4,
-    height: 28,
-  },
-  reviewDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
 });
