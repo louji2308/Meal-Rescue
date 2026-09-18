@@ -43,6 +43,33 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.post(
+    '/complete-onboarding',
+    {
+      schema: {
+        description: 'Mark onboarding as completed for the authenticated user',
+        tags: ['auth'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              onboardingCompleted: { type: 'boolean' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = (request as { user?: { sub?: string } }).user?.sub;
+      if (!userId) {
+        void reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+      await User.update({ onboardingCompleted: true }, { where: { id: userId } });
+      void reply.send({ onboardingCompleted: true });
+    },
+  );
+
+  app.post(
     '/register',
     {
       schema: {

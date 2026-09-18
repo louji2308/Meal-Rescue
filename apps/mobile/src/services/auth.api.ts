@@ -22,3 +22,7 @@ export function loginWithCredentials({ email, password }: Credentials): Promise<
 export function loginWithGoogle(idToken: string): Promise<AuthTokens> {
   return api.post<AuthTokens>('/api/v1/auth/google', { idToken }).then((res) => res.data);
 }
+
+export function completeOnboarding(): Promise<{ onboardingCompleted: boolean }> {
+  return api.post<{ onboardingCompleted: boolean }>('/api/v1/auth/complete-onboarding').then((res) => res.data);
+}

@@ -16,6 +16,7 @@ import type { CulinaryFamily } from '@meal-rescue/shared-types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import { submitCuisinePreferences } from '../services/taste.api';
+import { completeOnboarding } from '../services/auth.api';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
 import { FadeInView } from '../components/motion/FadeInView';
@@ -486,10 +487,12 @@ export function OnboardingScreen() {
         setStepIndex(stepIndex + 1);
       } else {
         setOnboardingCompleted(true);
+        void completeOnboarding().catch(() => {});
         navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
       }
     } else {
       setOnboardingCompleted(true);
+      void completeOnboarding().catch(() => {});
       navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
     }
   }
