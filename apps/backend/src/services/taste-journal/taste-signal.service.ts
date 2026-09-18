@@ -150,6 +150,8 @@ export function computeStatus(
   const topContext = topContextShare(pieces);
   if (
     total >= 2 &&
+    topContext.contextType !== 'global' &&
+    topContext.contextValue !== 'overall' &&
     topContext.share >= tasteJournalConfig.CONTEXTUAL_PREFIX_SHARE &&
     topContext.count >= 2
   ) {
@@ -454,7 +456,8 @@ function deriveContexts(
     }
   >();
   for (const r of rows) {
-    const key = `${r.contextType ?? 'global'}:${r.contextValue ?? 'overall'}`;
+    if (!r.contextType || !r.contextValue) continue;
+    const key = `${r.contextType}:${r.contextValue}`;
     const existing = buckets.get(key) ?? {
       contextType: r.contextType ?? 'global',
       contextValue: r.contextValue ?? 'overall',

@@ -80,6 +80,7 @@ export class TasteJournalService {
         landscape.patterns,
         landscape.avoidances,
         landscape.contextual,
+        this.hiddenKeys(signals, overrides),
       ),
     };
   }
@@ -114,12 +115,14 @@ export class TasteJournalService {
   }
 
   async getBoundaries(userId: string): Promise<TasteBoundaryGroup[]> {
+    const [signals, overrides] = await this.loadState(userId);
     const landscape = await this.buildLandscape(userId);
     return this.buildBoundaries(
       userId,
       landscape.patterns,
       landscape.avoidances,
       landscape.contextual,
+      this.hiddenKeys(signals, overrides),
     );
   }
 
@@ -230,7 +233,7 @@ export class TasteJournalService {
   }
 
   private async buildLandscape(userId: string) {
-    const [signals, overrides, visible] = await this.loadState(userId);
+    const [, , visible] = await this.loadState(userId);
     return this.aggregation.buildLandscape(userId, visible);
   }
 
@@ -254,6 +257,17 @@ export class TasteJournalService {
           value: override.correctedValue ?? s.value,
         };
       });
+  }
+
+  /** Strand ids a user has hidden (dismissed or forgotten) via overrides. */
+  private hiddenKeys(signals: TasteSignal[], overrides: Map<string, ModelOverride>): Set<string> {
+    const keys = new Set<string>();
+    for (const signal of signals) {
+      const id = strandId(signal.dimension, signal.value);
+      const override = overrides.get(id);
+      if (override && HIDDEN_OVERRIDES.includes(override.action)) keys.add(id);
+    }
+    return keys;
   }
 
   private buildSummary(active: TasteSignal[]): TasteJournalSummary {
@@ -285,6 +299,7 @@ export class TasteJournalService {
     patterns: TasteSignal[],
     avoidances: TasteSignal[],
     contextual: TasteSignal[],
+    hiddenKeys: Set<string>,
   ): Promise<TasteBoundaryGroup[]> {
     // Explicit onboarding cuisines ("you told us") are always USUALLY_WORKS.
     const cuisineAffinities = await this.tasteMemory.getCuisineAffinities(userId);
@@ -299,7 +314,7 @@ export class TasteJournalService {
     const seenWorks = new Set<string>();
     for (const family of worksCuisines) {
       const id = strandId('cuisine', family);
-      if (seenWorks.has(id)) continue;
+      if (seenWorks.has(id) || hiddenKeys.has(id)) continue;
       seenWorks.add(id);
       const strand = patterns.find((s) => s.dimension === 'cuisine' && s.value === family);
       works.push(
@@ -311,7 +326,7 @@ export class TasteJournalService {
     for (const signal of patterns) {
       if (signal.dimension === 'cuisine') continue;
       const id = strandId(signal.dimension, signal.value);
-      if (seenWorks.has(id) || signal.polarity === 'negative') continue;
+      if (seenWorks.has(id) || hiddenKeys.has(id) || signal.polarity === 'negative') continue;
       seenWorks.add(id);
       works.push(this.insights.renderBoundary(signal));
     }
@@ -320,7 +335,7 @@ export class TasteJournalService {
     const seenAvoid = new Set<string>();
     for (const family of avoidCuisines) {
       const id = strandId('cuisine', family);
-      if (seenAvoid.has(id)) continue;
+      if (seenAvoid.has(id) || hiddenKeys.has(id)) continue;
       seenAvoid.add(id);
       const strand = avoidances.find((s) => s.dimension === 'cuisine' && s.value === family);
       if (strand) {
@@ -350,7 +365,7 @@ export class TasteJournalService {
 
     for (const signal of avoidances) {
       const id = strandId(signal.dimension, signal.value);
-      if (seenAvoid.has(id)) continue;
+      if (seenAvoid.has(id) || hiddenKeys.has(id)) continue;
       seenAvoid.add(id);
       avoid.push(this.insights.renderBoundary(signal));
     }
@@ -401,13 +416,21 @@ export class TasteJournalService {
 
     let evidenceCreated = 0;
 
+    // A forgotten strand must not be resurrected by historical replay.
+    const isForgotten = async (dimension: string, value: string): Promise<boolean> => {
+      const override = await this.models.TasteInsightOverride.findOne({
+        where: { userId, insightKey: strandId(dimension, value), action: 'FORGOTTEN' },
+      });
+      return !!override;
+    };
+
     // (a) Explicit cuisines from the onboarding compass.
     const tasteMemories = await this.models.TasteMemory.findAll({ where: { userId } });
     for (const row of tasteMemories) {
       const data = row.get() as { contextType: string; contextValue: string; affinity: number };
       if (data.contextType !== 'cuisine_family') continue;
       const affinity = Number(data.affinity);
-      if (affinity >= 0.4 || affinity <= -0.4) {
+      if ((affinity >= 0.4 || affinity <= -0.4) && !(await isForgotten('cuisine', data.contextValue))) {
         await this.signals.addSignal({
           userId,
           dimension: 'cuisine',
@@ -439,7 +462,7 @@ export class TasteJournalService {
       };
       if (m.targetType !== 'ingredient') continue;
       const mapped = mapEventType(m.eventType);
-      if (!mapped) continue;
+      if (!mapped || (await isForgotten('ingredient', m.targetId))) continue;
       await this.signals.addSignal({
         userId,
         dimension: 'ingredient',
@@ -457,6 +480,8 @@ export class TasteJournalService {
     }
 
     // (c) Onboarding addition picks (cold-start "finish the meal" pairs).
+    // Kept live-weighted like the onboarding compass: these are the user's own
+    // answers, not historical passive behaviour, so they warm STILL LEARNING.
     const additions = await this.models.AdditionEvent.findAll({ where: { userId } });
     for (const a of additions) {
       const data = a.get() as {
@@ -468,6 +493,7 @@ export class TasteJournalService {
       };
       if (!data.selected) continue;
       const chosen = data.selected === 'A' ? data.additionA : data.additionB;
+      if (await isForgotten('ingredient', chosen)) continue;
       await this.signals.addSignal({
         userId,
         dimension: 'ingredient',
@@ -477,12 +503,11 @@ export class TasteJournalService {
         sourceLabel: 'What you picked during setup',
         sourceEventKey: `onboarding:${data.id}`,
         occurredAt: data.createdAt,
-        backfill: true,
-        evidenceWeightFactor: tasteJournalConfig.BACKFILL_WEIGHT_MULTIPLIER,
       });
       evidenceCreated += 1;
     }
 
+    await this.models.TasteJournalMeta.create({ userId, backfilledAt: new Date() });
     return { signalsCreated: 0, evidenceCreated };
   }
 }

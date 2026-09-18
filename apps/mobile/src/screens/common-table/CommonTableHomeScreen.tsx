@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, {
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
@@ -51,24 +52,33 @@ function MemberRow({
   isSelected: boolean;
   onToggle: (id: string) => void;
 }) {
-  const tilt = useSharedValue(0);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${tilt.value}deg` }],
+  const progress = useSharedValue(isSelected ? 1 : 0);
+  const pop = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(isSelected ? 1 : 0, { duration: 180 });
+  }, [isSelected]);
+
+  const popStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + pop.value * 0.045 }],
+  }));
+  const selectStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(progress.value, [0, 1], [colors.border, colors.homeInk]),
+    backgroundColor: interpolateColor(progress.value, [0, 1], [colors.surface, '#F5F5F7']),
   }));
 
   function handlePress() {
-    tilt.value = withSequence(
-      withTiming(1.2, { duration: 70 }),
-      withTiming(-0.9, { duration: 80 }),
-      withSpring(0, { damping: 7, stiffness: 220 }),
+    pop.value = withSequence(
+      withSpring(1, { damping: 18, stiffness: 240 }),
+      withSpring(0, { damping: 6, stiffness: 320 }),
     );
     onToggle(member.id);
   }
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={popStyle}>
       <Pressable
-        style={[styles.memberCard, isSelected && styles.memberCardSelected]}
+        style={[styles.memberCard, selectStyle as unknown as ViewStyle]}
         onPress={handlePress}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: isSelected }}
@@ -413,9 +423,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.smd,
     gap: spacing.smd,
-  },
-  memberCardSelected: {
-    borderColor: colors.homeInk,
   },
   avatar: {
     width: 40,
