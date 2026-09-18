@@ -6,7 +6,6 @@ import {
   Image,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { Text } from '../components/AppText';
@@ -320,14 +319,12 @@ function QuestionScreen({
   onToggle,
   onContinue,
   onBack,
-  extraInput,
 }: {
   question: Question;
   selected: Set<string>;
   onToggle: (id: string) => void;
   onContinue: () => void;
   onBack: () => void;
-  extraInput?: { value: string; onChange: (t: string) => void };
 }) {
   const canContinue = selected.size > 0;
 
@@ -436,7 +433,6 @@ export function OnboardingScreen() {
   const [phase, setPhase] = useState<'cuisine' | 'questions' | 'done'>('cuisine');
   const [selections, setSelections] = useState<Record<string, Set<string>>>({});
   const [cuisineSelections, setCuisineSelections] = useState<Set<CulinaryFamily>>(new Set());
-  const [customNever, setCustomNever] = useState('');
   const [_submitting, setSubmitting] = useState(false);
 
   // Build question list dynamically based on current selections
@@ -495,14 +491,6 @@ export function OnboardingScreen() {
   function handleContinue() {
     haptics.medium();
     if (!currentQuestionId) return;
-
-    if (currentQuestionId === 'hardNos' && customNever.trim()) {
-      setSelections((prev) => {
-        const never = new Set(prev.hardNos ?? []);
-        never.add(`custom:${customNever.trim()}`);
-        return { ...prev, hardNos: never };
-      });
-    }
 
     if (stepIndex < questionSteps.length - 1) {
       const newList = getQuestionList(selections);
