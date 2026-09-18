@@ -8,7 +8,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Pressable } from '../../components/motion/Pressable';
@@ -56,21 +55,21 @@ function MemberRow({
   const pop = useSharedValue(0);
 
   useEffect(() => {
-    progress.value = withTiming(isSelected ? 1 : 0, { duration: 180 });
+    progress.value = withTiming(isSelected ? 1 : 0, { duration: 140 });
   }, [isSelected]);
 
   const popStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pop.value * 0.045 }],
+    transform: [{ scale: 1 + pop.value * 0.015 }],
   }));
   const selectStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(progress.value, [0, 1], [colors.border, colors.homeInk]),
-    backgroundColor: interpolateColor(progress.value, [0, 1], [colors.surface, '#F5F5F7']),
+    backgroundColor: interpolateColor(progress.value, [0, 1], [colors.surface, '#F7F7F8']),
   }));
 
   function handlePress() {
     pop.value = withSequence(
-      withSpring(1, { damping: 18, stiffness: 240 }),
-      withSpring(0, { damping: 6, stiffness: 320 }),
+      withTiming(1, { duration: 90 }),
+      withTiming(0, { duration: 240 }),
     );
     onToggle(member.id);
   }
