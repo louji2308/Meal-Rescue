@@ -233,6 +233,41 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(result);
   });
 
+  app.post('/taste/onboarding/preferences', async (request, reply) => {
+    const userId = request.user.sub;
+    const parsed = z
+      .object({
+        hardNos: z.object({
+          allergies: z.array(z.string()).optional(),
+          avoidIngredients: z.array(z.string()).optional(),
+          dietaryRestrictions: z.array(z.string()).optional(),
+          religiousCultural: z.array(z.string()).optional(),
+          strongDislikes: z.array(z.string()).optional(),
+        }).optional(),
+        flavorPersonality: z.array(z.string()).optional(),
+        texturePreferences: z.object({
+          crunchiness: z.enum(['crunchy', 'soft']).optional(),
+          creaminess: z.enum(['creamy', 'crisp']).optional(),
+          moistness: z.enum(['juicy', 'dry']).optional(),
+          chewiness: z.enum(['chewy', 'tender']).optional(),
+        }).optional(),
+        adventurousness: z.string().optional(),
+        rescueNeed: z.array(z.string()).optional(),
+        priorities: z.array(z.string()).optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'INVALID_PREFERENCES',
+        message: 'Invalid onboarding preferences',
+        statusCode: 400,
+      });
+    }
+    await User.update({ onboardingCompleted: true }, { where: { id: userId } });
+    return reply.send({ saved: true });
+  });
+
   app.post('/taste/compass', async (request, reply) => {
     const { tasteMemory } = buildServices(app.redis);
     const userId = request.user.sub;

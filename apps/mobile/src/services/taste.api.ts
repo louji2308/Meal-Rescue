@@ -66,3 +66,33 @@ export async function getTasteV2(): Promise<TasteV2Response> {
   const res = await api.get<TasteV2Response>('/api/v1/user/taste/v2');
   return res.data;
 }
+
+export interface OnboardingPreferences {
+  hardNos?: {
+    allergies?: string[];
+    avoidIngredients?: string[];
+    dietaryRestrictions?: string[];
+    religiousCultural?: string[];
+    strongDislikes?: string[];
+  };
+  flavorPersonality?: string[];
+  texturePreferences?: {
+    crunchiness?: 'crunchy' | 'soft';
+    creaminess?: 'creamy' | 'crisp';
+    moistness?: 'juicy' | 'dry';
+    chewiness?: 'chewy' | 'tender';
+  };
+  adventurousness?: string;
+  rescueNeed?: string[];
+  priorities?: string[];
+}
+
+export async function submitOnboardingPreferences(
+  prefs: OnboardingPreferences,
+): Promise<{ saved: boolean }> {
+  const res = await api.post<{ saved: boolean }>(
+    '/api/v1/user/taste/onboarding/preferences',
+    prefs,
+  );
+  return res.data;
+}
