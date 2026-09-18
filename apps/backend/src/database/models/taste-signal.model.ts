@@ -65,7 +65,7 @@ export class TasteSignal extends Model<
     contextValue: string;
     count: number;
     share: number;
-    polarity: string;
+    polarity: (typeof POLARITIES)[number];
   }> | null;
   declare sourceEventIds: string[] | null;
   declare firstObservedAt: CreationOptional<Date>;

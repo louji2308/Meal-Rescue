@@ -3,16 +3,15 @@ import type {
   TasteJournal,
   TasteJournalEvidenceDetail,
   TasteJournalInsight,
-  TasteJournalOverrideAction,
   TasteJournalOverrideRequest,
   TasteJournalOverrideResponse,
   TasteJournalSummary,
   TasteSignal,
-  TasteSignalEvidence,
+  TasteInsightOverrideAction,
 } from '@meal-rescue/shared-types';
-import { ErrorCategory } from '@meal-rescue/shared-types';
 
 import type { Db } from '../../database/models';
+import type { TasteSignalEvidence as TasteSignalEvidenceRow } from '../../database/models/taste-signal-evidence.model';
 import { AppError } from '../../lib/errors';
 import { TasteMemoryService } from '../taste-memory.service';
 import { ContextualPatternService } from './contextual-pattern.service';
@@ -21,7 +20,7 @@ import { TasteInsightService } from './taste-insight.service';
 import { TasteSignalService } from './taste-signal.service';
 import type { AddSignalArgs } from './taste-signal.service';
 
-const HIDDEN_OVERRIDES: TasteJournalOverrideAction[] = ['DISMISSED', 'FORGOTTEN'];
+const HIDDEN_OVERRIDES: TasteInsightOverrideAction[] = ['DISMISSED', 'FORGOTTEN'];
 
 /**
  * TasteJournalService - the reader-facing face of the journal.
@@ -169,7 +168,7 @@ export class TasteJournalService {
     request: TasteJournalOverrideRequest,
   ): Promise<TasteJournalOverrideResponse> {
     const { dimension, value } = this.resolveInsightId(insightId);
-    const action: TasteJournalOverrideAction =
+    const action: TasteInsightOverrideAction =
       request.action === 'DISMISS' ? 'DISMISSED' : request.action === 'CORRECT' ? 'CORRECTED' : 'FORGOTTEN';
 
     if (action === 'CORRECTED') {
@@ -498,13 +497,13 @@ export class TasteJournalService {
 }
 
 interface ModelOverride {
-  action: TasteJournalOverrideAction;
+  action: TasteInsightOverrideAction;
   note?: string;
   correctedPolarity?: 'positive' | 'negative';
   correctedValue?: string;
 }
 
-function toEvidenceResponse(row: TasteSignalEvidence): TasteJournalEvidenceDetail['evidence'][number] {
+function toEvidenceResponse(row: TasteSignalEvidenceRow): TasteJournalEvidenceDetail['evidence'][number] {
   return {
     source: row.source,
     sourceLabel: row.sourceLabel,

@@ -4,7 +4,6 @@ import type {
   Confidence,
   TasteSignal,
   TasteSignalContext,
-  TasteSignalEvidence,
   TasteSignalPolarity,
   TasteSignalSource,
   TasteSignalStatus,
@@ -12,6 +11,7 @@ import type {
 
 import { tasteJournalConfig } from '../../config/taste-journal';
 import type { Db } from '../../database/models';
+import type { TasteSignalEvidence as TasteSignalEvidenceRow } from '../../database/models/taste-signal-evidence.model';
 
 export interface AddSignalArgs {
   userId: string;
@@ -218,94 +218,62 @@ export class TasteSignalService {
       (args.evidenceWeightFactor ?? 1);
     const occurredAt = args.occurredAt ?? new Date();
 
-    return this.models.sequelize.transaction(async (transaction) => {
-      const [signal] = await this.models.TasteSignal.findOrCreate({
-        where: { userId: args.userId, dimension: args.dimension, value },
-        transaction,
-      });
-
-      // A genuinely new user signal revives a forgotten strand; backfill never does.
-      if (!args.backfill && args.source !== 'SYSTEM_INFERENCE') {
-        await this.models.TasteInsightOverride.destroy({
-          where: { userId: args.userId, insightKey: `STRAND:${args.dimension}:${value}`, action: 'FORGOTTEN' },
-          transaction,
-        });
-      }
-
-      const existingEvidence = await this.models.TasteSignalEvidence.findOne({
-        where: { signalId: signal.id, sourceEventKey },
-        transaction,
-      });
-      if (existingEvidence) {
-        return {
-          created: false,
-          signal: this.toSignal(signal),
-        };
-      }
-
-      await this.models.TasteSignalEvidence.create(
-        {
-          id: randomUUID(),
-          signalId: signal.id,
-          userId: args.userId,
-          dimension: args.dimension,
-          value,
-          polarity: args.polarity,
-          source: args.source,
-          sourceLabel: args.sourceLabel ?? SOURCE_LABELS[args.source],
-          weight,
-          eventId: args.eventId ?? null,
-          sourceEventKey,
-          contextType: args.contextType ?? null,
-          contextValue: args.contextValue ?? null,
-          note: args.note ?? null,
-          occurredAt,
-        },
-        { transaction },
-      );
-
-      const all = await this.models.TasteSignalEvidence.findAll({
-        where: { signalId: signal.id },
-        transaction,
-      });
-
-      const pieces: EvidencePiece[] = all.map((e) => ({
-        polarity: e.polarity,
-        source: e.source,
-        weight: Number(e.weight),
-        contextType: e.contextType,
-        contextValue: e.contextValue,
-        occurredAt: e.occurredAt,
-      }));
-
-      const confidence = computeConfidence(pieces);
-      const polarity = computePolarity(pieces);
-      const status = computeStatus(pieces, confidence);
-      const contexts = deriveContexts(all);
-      const sourceTypes = deriveSourceTypes(all);
-      const primarySourceType = derivePrimarySource(all);
-
-      const timestamps = all.map((e) => e.occurredAt.getTime());
-      await signal.update(
-        {
-          confidence,
-          polarity,
-          status,
-          evidenceCount: all.length,
-          positiveCount: all.filter((e) => e.polarity === 'positive').length,
-          negativeCount: all.filter((e) => e.polarity === 'negative').length,
-          neutralCount: all.filter((e) => e.polarity === 'neutral').length,
-          sourceTypes,
-          primarySourceType,
-          contexts,
-          firstObservedAt: new Date(Math.min(...timestamps)),
-          lastObservedAt: new Date(Math.max(...timestamps)),
-        },
-        { transaction },
-      );
-
-      return { created: true, signal: this.toSignal(signal) };
+    const [signal] = await this.models.TasteSignal.findOrCreate({
+      where: { userId: args.userId, dimension: args.dimension, value },
     });
+
+    // A genuinely new user signal revives a forgotten strand; backfill never does.
+    if (!args.backfill && args.source !== 'SYSTEM_INFERENCE') {
+      await this.models.TasteInsightOverride.destroy({
+        where: {
+          userId: args.userId,
+          insightKey: `STRAND:${args.dimension}:${value}`,
+          action: 'FORGOTTEN',
+        },
+      });
+    }
+
+    const existingEvidence = await this.models.TasteSignalEvidence.findOne({
+      where: { signalId: signal.id, sourceEventKey },
+    });
+    if (existingEvidence) {
+      return {
+        created: false,
+        signal: this.toSignal(signal),
+      };
+    }
+
+    try {
+      await this.models.TasteSignalEvidence.create({
+        id: randomUUID(),
+        signalId: signal.id,
+        userId: args.userId,
+        dimension: args.dimension,
+        value,
+        polarity: args.polarity,
+        source: args.source,
+        sourceLabel: args.sourceLabel ?? SOURCE_LABELS[args.source],
+        weight,
+        eventId: args.eventId ?? null,
+        sourceEventKey,
+        contextType: args.contextType ?? null,
+        contextValue: args.contextValue ?? null,
+        note: args.note ?? null,
+        occurredAt,
+      });
+    } catch (err) {
+      // A concurrent writer won the unique (signal_id, source_event_key) race -
+      // this datum is already recorded. App-level idempotency is preserved.
+      if ((err as { name?: string }).name === 'SequelizeUniqueConstraintError') {
+        return { created: false, signal: this.toSignal(signal) };
+      }
+      throw err;
+    }
+
+    await this.refreshSignal(args.userId, args.dimension, value);
+
+    const refreshed = await this.getSignal(args.userId, args.dimension, value);
+    return { created: true, signal: refreshed ?? this.toSignal(signal) };
   }
 
   async getSignals(userId: string): Promise<TasteSignal[]> {
@@ -323,26 +291,28 @@ export class TasteSignalService {
     return row ? this.toSignal(row) : null;
   }
 
-  async getEvidence(userId: string, dimension: string, value: string): Promise<TasteSignalEvidence[]> {
-    const rows = await this.models.TasteSignalEvidence.findAll({
+  async getEvidence(
+    userId: string,
+    dimension: string,
+    value: string,
+  ): Promise<TasteSignalEvidenceRow[]> {
+    return this.models.TasteSignalEvidence.findAll({
       where: { userId, dimension, value: value.toLowerCase() },
       order: [['occurred_at', 'DESC']],
     });
-    return rows.map((r) => r.get() as unknown as TasteSignalEvidence);
   }
 
   /** All evidence for a user, keyed by strand (dimension:value). For backfill planning. */
-  async getEvidenceForUser(userId: string): Promise<Map<string, TasteSignalEvidence[]>> {
+  async getEvidenceForUser(userId: string): Promise<Map<string, TasteSignalEvidenceRow[]>> {
     const rows = await this.models.TasteSignalEvidence.findAll({
       where: { userId },
       order: [['occurred_at', 'ASC']],
     });
-    const map = new Map<string, TasteSignalEvidence[]>();
+    const map = new Map<string, TasteSignalEvidenceRow[]>();
     for (const r of rows) {
-      const d = r.get() as unknown as TasteSignalEvidence;
-      const key = `${d.dimension}:${d.value}`;
+      const key = `${r.dimension}:${r.value}`;
       const list = map.get(key) ?? [];
-      list.push(d);
+      list.push(r);
       map.set(key, list);
     }
     return map;

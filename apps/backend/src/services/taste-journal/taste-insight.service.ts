@@ -60,7 +60,8 @@ export class TasteInsightService {
 
   renderDependent(dep: DependentPattern): TasteJournalInsight {
     const { signal, split } = dep;
-    const [left, right] = split;
+    const left = split[0]!;
+    const right = split[1]!;
     const leftLabel = left.label ?? left.contextValue.replace(/_/g, ' ');
     const rightLabel = right.label ?? right.contextValue.replace(/_/g, ' ');
     const signalCopy = dimensionNoun(signal.dimension, signal.value);
@@ -101,7 +102,7 @@ export class TasteInsightService {
 
   renderBoundary(signal: TasteSignal): TasteJournalInsight {
     const name = signal.dimension === 'cuisine' ? cuisineName(signal.value) : humanize(signal.value);
-    const noun = dimensionNoun(signal.dimension, signal.value).title;
+    const nounTitle = dimensionNoun(signal.dimension, signal.value).title;
 
     if (signal.polarity === 'negative') {
       return {
@@ -109,7 +110,7 @@ export class TasteInsightService {
           signal,
           'boundary',
           `Usually avoid: ${name.toLowerCase()}`,
-          `You've steered clear of ${noun.title} when it's been offered.`,
+          `You've steered clear of ${nounTitle} when it's been offered.`,
         ),
         title: `Usually avoid: ${name.toLowerCase()}`,
       };
@@ -118,7 +119,7 @@ export class TasteInsightService {
       signal,
       'boundary',
       `Usually works: ${name.toLowerCase()}`,
-      `${noun.title} has worked out for you more than a couple of times.`,
+      `${nounTitle} has worked out for you more than a couple of times.`,
     );
   }
 

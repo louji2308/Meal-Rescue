@@ -114,7 +114,7 @@ export function CommonTableHomeScreen() {
   const hasTable = activeMembers.length > 0;
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <ErrorBanner error={error} />
 
       {busy && members.length === 0 ? (
@@ -150,7 +150,7 @@ export function CommonTableHomeScreen() {
                   disabled={!hasTable}
                 >
                   <Text style={styles.heroActionText}>Manage</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.homeInk} />
+                  <Ionicons name="chevron-forward" size={16} color={colors.surface} />
                 </Pressable>
               ) : null}
             </View>
@@ -165,9 +165,9 @@ export function CommonTableHomeScreen() {
             >
               <View style={styles.resumeIcon}>
                 {resumeBusy ? (
-                  <ActivityIndicator size="small" color={colors.homeInk} />
+                  <ActivityIndicator size="small" color={colors.surface} />
                 ) : (
-                  <Ionicons name="flame" size={20} color={colors.homeInk} />
+                  <Ionicons name="flame" size={20} color={colors.surface} />
                 )}
               </View>
               <View style={styles.resumeText}>
@@ -176,7 +176,7 @@ export function CommonTableHomeScreen() {
                   {activeStatus === 'split' ? 'Branch time — continue' : 'Pick up where you left off'}
                 </Text>
               </View>
-              <Ionicons name="arrow-forward" size={20} color={colors.homeInk} />
+              <Ionicons name="arrow-forward" size={20} color={colors.surface} />
             </Pressable>
           ) : null}
 
@@ -259,7 +259,7 @@ export function CommonTableHomeScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={`Edit ${member.displayName}`}
                       >
-                        <Ionicons name="create-outline" size={17} color={colors.homeTextQuiet} />
+                        <Ionicons name="create-outline" size={17} color={colors.textSecondary} />
                       </Pressable>
                     </View>
                   );
@@ -299,6 +299,9 @@ export function CommonTableHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: colors.primaryLight,
+  },
   content: {
     padding: spacing.lg,
     paddingBottom: spacing.xl * 2,
@@ -316,8 +319,10 @@ const styles = StyleSheet.create({
 
   // ── Hero ────────────────────────────────────────────────
   hero: {
-    backgroundColor: colors.homeCardBlush,
+    backgroundColor: colors.surface,
     borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
@@ -330,7 +335,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(22,22,22,0.06)',
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -341,18 +346,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.2,
-    color: colors.homeTextTertiary,
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   heroTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: colors.homeInk,
+    color: colors.text,
     textTransform: 'capitalize',
   },
   heroSubtitle: {
     fontSize: 13,
-    color: colors.homeTextSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   heroAction: {
@@ -360,14 +365,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.smd,
     borderRadius: 10,
-    backgroundColor: 'rgba(22,22,22,0.05)',
+    backgroundColor: colors.homeInk,
   },
   heroActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.homeInk,
+    color: colors.surface,
   },
 
   // ── Resume ──────────────────────────────────────────────
@@ -413,11 +418,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: colors.homeInk,
+    color: colors.text,
   },
   sectionHint: {
     fontSize: 12,
-    color: colors.homeTextTertiary,
+    color: colors.textSecondary,
   },
 
   // ── Member cards ────────────────────────────────────────
@@ -464,14 +469,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.homeTintNeutral,
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPhoto: {
-    backgroundColor: colors.homeTintNeutral,
+    backgroundColor: colors.primaryLight,
     overflow: 'hidden',
   },
   avatarImage: {
@@ -480,7 +485,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   avatarText: {
-    color: colors.homeInk,
+    color: colors.text,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -495,11 +500,11 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.homeInk,
+    color: colors.text,
     textTransform: 'capitalize',
   },
   youBadge: {
-    backgroundColor: colors.homeTintNeutral,
+    backgroundColor: colors.primaryLight,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 1,
@@ -508,11 +513,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.6,
-    color: colors.homeTextQuiet,
+    color: colors.textSecondary,
   },
   memberMeta: {
     fontSize: 12,
-    color: colors.homeTextSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
     textTransform: 'capitalize',
   },
@@ -521,18 +526,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.homeTintNeutral,
+    backgroundColor: colors.primaryLight,
     borderRadius: 10,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     marginTop: 6,
   },
   constraintDanger: {
-    backgroundColor: colors.error + '14',
+    backgroundColor: colors.errorSoft,
   },
   constraintText: {
     fontSize: 11,
-    color: colors.homeTextSecondary,
+    color: colors.textSecondary,
     textTransform: 'capitalize',
   },
   constraintTextDanger: {
@@ -555,14 +560,14 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.homeTintNeutral,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addSomeoneText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.homeInk,
+    color: colors.text,
   },
 
   // ── Empty state ─────────────────────────────────────────
@@ -579,11 +584,11 @@ const styles = StyleSheet.create({
   emptyMembersTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.homeInk,
+    color: colors.text,
   },
   emptyMembersText: {
     fontSize: 13,
-    color: colors.homeTextSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 19,
   },
