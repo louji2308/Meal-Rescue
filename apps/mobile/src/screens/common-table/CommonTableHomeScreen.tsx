@@ -11,6 +11,7 @@ import { Text } from '../../components/AppText';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
+import type { HouseholdMemberProfile } from '@meal-rescue/shared-types';
 import { toApiError } from '../../services/api';
 import {
   getSharedMeal,
@@ -22,10 +23,27 @@ import { colors, spacing, typography } from '../../theme';
 import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
- * Common Table home � the dashboard for the household meal session.
- * Person selection happens inline here ("Who's eating?"), so the flow is
- * home ? ingredients ? cook ? how did it go.
+ * Common Table home — one unified "Your Table" screen.
+ *
+ * The roster IS the selection: everyone you cook for is listed once, with a
+ * check for "eating tonight?" and a tap-to-edit (constraints live behind the
+ * person). Finding a meal uses the people you checked.
+ *
+ * Flow: Your Table (pick who's eating) → Ingredients → Plan & Cook → How did it go.
  */
+
+function constraintSummary(member: HouseholdMemberProfile): {
+  label: string;
+  danger: boolean;
+} | null {
+  const { allergies, avoidIngredients, dietaryRestrictions } = member.constraints;
+  if (allergies.length > 0) return { label: `allergy: ${allergies[0]}`, danger: true };
+  if (avoidIngredients.length > 0) return { label: `avoids ${avoidIngredients[0]}`, danger: false };
+  if (dietaryRestrictions.length > 0)
+    return { label: dietaryRestrictions[0], danger: false };
+  return null;
+}
+
 export function CommonTableHomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
   const household = useCommonTableStore((s) => s.household);
@@ -48,7 +66,7 @@ export function CommonTableHomeScreen() {
     setBusy(true);
     setError(null);
     try {
-await hydrate();
+      await hydrate();
       await loadHousehold();
       const loaded = await loadPeoplePhotos();
       setPhotos(loaded);
@@ -91,177 +109,188 @@ await hydrate();
   }
 
   const activeMembers = members.filter((m) => m.active);
+  const activeSorted = [...activeMembers].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
+  const hasOneself = activeSorted.some((m) => m.isOwner);
+  const hasTable = activeMembers.length > 0;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <ErrorBanner error={error} />
 
-      {busy ? (
+      {busy && members.length === 0 ? (
         <View style={styles.loadingCenter}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Finding your table�</Text>
+          <Text style={styles.loadingText}>Setting the table…</Text>
         </View>
-) : (
+      ) : (
         <FadeInView>
-          {/* Table card */}
-          <Pressable
-            style={styles.homeCard}
-            onPress={() => navigation.navigate('Household')}
-          >
-            <View style={styles.homeCardHeader}>
-              <View style={styles.homeCardIcon}>
-                <Ionicons name="people" size={22} color={colors.softAlert} />
+          {/* ── Hero: your table ─────────────────────────────── */}
+          <View style={styles.hero}>
+            <View style={styles.heroRow}>
+              <View style={styles.heroIcon}>
+                <Ionicons name="restaurant" size={24} color={colors.homeInk} />
               </View>
-              <View style={styles.homeCardText}>
-                <Text style={styles.homeCardTitle}>
-                  {household ? household.name : 'Set up your table'}
+              <View style={styles.heroText}>
+                <Text style={styles.heroEyebrow}>YOURTABLE</Text>
+                <Text style={styles.heroTitle}>
+                  {household ? household.name : 'Your table'}
                 </Text>
-                <Text style={styles.homeCardSubtitle}>
-                  {household
-                    ? `${activeMembers.length} at the table`
+                <Text style={styles.heroSubtitle}>
+                  {hasTable
+                    ? `${activeMembers.length} ${activeMembers.length === 1 ? 'person' : 'people'} you cook for`
                     : 'Add the people you cook for'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.softAlert} />
+              {hasTable ? (
+                <Pressable
+                  style={styles.heroAction}
+                  onPress={() => navigation.navigate('Household')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage table"
+                  disabled={!hasTable}
+                >
+                  <Text style={styles.heroActionText}>Manage</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.homeInk} />
+                </Pressable>
+              ) : null}
             </View>
-          </Pressable>
+          </View>
 
-          {/* Resume card */}
+          {/* ── Resume in-progress meal ─────────────────────── */}
           {activeId && (activeStatus === 'cooking' || activeStatus === 'split') ? (
             <Pressable
-              style={[styles.homeCard, styles.resumeCard]}
+              style={styles.resumeCard}
               disabled={resumeBusy}
               onPress={() => void handleResume()}
             >
-              <View style={styles.homeCardHeader}>
-                <View style={[styles.homeCardIcon, styles.resumeIcon]}>
-                  {resumeBusy ? (
-                    <ActivityIndicator size="small" color={colors.surface} />
-                  ) : (
-                    <Ionicons name="restaurant" size={22} color={colors.surface} />
-                  )}
-                </View>
-                <View style={styles.homeCardText}>
-                  <Text style={styles.resumeTitle}>A meal is in progress</Text>
-                  <Text style={styles.resumeSubtitle}>
-                    {activeStatus === 'split' ? 'Branch time � continue' : 'Pick up where you left off'}
-                  </Text>
-                </View>
-                <Ionicons name="arrow-forward" size={20} color={colors.surface} />
+              <View style={styles.resumeIcon}>
+                {resumeBusy ? (
+                  <ActivityIndicator size="small" color={colors.homeInk} />
+                ) : (
+                  <Ionicons name="flame" size={20} color={colors.homeInk} />
+                )}
               </View>
+              <View style={styles.resumeText}>
+                <Text style={styles.resumeTitle}>A meal is in progress</Text>
+                <Text style={styles.resumeSubtitle}>
+                  {activeStatus === 'split' ? 'Branch time — continue' : 'Pick up where you left off'}
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward" size={20} color={colors.homeInk} />
             </Pressable>
           ) : null}
 
-          {/* CTA */}
-          <PrimaryButton
-            label={members.length > 0 ? "Find a meal for tonight's table" : 'Set up your table first'}
-            onPress={() =>
-              members.length > 0
-                ? navigation.navigate('Ingredients', { memberIds: selected })
-                : navigation.navigate('Household')
-            }
-            disabled={members.length > 0 && selected.length === 0}
-            style={styles.cta}
-          />
-
-          {/* Who's eating � tap to select, tap again to unselect */}
-          {members.length > 0 && (
+          {/* ── Who's eating tonight ────────────────────────── */}
+          {hasTable ? (
             <>
-              <Text style={[typography.heading, styles.sectionTitle]}>Who's eating?</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Who's eating tonight?</Text>
+                <Text style={styles.sectionHint}>Check the box · tap the card to edit</Text>
+              </View>
+
               <View style={styles.memberList}>
-                {activeMembers.map((member) => {
+                {activeSorted.map((member) => {
                   const isSelected = selected.includes(member.id);
                   const photo = photos[member.id];
+                  const constraint = constraintSummary(member);
                   return (
-                    <Pressable
-                      key={member.id}
-                      style={[styles.memberRow, isSelected && styles.memberRowSelected]}
-                      onPress={() => toggleSelected(member.id)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: isSelected }}
-                    >
-                      <View
-                        style={[
-                          styles.avatar,
-                          isSelected && styles.avatarSelected,
-                          photo && styles.avatarPhoto,
-                        ]}
+                    <View key={member.id} style={styles.memberCard}>
+                      <Pressable
+                        style={styles.checkBox}
+                        onPress={() => toggleSelected(member.id)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isSelected }}
+                        accessibilityLabel={`${member.displayName} eating tonight`}
                       >
-{photo ? (
-                          <AppImage source={{ uri: photo }} style={styles.avatarImage} />
-                        ) : (
-                          <Text style={styles.avatarText}>{member.initials}</Text>
-                        )}
-                      </View>
-                      <View style={styles.memberInfo}>
-                        <Text style={styles.memberName}>{member.displayName}</Text>
-                        <Text style={styles.memberMeta}>
-                          {member.ageGroup}
-                          {member.isOwner ? ' � you' : ''}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={22}
-                        color={isSelected ? colors.softAlert : colors.border}
-                      />
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          )}
-
-          {/* At the table */}
-          <Text style={[typography.heading, styles.sectionTitle]}>The people you cook for</Text>
-          {activeMembers.length === 0 ? (
-            <View style={styles.emptyMembers}>
-              <Ionicons name="person-add-outline" size={32} color={colors.softAlert} />
-              <Text style={styles.emptyMembersText}>
-                Add people (and the things to avoid) so we can plan one meal that works for
-                everyone.
-              </Text>
-              <Pressable
-                onPress={() => navigation.navigate('AddPeople')}
-              >
-                <Text style={styles.emptyMembersLink}>Add someone ?</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <>
-              <View style={styles.memberList}>
-                {activeMembers.map((member) => {
-                  const photo = photos[member.id];
-                  return (
-                    <View key={member.id} style={styles.memberRow}>
-                      <View style={[styles.avatar, photo && styles.avatarPhoto]}>
-{photo ? (
-                          <AppImage source={{ uri: photo }} style={styles.avatarImage} />
-                        ) : (
-                          <Text style={styles.avatarText}>{member.initials}</Text>
-                        )}
-                      </View>
-                      <View style={styles.memberInfo}>
-                        <Text style={styles.memberName}>{member.displayName}</Text>
-                        <Text style={styles.memberMeta}>{member.ageGroup ?? 'adult'}</Text>
-                      </View>
-                      {member.isOwner && (
-                        <View style={styles.ownerBadge}>
-                          <Text style={styles.ownerBadgeText}>You</Text>
+                        <View style={[styles.checkCircle, isSelected && styles.checkCircleOn]}>
+                          {isSelected && (
+                            <Ionicons name="checkmark" size={14} color={colors.surface} />
+                          )}
                         </View>
-                      )}
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.memberBody}
+                        onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${member.displayName}`}
+                      >
+                        <View style={[styles.avatar, photo && styles.avatarPhoto]}>
+                          {photo ? (
+                            <AppImage source={{ uri: photo }} style={styles.avatarImage} />
+                          ) : (
+                            <Text style={styles.avatarText}>{member.initials}</Text>
+                          )}
+                        </View>
+
+                        <View style={styles.memberInfo}>
+                          <View style={styles.nameRow}>
+                            <Text style={styles.memberName}>{member.displayName}</Text>
+                            {member.isOwner && <View style={styles.youBadge}><Text style={styles.youBadgeText}>YOU</Text></View>}
+                          </View>
+                          <Text style={styles.memberMeta}>
+                            {[member.relationship, member.ageGroup ?? 'adult']
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </Text>
+                          {constraint ? (
+                            <View style={[styles.constraintChip, constraint.danger && styles.constraintDanger]}>
+                              <Ionicons
+                                name={constraint.danger ? 'warning' : 'leaf'}
+                                size={11}
+                                color={constraint.danger ? colors.error : colors.secondary}
+                              />
+                              <Text
+                                style={[
+                                  styles.constraintText,
+                                  constraint.danger && styles.constraintTextDanger,
+                                ]}
+                              >
+                                {constraint.label}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </Pressable>
+
+                      <Pressable
+                        style={styles.editBtn}
+                        onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${member.displayName}`}
+                      >
+                        <Ionicons name="create-outline" size={17} color={colors.homeTextQuiet} />
+                      </Pressable>
                     </View>
                   );
                 })}
               </View>
+
               <Pressable
                 onPress={() => navigation.navigate('AddPeople')}
                 style={styles.addSomeoneButton}
+                accessibilityRole="button"
               >
-                <Ionicons name="person-add-outline" size={16} color={colors.primary} />
-                <Text style={styles.addSomeoneText}>Add someone +</Text>
-</Pressable>
+                <View style={styles.addCircle}>
+                  <Ionicons name="add" size={18} color={colors.homeInk} />
+                </View>
+                <Text style={styles.addSomeoneText}>Add someone</Text>
+              </Pressable>
             </>
+          ) : (
+            <View style={styles.emptyMembers}>
+              <Ionicons name="people-outline" size={34} color={colors.homeTextTertiary} />
+              <Text style={styles.emptyMembersTitle}>Set up your table</Text>
+              <Text style={styles.emptyMembersText}>
+                Add the people you cook for — their allergies and avoid lists become hard
+                rules we never break.
+              </Text>
+              <PrimaryButton
+                label="Add someone"
+                onPress={() => navigation.navigate('AddPeople')}
+                style={styles.emptyCta}
+              />
+            </View>
           )}
         </FadeInView>
       )}
@@ -284,165 +313,281 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
   },
-  homeCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+
+  // ── Hero ────────────────────────────────────────────────
+  hero: {
+    backgroundColor: colors.homeCardBlush,
+    borderRadius: 18,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  homeCardHeader: {
+  heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
-  homeCardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primaryLight,
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(22,22,22,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  homeCardText: {
+  heroText: {
     flex: 1,
   },
-  homeCardTitle: {
-    fontSize: 16,
+  heroEyebrow: {
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.text,
+    letterSpacing: 1.2,
+    color: colors.homeTextTertiary,
+    marginBottom: 2,
   },
-  homeCardSubtitle: {
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.homeInk,
+    textTransform: 'capitalize',
+  },
+  heroSubtitle: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.homeTextSecondary,
     marginTop: 2,
   },
-resumeCard: {
-    backgroundColor: colors.text,
-    borderColor: colors.text,
+  heroAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 10,
+    backgroundColor: 'rgba(22,22,22,0.05)',
+  },
+  heroActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.homeInk,
+  },
+
+  // ── Resume ──────────────────────────────────────────────
+  resumeCard: {
+    backgroundColor: colors.homeInk,
+    borderRadius: 16,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   resumeIcon: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resumeText: {
+    flex: 1,
   },
   resumeTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.surface,
   },
   resumeSubtitle: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.72)',
     marginTop: 2,
   },
-  cta: {
+
+  // ── Section header ──────────────────────────────────────
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
     marginTop: spacing.sm,
   },
   sectionTitle: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.md,
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.homeInk,
   },
-  emptyMembers: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+  sectionHint: {
+    fontSize: 12,
+    color: colors.homeTextTertiary,
   },
-  emptyMembersText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  emptyMembersLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-    marginTop: spacing.xs,
-  },
+
+  // ── Member cards ────────────────────────────────────────
   memberList: {
     gap: spacing.sm,
   },
-  memberRow: {
+  memberCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingLeft: spacing.sm,
+    paddingRight: spacing.xs,
+    gap: spacing.xs,
   },
-memberRowSelected: {
-    borderColor: colors.borderStrong,
+  checkBox: {
+    padding: spacing.sm,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
-    backgroundColor: colors.primaryLight + '44',
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  checkCircleOn: {
+    backgroundColor: colors.homeInk,
+    borderColor: colors.homeInk,
+  },
+  memberBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primaryLight,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.homeTintNeutral,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarPhoto: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.homeTintNeutral,
     overflow: 'hidden',
   },
   avatarImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
-  avatarSelected: {
-    backgroundColor: colors.primaryLight,
-  },
-avatarText: {
-    color: colors.text,
+  avatarText: {
+    color: colors.homeInk,
     fontSize: 15,
     fontWeight: '700',
   },
   memberInfo: {
     flex: 1,
   },
-  memberName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    textTransform: 'capitalize',
-  },
-  memberMeta: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-    textTransform: 'capitalize',
-  },
-  ownerBadge: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  ownerBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.secondary,
-  },
-  addSomeoneButton: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+  },
+  memberName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.homeInk,
+    textTransform: 'capitalize',
+  },
+  youBadge: {
+    backgroundColor: colors.homeTintNeutral,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  youBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: colors.homeTextQuiet,
+  },
+  memberMeta: {
+    fontSize: 12,
+    color: colors.homeTextSecondary,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  constraintChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.homeTintNeutral,
+    borderRadius: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginTop: 6,
+  },
+  constraintDanger: {
+    backgroundColor: colors.error + '14',
+  },
+  constraintText: {
+    fontSize: 11,
+    color: colors.homeTextSecondary,
+    textTransform: 'capitalize',
+  },
+  constraintTextDanger: {
+    color: colors.error,
+    fontWeight: '600',
+  },
+  editBtn: {
+    padding: spacing.sm,
+  },
+
+  // ── Add someone ─────────────────────────────────────────
+  addSomeoneButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  addCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.homeTintNeutral,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addSomeoneText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.primary,
+    color: colors.homeInk,
+  },
+
+  // ── Empty state ─────────────────────────────────────────
+  emptyMembers: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    marginTop: spacing.sm,
+  },
+  emptyMembersTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.homeInk,
+  },
+  emptyMembersText: {
+    fontSize: 13,
+    color: colors.homeTextSecondary,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  emptyCta: {
+    marginTop: spacing.sm,
   },
 });

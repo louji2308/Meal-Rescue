@@ -11,6 +11,7 @@ import {
 import { User } from '../database/models/user.model';
 import { AppError } from '../lib/errors';
 import { buildServices, dbModels } from '../services/composition';
+import { getPair } from '../services/onboarding';
 
 /**
  * GET /api/v1/user/preferences - learned preferences with confidence
@@ -155,7 +156,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/taste/onboarding/cuisines', async (request, reply) => {
-    const { mealCompletion, tasteMemory } = buildServices(app.redis);
+    const { mealCompletion, tasteMemory, tasteJournal } = buildServices(app.redis);
     const userId = request.user.sub;
     const parsed = z
       .object({
@@ -172,6 +173,16 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
     for (const family of parsed.data.cuisines) {
       await tasteMemory.seedCompass(userId, { family, traditionVsModern: 0 });
+      // Journal evidence: an explicitly chosen cuisine is a user-asserted "works".
+      await tasteJournal.addSignal({
+        userId,
+        dimension: 'cuisine',
+        value: family,
+        polarity: 'positive',
+        source: 'ONBOARDING',
+        sourceLabel: 'What you told us during setup',
+        sourceEventKey: `onboardingcuisine:${family}`,
+      });
     }
     const user = await User.findByPk(userId, {
       attributes: ['onboardingCompleted'],
@@ -184,7 +195,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/taste/onboarding/answers', async (request, reply) => {
-    const { mealCompletion } = buildServices(app.redis);
+    const { mealCompletion, tasteJournal } = buildServices(app.redis);
     const userId = request.user.sub;
     const parsed = z
       .object({
@@ -227,6 +238,23 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     const result = await mealCompletion.answerOnboarding(userId, parsed.data.answer);
+    // Journal evidence: the chosen completion addition is a soft onboarding "like".
+    if (result.createdEventId && parsed.data.answer.selected) {
+      const pair = getPair(parsed.data.answer.pairId);
+      const chosen =
+        parsed.data.answer.selected === 'A' ? pair?.optionA.name : pair?.optionB.name;
+      if (chosen) {
+        await tasteJournal.addSignal({
+          userId,
+          dimension: 'ingredient',
+          value: chosen,
+          polarity: 'positive',
+          source: 'ONBOARDING',
+          sourceLabel: 'What you picked during setup',
+          sourceEventKey: `onboarding:${result.createdEventId}`,
+        });
+      }
+    }
     if (result.summary) {
       await User.update({ onboardingCompleted: true }, { where: { id: userId } });
     }

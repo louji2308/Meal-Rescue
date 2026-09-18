@@ -139,7 +139,7 @@ export function LoginScreen() {
         setSession(tokens.accessToken, tokens.user);
       } else {
         const tokens = await loginWithCredentials({ email: email.trim(), password });
-        setSession(tokens.accessToken, tokens.user);
+        setSession(tokens.accessToken, { ...tokens.user, onboardingCompleted: true });
       }
     } catch (err) {
       setError(toApiError(err));
@@ -438,8 +438,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   modalMascot: {
-    width: 100,
-    height: 100,
+    width: 200,
+    height: 200,
   },
   emailHint: {
     color: colors.textSecondary,

@@ -502,6 +502,8 @@ export interface CuisinePreferences {
 export interface OnboardingAnswerResponse {
   next: OnboardingPair | null;
   summary: OnboardingSummaryResponse | null;
+  /** Backend-internal: id of the AdditionEvent row stamped for this answer. */
+  createdEventId?: UUID;
 }
 
 // ---------------------------------------------------------------------------
@@ -717,3 +719,6 @@ export * from './common-table';
 
 // Meal Memory — intent-aware household food agent (weekly planning)
 export * from './meal-memory';
+
+// Taste Journal — evidence-backed taste presentation
+export * from './taste-journal';

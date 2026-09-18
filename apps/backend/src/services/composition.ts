@@ -37,6 +37,7 @@ import { TasteExposureService } from './taste-exposure.service';
 import { TasteMemoryService } from './taste-memory.service';
 import { TasteSensoryService } from './taste-sensory.service';
 import { TasteTreatmentService } from './taste-treatment.service';
+import { TasteJournalService } from './taste-journal/taste-journal.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
 import { DecisionService } from './v2/decision.service';
@@ -90,6 +91,7 @@ export function buildServices(redis: Redis | null): {
   householdMembers: HouseholdMemberService;
   mealMemory: MealMemoryService;
   mealIntelligence: MealIntelligenceService;
+  tasteJournal: TasteJournalService;
 } {
   const llm = createLlmClient();
   const tasteMemory = new TasteMemoryService(models);
@@ -176,5 +178,6 @@ export function buildServices(redis: Redis | null): {
     householdMembers: new HouseholdMemberService(dbModels),
     mealMemory: mealMemoryService,
     mealIntelligence: mealIntelligenceService,
+    tasteJournal: new TasteJournalService(models),
   };
 }

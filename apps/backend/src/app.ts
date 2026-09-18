@@ -28,6 +28,7 @@ import { pantryRoutes } from './routes/pantry.routes';
 import { rescueRoutes } from './routes/rescue.routes';
 import { satisfactionRoutes } from './routes/satisfaction.routes';
 import { subscriptionRoutes } from './routes/subscription.routes';
+import { tasteJournalRoutes } from './routes/taste-journal.routes';
 import { userRoutes } from './routes/user.routes';
 import { webhookRoutes } from './routes/webhook.routes';
 
@@ -139,6 +140,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(aftercareRoutes, { prefix: '/api/v1/rescue' });
   await app.register(pantryRoutes, { prefix: '/api/v1/pantry' });
   await app.register(userRoutes, { prefix: '/api/v1/user' });
+  await app.register(tasteJournalRoutes, { prefix: '/api/v1/user/taste-journal' });
   await app.register(leftoverRoutes, { prefix: '/api/v1/leftover' });
   await app.register(kitchenRoutes, { prefix: '/api/v1/kitchen' });
   await app.register(adsRoutes, { prefix: '/api/v1/ads' });

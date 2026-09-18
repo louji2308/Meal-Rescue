@@ -6,6 +6,7 @@ import type { Db } from '../database/models';
 import { AppError, ErrorCategory } from '../lib/errors';
 import { PreferenceLearningService } from './preference-learning.service';
 import { TasteEventService } from './taste-event.service';
+import { TasteJournalService } from './taste-journal/taste-journal.service';
 import { TasteMemoryService } from './taste-memory.service';
 import { TasteSensoryService } from './taste-sensory.service';
 import { TasteTreatmentService } from './taste-treatment.service';
@@ -26,6 +27,7 @@ export class FeedbackService {
   private readonly tasteEvents: TasteEventService;
   private readonly tasteSensory: TasteSensoryService;
   private readonly tasteTreatment: TasteTreatmentService;
+  private readonly tasteJournal: TasteJournalService;
 
   constructor(
     models: Db['models'],
@@ -39,6 +41,7 @@ export class FeedbackService {
     this.tasteEvents = tasteEvents;
     this.tasteSensory = tasteSensory;
     this.tasteTreatment = tasteTreatment;
+    this.tasteJournal = new TasteJournalService(models);
   }
 
   async submitFeedback(
@@ -158,7 +161,7 @@ export class FeedbackService {
           : 'RESCUE_REJECTED';
 
     for (const name of ingredientNames) {
-      await this.tasteEvents.emit({
+      const event = await this.tasteEvents.emit({
         userId,
         eventType: decisionEventType,
         targetType: 'ingredient',
@@ -167,6 +170,22 @@ export class FeedbackService {
         sourceStrength: decisionEventType === 'RESCUE_REJECTED' ? 0.7 : 0.5,
         attributionConfidence: 0.5,
         rescueId,
+      });
+      // Mirror into the journal as behavior evidence (deduped by event id).
+      await this.tasteJournal.addSignal({
+        userId,
+        dimension: 'ingredient',
+        value: name,
+        polarity: decisionEventType === 'RESCUE_ACCEPTED' ? 'positive' : decisionEventType === 'RESCUE_REJECTED' ? 'negative' : 'neutral',
+        source: 'BEHAVIOR',
+        sourceLabel:
+          decisionEventType === 'RESCUE_REJECTED'
+            ? 'A rescue you passed on'
+            : decisionEventType === 'RESCUE_ACCEPTED'
+              ? 'A rescue you accepted'
+              : 'A rescue you swapped',
+        eventId: event.id,
+        sourceEventKey: `event:${event.id}`,
       });
     }
 
@@ -178,7 +197,7 @@ export class FeedbackService {
           : 'SATISFACTION_ALMOST';
 
     for (const name of ingredientNames) {
-      await this.tasteEvents.emit({
+      const event = await this.tasteEvents.emit({
         userId,
         eventType: satisfactionEventType,
         targetType: 'ingredient',
@@ -187,6 +206,17 @@ export class FeedbackService {
         sourceStrength: satisfaction === 'better' ? 0.8 : satisfaction === 'not_for_me' ? 0.9 : 0.4,
         attributionConfidence: 0.6,
         rescueId,
+      });
+      // Mirror into the journal as explicit feedback evidence (deduped by event id).
+      await this.tasteJournal.addSignal({
+        userId,
+        dimension: 'ingredient',
+        value: name,
+        polarity: satisfaction === 'better' ? 'positive' : satisfaction === 'not_for_me' ? 'negative' : 'neutral',
+        source: 'EXPLICIT_FEEDBACK',
+        sourceLabel: 'How you rated a rescue',
+        eventId: event.id,
+        sourceEventKey: `event:${event.id}`,
       });
     }
 

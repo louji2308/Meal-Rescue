@@ -121,17 +121,17 @@ export class MealCompletionService {
     const pair = getPair(answer.pairId);
     if (!pair) throw new Error(`Unknown pairId '${answer.pairId}'`);
 
-    await this.applyAnswer(userId, pair, answer);
+    const createdEventId = await this.applyAnswer(userId, pair, answer);
 
     const profile = await this.getTasteProfile(userId);
     const answered = await this.answeredPairIds(userId);
 
     if (answered.size >= PAIRS.length) {
       const summary = await this.getSummaryFromProfile(userId, profile);
-      return { next: null, summary };
+      return { next: null, summary, createdEventId };
     }
     const next = this.pickNextPairFromProfile(profile, answered);
-    return { next, summary: null };
+    return { next, summary: null, createdEventId };
   }
 
   async getSummary(userId: string): Promise<OnboardingSummaryResponse> {
@@ -162,7 +162,7 @@ export class MealCompletionService {
     userId: string,
     pair: OnboardingPair,
     answer: OnboardingAnswer,
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     const state = answer.selected
       ? 'selected'
       : answer.unavailableOption
@@ -207,7 +207,7 @@ export class MealCompletionService {
       });
     }
 
-    await this.models.AdditionEvent.create({
+    const event = await this.models.AdditionEvent.create({
       id: randomUUID(),
       userId,
       pairId: pair.id,
@@ -221,6 +221,7 @@ export class MealCompletionService {
       rejectionReason: answer.rejectionReason ?? null,
       unavailableOption: answer.unavailableOption,
     });
+    return event.id;
   }
 
   private async applyCellSignal(args: {

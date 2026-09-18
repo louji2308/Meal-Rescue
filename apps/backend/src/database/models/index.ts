@@ -34,6 +34,13 @@ import { TableEvent, defineTableEventModel } from './table-event.model';
 import { TableOutcome, defineTableOutcomeModel } from './table-outcome.model';
 import { TasteCombination, defineTasteCombinationModel } from './taste-combination.model';
 import { TasteEvent, defineTasteEventModel } from './taste-event.model';
+import { TasteJournalMeta, defineTasteJournalMetaModel } from './taste-journal-meta.model';
+import { TasteInsightOverride, defineTasteInsightOverrideModel } from './taste-insight-override.model';
+import {
+  TasteSignalEvidence,
+  defineTasteSignalEvidenceModel,
+} from './taste-signal-evidence.model';
+import { TasteSignal, defineTasteSignalModel } from './taste-signal.model';
 import { TasteExposure, defineTasteExposureModel } from './taste-exposure.model';
 import { TasteMemory, defineTasteMemoryModel } from './taste-memory.model';
 import {
@@ -61,6 +68,10 @@ export interface DbModels {
   TasteCombination: typeof TasteCombination;
   TasteSensoryPreference: typeof TasteSensoryPreference;
   TasteTreatmentPreference: typeof TasteTreatmentPreference;
+  TasteSignal: typeof TasteSignal;
+  TasteSignalEvidence: typeof TasteSignalEvidence;
+  TasteInsightOverride: typeof TasteInsightOverride;
+  TasteJournalMeta: typeof TasteJournalMeta;
   AdditionEvent: typeof AdditionEvent;
   SatisfactionRecord: typeof SatisfactionRecordModel;
   DecisionEvent: typeof DecisionEvent;
@@ -104,6 +115,10 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     TasteCombination: defineTasteCombinationModel(sequelize),
     TasteSensoryPreference: defineTasteSensoryPreferenceModel(sequelize),
     TasteTreatmentPreference: defineTasteTreatmentPreferenceModel(sequelize),
+    TasteSignal: defineTasteSignalModel(sequelize),
+    TasteSignalEvidence: defineTasteSignalEvidenceModel(sequelize),
+    TasteInsightOverride: defineTasteInsightOverrideModel(sequelize),
+    TasteJournalMeta: defineTasteJournalMetaModel(sequelize),
     AdditionEvent: defineAdditionEventModel(sequelize),
     SatisfactionRecord: defineSatisfactionRecordModel(sequelize),
     DecisionEvent: defineDecisionEventModel(sequelize),
@@ -200,6 +215,34 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
   models.TasteTreatmentPreference.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
+  models.User.hasMany(models.TasteSignal, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.TasteSignal.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
+  models.TasteSignal.hasMany(models.TasteSignalEvidence, {
+    foreignKey: { name: 'signalId', allowNull: false },
+  });
+  models.TasteSignalEvidence.belongsTo(models.TasteSignal, {
+    foreignKey: { name: 'signalId', allowNull: false },
+  });
+
+  models.User.hasMany(models.TasteInsightOverride, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.TasteInsightOverride.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
+  models.User.hasOne(models.TasteJournalMeta, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.TasteJournalMeta.belongsTo(models.User, {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
@@ -379,6 +422,10 @@ export const dbModels = {
   TasteCombination,
   TasteSensoryPreference,
   TasteTreatmentPreference,
+  TasteSignal,
+  TasteSignalEvidence,
+  TasteInsightOverride,
+  TasteJournalMeta,
   AdditionEvent,
   SatisfactionRecord: SatisfactionRecordModel,
   DecisionEvent,
