@@ -3,6 +3,13 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Pressable } from '../../components/motion/Pressable';
 
 import { AppImage, prefetchImages } from '../../components/AppImage';
@@ -11,6 +18,7 @@ import { Text } from '../../components/AppText';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
+import type { HouseholdMemberProfile } from '@meal-rescue/shared-types';
 import { toApiError } from '../../services/api';
 import {
   getSharedMeal,
@@ -18,7 +26,7 @@ import {
 } from '../../services/common-table.api';
 import { loadPeoplePhotos } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
-import { colors, spacing, typography } from '../../theme';
+import { colors, fonts, spacing, typography } from '../../theme';
 import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
@@ -31,6 +39,55 @@ import { FadeInView } from '../../components/motion/FadeInView';
  *
  * Flow: Your Table (pick who's eating) → Ingredients → Plan & Cook → How did it go.
  */
+
+function MemberRow({
+  member,
+  photo,
+  isSelected,
+  onToggle,
+}: {
+  member: HouseholdMemberProfile;
+  photo?: string;
+  isSelected: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const tilt = useSharedValue(0);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${tilt.value}deg` }],
+  }));
+
+  function handlePress() {
+    tilt.value = withSequence(
+      withTiming(1.2, { duration: 70 }),
+      withTiming(-0.9, { duration: 80 }),
+      withSpring(0, { damping: 7, stiffness: 220 }),
+    );
+    onToggle(member.id);
+  }
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        style={[styles.memberCard, isSelected && styles.memberCardSelected]}
+        onPress={handlePress}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: isSelected }}
+        accessibilityLabel={`${member.displayName} eating tonight`}
+      >
+        <View style={[styles.avatar, photo && styles.avatarPhoto]}>
+          {photo ? (
+            <AppImage source={{ uri: photo }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{member.initials}</Text>
+          )}
+        </View>
+        <Text style={styles.memberName} numberOfLines={1}>
+          {member.displayName}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export function CommonTableHomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
@@ -173,57 +230,18 @@ export function CommonTableHomeScreen() {
             <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Who's eating tonight?</Text>
-                <Text style={styles.sectionHint}>Tap to include · tap › for details</Text>
               </View>
 
               <View style={styles.memberList}>
-                {activeSorted.map((member) => {
-                  const isSelected = selected.includes(member.id);
-                  const photo = photos[member.id];
-                  return (
-                    <View
-                      key={member.id}
-                      style={[styles.memberCard, isSelected && styles.memberCardSelected]}
-                    >
-                      <Pressable
-                        style={styles.memberBody}
-                        onPress={() => toggleSelected(member.id)}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: isSelected }}
-                        accessibilityLabel={`${member.displayName} eating tonight`}
-                      >
-                        <View style={[styles.avatar, photo && styles.avatarPhoto]}>
-                          {photo ? (
-                            <AppImage source={{ uri: photo }} style={styles.avatarImage} />
-                          ) : (
-                            <Text style={styles.avatarText}>{member.initials}</Text>
-                          )}
-                        </View>
-
-                        <View style={styles.memberInfo}>
-                          <View style={styles.nameRow}>
-                            <Text style={styles.memberName}>{member.displayName}</Text>
-                            {member.isOwner && <View style={styles.youBadge}><Text style={styles.youBadgeText}>YOU</Text></View>}
-                          </View>
-                          <Text style={styles.memberMeta}>
-                            {[member.relationship, member.ageGroup ?? 'adult']
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </Text>
-                        </View>
-                      </Pressable>
-
-                      <Pressable
-                        style={styles.chevronBtn}
-                        onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${member.displayName}`}
-                      >
-                        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-                      </Pressable>
-                    </View>
-                  );
-                })}
+                {activeSorted.map((member) => (
+                  <MemberRow
+                    key={member.id}
+                    member={member}
+                    photo={photos[member.id]}
+                    isSelected={selected.includes(member.id)}
+                    onToggle={toggleSelected}
+                  />
+                ))}
               </View>
 
               <Pressable
@@ -376,13 +394,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 20,
+    fontFamily: fonts.display,
     color: colors.text,
-  },
-  sectionHint: {
-    fontSize: 12,
-    color: colors.textSecondary,
   },
 
   // ── Member cards ────────────────────────────────────────
@@ -393,28 +407,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.xs,
-    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.smd,
+    gap: spacing.smd,
   },
   memberCardSelected: {
     borderColor: colors.homeInk,
   },
-  memberBody: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
-  },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.primaryLight,
     borderWidth: 1,
     borderColor: colors.border,
@@ -426,49 +432,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   avatarText: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
-  memberInfo: {
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
   memberName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '600',
     color: colors.text,
     textTransform: 'capitalize',
-  },
-  youBadge: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  youBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    color: colors.textSecondary,
-  },
-  memberMeta: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-    textTransform: 'capitalize',
-  },
-  chevronBtn: {
-    padding: spacing.sm,
   },
 
   // ── Add someone ─────────────────────────────────────────
