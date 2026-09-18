@@ -395,19 +395,6 @@ function QuestionScreen({
         </View>
       )}
 
-      {extraInput ? (
-        <View style={styles.extraInputWrap}>
-          <TextInput
-            style={styles.extraInput}
-            placeholder="Anything else..."
-            placeholderTextColor={colors.homeTextTertiary}
-            value={extraInput.value}
-            onChangeText={extraInput.onChange}
-            multiline
-          />
-        </View>
-      ) : null}
-
       <Pressable
         style={[styles.continueBtn, !canContinue && styles.continueBtnDisabled]}
         onPress={onContinue}
