@@ -45,18 +45,17 @@ const CUISINE_OPTIONS: CuisineOption[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Questions (same as before, but with backend integration)
+// Questions
 // ---------------------------------------------------------------------------
 
 type QuestionId =
   | 'cuisine'
-  | 'rescueStyle'
-  | 'mealFeel'
-  | 'changeAmount'
-  | 'familiarVsNew'
-  | 'cookingEffort'
-  | 'whoAtTable'
-  | 'neverSuggest';
+  | 'hardNos'
+  | 'flavorPersonality'
+  | 'texturePairs'
+  | 'adventurousness'
+  | 'rescueNeed'
+  | 'priorities';
 
 type StepId = QuestionId | 'done';
 
@@ -68,83 +67,93 @@ interface Question {
   maxSelect?: number;
 }
 
-const RESCUE_STYLE_Q: Question = {
-  id: 'rescueStyle',
-  title: 'You already have some food.\nWhat would you do with it?',
+const HARD_NOS_Q: Question = {
+  id: 'hardNos',
+  title: 'First, any hard no\'s?\nWhat should Meal Rescue never suggest?',
+  subtitle: 'Select anything that applies.\nHard restrictions are treated as rules, not preferences.',
   options: [
-    { id: 'keep_simple', label: 'Keep it simple', desc: 'Just make it better.' },
-    { id: 'add_something', label: 'Add something', desc: 'Find a good side for it.' },
-    { id: 'change_little', label: 'Change it a little', desc: 'Give it a new twist.' },
-    { id: 'make_new', label: 'Make something new', desc: 'Turn it into a new meal.' },
+    { id: 'allergies', label: 'Allergies' },
+    { id: 'avoid_ingredients', label: 'Ingredients I avoid' },
+    { id: 'dietary_restrictions', label: 'Dietary restrictions' },
+    { id: 'religious_cultural', label: 'Religious/cultural restrictions' },
+    { id: 'strong_dislikes', label: 'Foods I strongly dislike' },
+    { id: 'nothing', label: 'Nothing \u2014 I\'m pretty open' },
   ],
 };
 
-const MEAL_FEEL_Q: Question = {
-  id: 'mealFeel',
-  title: 'What makes a meal feel right to you?',
-  subtitle: 'Pick up to 2.',
+const FLAVOR_PERSONALITY_Q: Question = {
+  id: 'flavorPersonality',
+  title: 'Let\'s find your flavor\npersonality.',
+  subtitle: 'Which direction usually wins? Pick up to 3.',
   options: [
-    { id: 'fresh', label: 'Fresh' },
-    { id: 'crispy', label: 'Crispy' },
-    { id: 'spicy', label: 'Spicy' },
-    { id: 'tangy', label: 'Tangy' },
+    { id: 'bright_tangy', label: 'Bright & Tangy', desc: 'lemon, pickles, chutneys, citrus' },
+    { id: 'deep_savory', label: 'Deep & Savory', desc: 'umami, roasted, rich flavors' },
+    { id: 'hot_spicy', label: 'Hot & Spicy', desc: 'chilli, pepper, heat' },
+    { id: 'fresh_light', label: 'Fresh & Light', desc: 'herbs, vegetables, citrus' },
+    { id: 'creamy_comforting', label: 'Creamy & Comforting', desc: 'yogurt, sauces, creamy textures' },
+    { id: 'mild_familiar', label: 'Mild & Familiar', desc: 'simple, comforting flavors' },
+  ],
+  maxSelect: 3,
+};
+
+const TEXTURE_PAIRS_Q: Question = {
+  id: 'texturePairs',
+  title: 'Texture matters too.',
+  subtitle: 'Pick one from each pair.',
+  options: [
+    { id: 'crunchy', label: 'Crunchy' },
+    { id: 'soft', label: 'Soft' },
     { id: 'creamy', label: 'Creamy' },
-    { id: 'filling', label: 'Something filling' },
+    { id: 'crisp', label: 'Crisp' },
+    { id: 'juicy', label: 'Juicy' },
+    { id: 'dry', label: 'Dry' },
+    { id: 'chewy', label: 'Chewy' },
+    { id: 'tender', label: 'Tender' },
   ],
-  maxSelect: 2,
+  maxSelect: 4,
 };
 
-const CHANGE_AMOUNT_Q: Question = {
-  id: 'changeAmount',
-  title: 'How much should we\nchange your food?',
-  subtitle: "We won't change what you love.",
+const ADVENTUROUSNESS_Q: Question = {
+  id: 'adventurousness',
+  title: 'How adventurous\nshould I be?',
+  subtitle: 'When I rescue your meal, I should usually...',
   options: [
-    { id: 'little', label: 'Just a little' },
-    { id: 'twist', label: 'A nice twist' },
-    { id: 'surprise', label: 'Surprise me' },
-  ],
-};
-
-const FAMILIAR_VS_NEW_Q: Question = {
-  id: 'familiarVsNew',
-  title: 'Tonight, which sounds better?',
-  options: [
-    { id: 'familiar', label: 'Something I know I\u2019ll enjoy' },
-    { id: 'different', label: 'Show me something different' },
+    { id: 'stay_familiar', label: 'Stay familiar', desc: 'Give me something I already understand.' },
+    { id: 'familiar_twist', label: 'Keep it familiar, add a twist', desc: 'Surprise me a little.' },
+    { id: 'surprise_me', label: 'Surprise me', desc: 'I\'m happy to discover new combinations.' },
   ],
 };
 
-const COOKING_EFFORT_Q: Question = {
-  id: 'cookingEffort',
-  title: 'How much work sounds\nokay today?',
+const RESCUE_NEED_Q: Question = {
+  id: 'rescueNeed',
+  title: 'What kind of "rescue"\nsounds most like you?',
+  subtitle: 'My meal usually needs...',
   options: [
-    { id: 'easy', label: 'Keep it easy', desc: '10\u201315 min' },
-    { id: 'little', label: 'I can cook a little', desc: '20\u201330 min' },
-    { id: 'enjoy', label: 'I enjoy cooking', desc: 'Take your time' },
+    { id: 'substance', label: 'More substance' },
+    { id: 'freshness', label: 'More freshness' },
+    { id: 'flavor', label: 'More flavor' },
+    { id: 'texture', label: 'More texture' },
+    { id: 'something_rich', label: 'Something rich' },
+    { id: 'something_light', label: 'Something light' },
+    { id: 'side', label: 'A side to round it out' },
+    { id: 'figure_out', label: 'I don\'t know \u2014 figure it out for me' },
   ],
 };
 
-const WHO_AT_TABLE_Q: Question = {
-  id: 'whoAtTable',
-  title: 'Who is usually at the table?',
-  subtitle: 'You can change this anytime.',
+const PRIORITIES_Q: Question = {
+  id: 'priorities',
+  title: 'What should I prioritize\nwhen I suggest something?',
+  subtitle: 'Pick up to 3.',
   options: [
-    { id: 'just_me', label: 'Just me' },
-    { id: 'family', label: 'Me + family' },
-    { id: 'few_people', label: 'A few people' },
+    { id: 'enjoy', label: 'Something I\'ll genuinely enjoy' },
+    { id: 'filling', label: 'Something that makes the meal more filling' },
+    { id: 'freshness', label: 'Something that adds freshness' },
+    { id: 'balance', label: 'Something that balances the meal' },
+    { id: 'have_at_home', label: 'Something I already have in my kitchen' },
+    { id: 'quick', label: 'Something quick' },
+    { id: 'new_to_try', label: 'Something new to try' },
   ],
-};
-
-const NEVER_SUGGEST_Q: Question = {
-  id: 'neverSuggest',
-  title: 'What should we\nnever suggest?',
-  subtitle: 'Pick all that apply.',
-  options: [
-    { id: 'too_spicy', label: 'Too spicy' },
-    { id: 'too_sweet', label: 'Too sweet' },
-    { id: 'too_much_work', label: 'Too much work' },
-    { id: 'too_different', label: 'Too different' },
-  ],
+  maxSelect: 3,
 };
 
 // ---------------------------------------------------------------------------
@@ -153,27 +162,22 @@ const NEVER_SUGGEST_Q: Question = {
 
 function getNextQuestion(
   current: QuestionId,
-  selections: Record<string, Set<string>>,
+  _selections: Record<string, Set<string>>,
 ): StepId | null {
   switch (current) {
-    case 'cuisine': {
-      const cuisines = selections.cuisine ?? new Set();
-      const hasIndian = cuisines.has('indian');
-      return hasIndian ? 'rescueStyle' : 'mealFeel';
-    }
-    case 'rescueStyle':
-      return 'mealFeel';
-    case 'mealFeel':
-      return 'changeAmount';
-    case 'changeAmount':
-      return 'familiarVsNew';
-    case 'familiarVsNew':
-      return 'cookingEffort';
-    case 'cookingEffort':
-      return 'whoAtTable';
-    case 'whoAtTable':
-      return 'neverSuggest';
-    case 'neverSuggest':
+    case 'cuisine':
+      return 'hardNos';
+    case 'hardNos':
+      return 'flavorPersonality';
+    case 'flavorPersonality':
+      return 'texturePairs';
+    case 'texturePairs':
+      return 'adventurousness';
+    case 'adventurousness':
+      return 'rescueNeed';
+    case 'rescueNeed':
+      return 'priorities';
+    case 'priorities':
       return 'done';
     default:
       return null;
@@ -197,13 +201,12 @@ function getQuestionList(selections: Record<string, Set<string>>): StepId[] {
 
 function getQuestion(id: QuestionId): Question | null {
   const map: Record<string, Question> = {
-    rescueStyle: RESCUE_STYLE_Q,
-    mealFeel: MEAL_FEEL_Q,
-    changeAmount: CHANGE_AMOUNT_Q,
-    familiarVsNew: FAMILIAR_VS_NEW_Q,
-    cookingEffort: COOKING_EFFORT_Q,
-    whoAtTable: WHO_AT_TABLE_Q,
-    neverSuggest: NEVER_SUGGEST_Q,
+    hardNos: HARD_NOS_Q,
+    flavorPersonality: FLAVOR_PERSONALITY_Q,
+    texturePairs: TEXTURE_PAIRS_Q,
+    adventurousness: ADVENTUROUSNESS_Q,
+    rescueNeed: RESCUE_NEED_Q,
+    priorities: PRIORITIES_Q,
   };
   return map[id] ?? null;
 }
@@ -225,6 +228,20 @@ function ProgressDots({ total, current }: { total: number; current: number }) {
           ]}
         />
       ))}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Texture pair divider (visual separator between pairs)
+// ---------------------------------------------------------------------------
+
+function TexturePairDivider() {
+  return (
+    <View style={styles.textureDivider}>
+      <View style={styles.textureDividerLine} />
+      <Text style={styles.textureDividerText}>or</Text>
+      <View style={styles.textureDividerLine} />
     </View>
   );
 }
@@ -273,7 +290,7 @@ function CuisineGridScreen({
                   {cuisine.label}
                 </Text>
               </View>
-              {isSelected && <View style={styles.cuisineCheck}><Text style={styles.checkmark}>?</Text></View>}
+              {isSelected && <View style={styles.cuisineCheck}><Text style={styles.checkmark}>✓</Text></View>}
             </Pressable>
           );
         })}
@@ -314,6 +331,9 @@ function QuestionScreen({
 }) {
   const canContinue = selected.size > 0;
 
+  // For texture pairs, render with dividers between pairs
+  const isTexturePairs = question.id === 'texturePairs';
+
   return (
     <ScrollView
       contentContainerStyle={styles.qContent}
@@ -328,30 +348,55 @@ function QuestionScreen({
         <Text style={styles.qSubtitle}>{question.subtitle}</Text>
       ) : null}
 
-      <View style={styles.chipsWrap}>
-        {question.options.map((opt) => {
-          const isSelected = selected.has(opt.id);
-          return (
-            <Pressable
-              key={opt.id}
-              style={[styles.chip, isSelected && styles.chipSelected]}
-              onPress={() => onToggle(opt.id)}
-              scaleTo={1}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-            >
-              <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
-                {opt.label}
-              </Text>
-              {opt.desc ? (
-                <Text style={[styles.chipDesc, isSelected && styles.chipDescSelected]}>
-                  {opt.desc}
+      {isTexturePairs ? (
+        <View style={styles.chipsWrap}>
+          {question.options.map((opt, index) => {
+            const isSelected = selected.has(opt.id);
+            const isEvenPair = index % 2 === 0;
+            return (
+              <React.Fragment key={opt.id}>
+                <Pressable
+                  style={[styles.chip, isSelected && styles.chipSelected]}
+                  onPress={() => onToggle(opt.id)}
+                  scaleTo={1}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+                {!isEvenPair && index < question.options.length - 1 && <TexturePairDivider />}
+              </React.Fragment>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.chipsWrap}>
+          {question.options.map((opt) => {
+            const isSelected = selected.has(opt.id);
+            return (
+              <Pressable
+                key={opt.id}
+                style={[styles.chip, isSelected && styles.chipSelected]}
+                onPress={() => onToggle(opt.id)}
+                scaleTo={1}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <Text style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}>
+                  {opt.label}
                 </Text>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </View>
+                {opt.desc ? (
+                  <Text style={[styles.chipDesc, isSelected && styles.chipDescSelected]}>
+                    {opt.desc}
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {extraInput ? (
         <View style={styles.extraInputWrap}>
@@ -419,13 +464,10 @@ export function OnboardingScreen() {
     haptics.medium();
     setSubmitting(true);
     try {
-      // Submit cuisines to backend
       await submitCuisinePreferences(Array.from(cuisineSelections));
-      // Also store locally for question routing
       setSelections({ cuisine: cuisineSelections });
       setPhase('questions');
     } catch {
-      // If backend fails, still proceed with local state
       setSelections({ cuisine: cuisineSelections });
       setPhase('questions');
     } finally {
@@ -454,12 +496,11 @@ export function OnboardingScreen() {
     haptics.medium();
     if (!currentQuestionId) return;
 
-    // Save custom "never suggest" text
-    if (currentQuestionId === 'neverSuggest' && customNever.trim()) {
+    if (currentQuestionId === 'hardNos' && customNever.trim()) {
       setSelections((prev) => {
-        const never = new Set(prev.neverSuggest ?? []);
+        const never = new Set(prev.hardNos ?? []);
         never.add(`custom:${customNever.trim()}`);
-        return { ...prev, neverSuggest: never };
+        return { ...prev, hardNos: never };
       });
     }
 
@@ -508,11 +549,6 @@ export function OnboardingScreen() {
             onToggle={toggleOption}
             onContinue={handleContinue}
             onBack={handleBack}
-            extraInput={
-              currentQuestionId === 'neverSuggest'
-                ? { value: customNever, onChange: setCustomNever }
-                : undefined
-            }
           />
         </FadeInView>
       )}
@@ -551,44 +587,6 @@ const styles = StyleSheet.create({
   },
   dotDone: {
     backgroundColor: CHARCOAL,
-  },
-
-  // Intro
-  introWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  introSpacer: { flex: 0.4 },
-  introTitle: {
-    fontFamily: fonts.semiBold,
-    fontSize: 30,
-    lineHeight: 38,
-    color: CHARCOAL,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  introSubtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 17,
-    lineHeight: 24,
-    color: colors.homeTextSecondary,
-    textAlign: 'center',
-    marginBottom: 40,
-  },
-  startButton: {
-    width: 200,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: CHARCOAL,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  startButtonText: {
-    fontFamily: fonts.semiBold,
-    fontSize: 16,
-    color: '#FFFFFF',
   },
 
   // Question screen
@@ -716,6 +714,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   chipDescSelected: {
+    color: colors.homeTextSecondary,
+  },
+
+  // Texture pair divider
+  textureDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 2,
+  },
+  textureDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: SMOKE,
+  },
+  textureDividerText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
     color: colors.homeTextSecondary,
   },
 

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 
 import { googleLoginSchema, loginSchema, registerSchema } from './auth.schemas';
 import { authService } from './auth.service';
-import { User } from '../../../database/models/user.model';
+import { User } from '../../database/models/user.model';
 
 /**
  * Auth routes (public - excluded from the JWT hook):
