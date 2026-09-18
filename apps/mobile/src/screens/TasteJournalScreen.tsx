@@ -2,16 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Pressable } from '../components/motion/Pressable';
 import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
-  FoodPersonality,
-  TasteJournalEntry,
-  TasteJournalKind,
-  TasteV2Response,
+  TasteBoundaryGroup,
+  TasteBoundaryGroupKind,
+  TasteJournal,
+  TasteJournalEvidenceDetail,
+  TasteJournalInsight,
+  TasteSignalPolarity,
+  TasteSignalSource,
 } from '@meal-rescue/shared-types';
 
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -19,185 +22,228 @@ import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
-import { getTasteBundle, getTasteV2 } from '../services/taste.api';
+import {
+  correctInsight,
+  dismissInsight,
+  forgetInsight,
+  getJournal,
+  getJournalEvidence,
+} from '../services/taste-journal.api';
 import { colors, spacing, typography } from '../theme';
 
-type JournalSection = TasteJournalKind;
+const SOURCE_LABELS: Record<TasteSignalSource, string> = {
+  ONBOARDING: 'your setup',
+  BEHAVIOR: 'your rescues',
+  EXPLICIT_FEEDBACK: 'your ratings',
+  SYSTEM_INFERENCE: 'our reading',
+};
+
+const POLARITY_LABELS: Record<TasteSignalPolarity, string> = {
+  positive: 'Liked',
+  negative: 'Steered clear',
+  mixed: 'Mixed',
+  neutral: 'Noted',
+};
 
 const SECTION_META: Record<
-  JournalSection,
-  { title: string; icon: keyof typeof Ionicons.glyphMap; accent: string; hint: string }
+  string,
+  { title: string; name: keyof typeof Ionicons.glyphMap; accent: string; hint: string }
 > = {
-  preference: {
-    title: 'From your finish-a-meal picks',
-    icon: 'sparkles',
-    accent: colors.softAlert,
-    hint: 'The little additions you reached for as you set up your taste.',
-  },
-  culture: {
-    title: 'Your food world',
-    icon: 'compass',
+  patterns: {
+    title: 'Your patterns',
+    name: 'sparkles',
     accent: colors.softFresh,
-    hint: 'How you lean between home-style and a twist.',
+    hint: 'What you reliably love - and avoid',
   },
-  learned: {
-    title: 'From your rescues',
-    icon: 'restaurant',
+  depends: {
+    title: 'It depends',
+    name: 'git-compare',
     accent: colors.softWarm,
-    hint: 'What you leaned into — or away from — after saving meals.',
+    hint: 'When the context decides the outcome',
   },
-  personality_shift: {
-    title: 'Shifts',
-    icon: 'trending-up',
+  discoveries: {
+    title: 'Recently discovered',
+    name: 'trending-up',
     accent: colors.softCool,
-    hint: 'Moments your taste changed.',
+    hint: 'Freshly spotted, still settling',
   },
-  milestone: {
-    title: 'Milestones',
-    icon: 'flag',
+  stillLearning: {
+    title: 'Still learning',
+    name: 'flask',
     accent: colors.softAccent,
-    hint: 'Little wins worth remembering.',
-  },
-  corrected: {
-    title: 'Corrections',
-    icon: 'refresh',
-    accent: colors.softRose,
-    hint: 'Times we got it wrong and you told us.',
+    hint: 'Thin or conflicting - we are watching',
   },
 };
 
-const V1_ORDER: JournalSection[] = ['preference', 'culture', 'learned'];
-
-function groupBySections(entries: TasteJournalEntry[]): [JournalSection, TasteJournalEntry[]][] {
-  const sections = new Map<JournalSection, TasteJournalEntry[]>();
-  for (const entry of entries) {
-    const key: JournalSection = V1_ORDER.includes(entry.kind as JournalSection)
-      ? (entry.kind as JournalSection)
-      : 'learned';
-    const list = sections.get(key) ?? [];
-    list.push(entry);
-    sections.set(key, list);
-  }
-  return V1_ORDER.filter((key) => (sections.get(key)?.length ?? 0) > 0).map((key) => [
-    key,
-    sections.get(key)!,
-  ]);
+interface InsightHandlers {
+  busyId: string | null;
+  onDismiss: (insight: TasteJournalInsight) => Promise<void>;
+  onForget: (insight: TasteJournalInsight) => void;
+  onCorrect: (insight: TasteJournalInsight, polarity: 'positive' | 'negative') => Promise<void>;
 }
 
-function getTopPrefs(
-  sensory: Record<string, { dimension: string; preference: string; strength: number; sampleCount: number }[]>,
-  limit = 5,
-): { liked: string[]; disliked: string[] } {
-  const liked: { id: string; strength: number }[] = [];
-  const disliked: { id: string; strength: number }[] = [];
-
-  for (const [ingredient, beliefs] of Object.entries(sensory)) {
-    for (const b of beliefs) {
-      if (b.preference === 'love' || b.preference === 'like') {
-        liked.push({ id: ingredient, strength: b.strength });
-      } else if (b.preference === 'dislike' || b.preference === 'hate') {
-        disliked.push({ id: ingredient, strength: b.strength });
-      }
-    }
-  }
-
-  liked.sort((a, b) => b.strength - a.strength);
-  disliked.sort((a, b) => b.strength - a.strength);
-
-  return {
-    liked: [...new Set(liked.map((l) => l.id))].slice(0, limit),
-    disliked: [...new Set(disliked.map((d) => d.id))].slice(0, limit),
-  };
+function sourceAttribution(sources: TasteSignalSource[]): string {
+  const labels = [...new Set(sources.map((s) => SOURCE_LABELS[s] ?? s))];
+  return labels.length > 0 ? `From ${labels.join(', ')}` : '';
 }
 
-function getEventLabel(eventType: string): string {
-  const map: Record<string, string> = {
-    EXPLICIT_LIKE: 'Liked',
-    EXPLICIT_DISLIKE: 'Disliked',
-    CURRENT_WANT: 'Wants',
-    RESCUE_ACCEPTED: 'Accepted rescue',
-    RESCUE_REJECTED: 'Rejected rescue',
-    RESCUE_SWAPPED: 'Swapped rescue',
-    MEAL_COMPLETED: 'Finished meal',
-    SATISFACTION_NAILED: 'Nailed it',
-    SATISFACTION_ALMOST: 'Almost right',
-    SATISFACTION_NOT_FOR_ME: 'Not for me',
-  };
-  return map[eventType] ?? eventType;
-}
-
-function getSensorySummary(
-  sensory: Record<string, { dimension: string; preference: string; strength: number }[]>,
-): { dimension: string; count: number; top: string }[] {
-  const dimCounts = new Map<string, { count: number; examples: string[] }>();
-  for (const beliefs of Object.values(sensory)) {
-    for (const b of beliefs) {
-      const existing = dimCounts.get(b.dimension) ?? { count: 0, examples: [] };
-      existing.count++;
-      if (existing.examples.length < 2) existing.examples.push(b.preference);
-      dimCounts.set(b.dimension, existing);
-    }
-  }
-  return [...dimCounts.entries()]
-    .map(([dimension, { count, examples }]) => ({
-      dimension,
-      count,
-      top: examples.join(', '),
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export function TasteJournalScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [v2, setV2] = useState<TasteV2Response | null>(null);
-  const [journal, setJournal] = useState<TasteJournalEntry[]>([]);
-  const [personality, setPersonality] = useState<FoodPersonality | null>(null);
+  const [journal, setJournal] = useState<TasteJournal | null>(null);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const lastLoadedAt = useRef(0);
 
-  const loadBundle = useCallback(
-    async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
-      if (mode === 'refresh') setRefreshing(true);
-      if (mode === 'initial' && !lastLoadedAt.current) setLoading(true);
-      try {
-        const [v2Data, bundle] = await Promise.all([getTasteV2().catch(() => null), getTasteBundle()]);
-        lastLoadedAt.current = Date.now();
-        if (v2Data) setV2(v2Data);
-        setJournal(bundle.journal);
-        setPersonality(bundle.personality);
-        setError(null);
-      } catch (err) {
-        setError(toApiError(err));
-      } finally {
-        if (mode !== 'background') {
-          setLoading(false);
-          setRefreshing(false);
-        }
+  const load = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
+    if (mode === 'refresh') setRefreshing(true);
+    if (mode === 'initial' && !lastLoadedAt.current) setLoading(true);
+    try {
+      const data = await getJournal();
+      lastLoadedAt.current = Date.now();
+      setJournal(data);
+      setError(null);
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      if (mode !== 'background') {
+        setLoading(false);
+        setRefreshing(false);
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       if (!lastLoadedAt.current) {
-        void loadBundle('initial');
+        void load('initial');
       } else if (Date.now() - lastLoadedAt.current > 30_000) {
-        void loadBundle('background');
+        void load('background');
       }
-    }, [loadBundle]),
+    }, [load]),
   );
 
-  const v1Sections = useMemo(() => groupBySections(journal), [journal]);
-  const topPrefs = useMemo(() => (v2 ? getTopPrefs(v2.sensory) : null), [v2]);
-  const sensorySummary = useMemo(() => (v2 ? getSensorySummary(v2.sensory) : []), [v2]);
-  const recentEvents = useMemo(() => v2?.recentEvents?.slice(0, 8) ?? [], [v2]);
+  const afterMutation = useCallback(async () => {
+    try {
+      const data = await getJournal();
+      setJournal(data);
+      setError(null);
+    } catch (err) {
+      setError(toApiError(err));
+    }
+  }, []);
 
-  const header = useMemo(
-    () => (
+  const handleDismiss = useCallback(
+    async (insight: TasteJournalInsight) => {
+      setBusyId(insight.id);
+      try {
+        await dismissInsight(insight.id);
+        await afterMutation();
+      } catch (err) {
+        setError(toApiError(err));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [afterMutation],
+  );
+
+  const handleForget = useCallback(
+    (insight: TasteJournalInsight) => {
+      Alert.alert(
+        'Forget this?',
+        'This strand and everything behind it will be removed from your journal. A genuinely new signal would bring it back.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Forget',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setBusyId(insight.id);
+                try {
+                  await forgetInsight(insight.id);
+                  await afterMutation();
+                } catch (err) {
+                  setError(toApiError(err));
+                } finally {
+                  setBusyId(null);
+                }
+              })();
+            },
+          },
+        ],
+      );
+    },
+    [afterMutation],
+  );
+
+  const handleCorrect = useCallback(
+    async (insight: TasteJournalInsight, polarity: 'positive' | 'negative') => {
+      setBusyId(insight.id);
+      try {
+        await correctInsight(insight.id, polarity);
+        await afterMutation();
+      } catch (err) {
+        setError(toApiError(err));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [afterMutation],
+  );
+
+  const handlers = useMemo<InsightHandlers>(
+    () => ({ busyId, onDismiss: handleDismiss, onForget: handleForget, onCorrect: handleCorrect }),
+    [busyId, handleCorrect, handleDismiss, handleForget],
+  );
+
+  const isEmpty = useMemo(() => {
+    if (!journal) return true;
+    return (
+      journal.summary.totalSignals === 0 &&
+      journal.patterns.length === 0 &&
+      journal.dependentPatterns.length === 0 &&
+      journal.discoveries.length === 0 &&
+      journal.stillLearning.length === 0 &&
+      journal.boundaries.every((b) => b.items.length === 0)
+    );
+  }, [journal]);
+
+  type SectionItem = { key: string; render: () => React.ReactElement };
+  const sections = useMemo(() => {
+    if (!journal) return [];
+    const list: SectionItem[] = [];
+    if (journal.patterns.length > 0) {
+      list.push(renderInsightSection('patterns', journal.patterns, handlers));
+    }
+    if (journal.dependentPatterns.length > 0) {
+      list.push(renderInsightSection('depends', journal.dependentPatterns, handlers));
+    }
+    if (journal.discoveries.length > 0) {
+      list.push(renderInsightSection('discoveries', journal.discoveries, handlers));
+    }
+    if (journal.stillLearning.length > 0) {
+      list.push(renderInsightSection('stillLearning', journal.stillLearning, handlers));
+    }
+    if (journal.boundaries.some((b) => b.items.length > 0)) {
+      list.push({
+        key: 'boundaries',
+        render: () => renderBoundaries(journal.boundaries, handlers),
+      });
+    }
+    return list;
+  }, [handlers, journal]);
+
+  const header = useMemo(() => {
+    if (!journal) return null;
+    return (
       <>
         <Pressable
           accessibilityRole="button"
@@ -205,7 +251,7 @@ export function TasteJournalScreen() {
           onPress={() => navigation.goBack()}
           style={styles.backRow}
         >
-            <Ionicons name="arrow-back" size={20} color={colors.softAlert} />
+          <Ionicons name="arrow-back" size={20} color={colors.softAlert} />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
 
@@ -215,51 +261,34 @@ export function TasteJournalScreen() {
           </View>
           <Text style={[typography.title, styles.heroTitle]}>Your Taste Journal</Text>
           <Text style={[typography.body, styles.heroSub]}>
-            What Meal Rescue remembers about how you eat —{'\n'}and the small things it learned
-            while watching.
+            What Meal Rescue says about how you eat - every line grounded in something you have
+            told us or shown us.
           </Text>
           <View style={styles.heroStatRow}>
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatNum}>{journal.length}</Text>
-              <Text style={styles.heroStatLabel}>memories</Text>
+              <Text style={styles.heroStatNum}>{journal.summary.establishedCount}</Text>
+              <Text style={styles.heroStatLabel}>confident reads</Text>
             </View>
             <View style={styles.heroDivider} />
-            {personality && personality.traits.length > 0 && (
-              <View style={styles.heroTrait}>
-                <Text style={styles.heroTraitLabel}>{personality.traits[0]!.label}</Text>
-                <Text style={styles.heroTraitSub}>personality</Text>
-              </View>
-            )}
-            {v2 && v2.combinations.length > 0 && (
-              <>
-                <View style={styles.heroDivider} />
-                <View style={styles.heroTrait}>
-                  <Text style={styles.heroTraitLabel}>{v2.combinations.length}</Text>
-                  <Text style={styles.heroTraitSub}>combinations</Text>
-                </View>
-              </>
-            )}
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatNum}>{journal.summary.patternsCount}</Text>
+              <Text style={styles.heroStatLabel}>patterns</Text>
+            </View>
+            <View style={styles.heroDivider} />
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatNum}>{journal.summary.totalSignals}</Text>
+              <Text style={styles.heroStatLabel}>observations</Text>
+            </View>
           </View>
+          <Text style={styles.heroFreshness}>
+            {journal.summary.freshness === 'stale'
+              ? 'Based on older observations - they quiet down over time.'
+              : 'Everything here comes from what you have told us - never from guessing.'}
+          </Text>
         </View>
-
-        {personality && personality.traits.length > 0 && (
-          <View style={styles.traitCard}>
-            <Text style={styles.traitCardTitle}>Your Food Personality</Text>
-            {personality.traits.map((trait) => (
-              <View key={trait.id} style={styles.traitRow}>
-                <Text style={styles.traitLabel}>{trait.label}</Text>
-                <Text style={styles.traitDesc}>{trait.description}</Text>
-              </View>
-            ))}
-            <Text style={styles.traitBio}>{personality.bio}</Text>
-          </View>
-        )}
       </>
-    ),
-    [journal.length, navigation, personality, v2],
-  );
-
-const v2Content = v2 && (v2.combinations.length > 0 || topPrefs || recentEvents.length > 0);
+    );
+  }, [journal, navigation]);
 
   if (loading) {
     return (
@@ -273,16 +302,10 @@ const v2Content = v2 && (v2.combinations.length > 0 || topPrefs || recentEvents.
             <Skeleton.Block width={280} height={14} />
             <Skeleton.Block width={140} height={14} />
           </View>
-          <View style={styles.traitCard}>
-            <Skeleton.Block width="45%" height={16} />
-            {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton.Block key={i} width={i === 2 ? '70%' : '100%'} height={14} />
-            ))}
-          </View>
           <View style={styles.section}>
             <Skeleton.Block width="40%" height={16} />
             {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton.Block key={i} width={i === 2 ? '60%' : '100%'} height={16} />
+              <Skeleton.Block key={i} width={i === 2 ? '60%' : '100%'} height={60} />
             ))}
           </View>
         </ScrollView>
@@ -290,16 +313,17 @@ const v2Content = v2 && (v2.combinations.length > 0 || topPrefs || recentEvents.
     );
   }
 
-  if (!v2Content && v1Sections.length === 0) {
+  if (isEmpty || !journal) {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.content}>
           {header}
           <View style={styles.empty}>
             <Ionicons name="book-outline" size={44} color={colors.softAlert} />
-            <Text style={styles.emptyText}>No memories yet</Text>
+            <Text style={styles.emptyText}>Nothing here yet</Text>
             <Text style={styles.emptySub}>
-              Rescue a meal or give feedback and we&apos;ll start writing it all down here.
+              Rescue a meal, rate how it went, or finish a pairing and we will start keeping a
+              record of your taste.
             </Text>
           </View>
           <ErrorBanner error={error} />
@@ -308,237 +332,270 @@ const v2Content = v2 && (v2.combinations.length > 0 || topPrefs || recentEvents.
     );
   }
 
-  type SectionItem = { key: string; render: () => React.ReactElement };
-  const sections: SectionItem[] = v2Content
-    ? v2Sections(v2, sensorySummary, topPrefs, recentEvents)
-    : v1Sections.map(([k, entries]) => ({
-        key: k,
-        render: () => {
-          const meta = SECTION_META[k];
-          return (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIcon, { backgroundColor: meta.accent }]}>
-                  <Ionicons name={meta.icon} size={16} color="#FFFFFF" />
-                </View>
-                <View style={styles.sectionHeaderText}>
-                  <Text style={styles.sectionTitle}>{meta.title}</Text>
-                  <Text style={styles.sectionHint}>{meta.hint}</Text>
-                </View>
-                <View style={[styles.sectionCount, { borderColor: meta.accent }]}>
-                  <Text style={[styles.sectionCountText, { color: meta.accent }]}>
-                    {entries.length}
-                  </Text>
-                </View>
-              </View>
-              {entries.map((entry, i) => (
-                <View
-                  key={`${entry.id}-${i}`}
-                  style={[styles.entry, k === 'preference' && styles.entryPreference]}
-                >
-                  <View style={[styles.entryAccent, { backgroundColor: meta.accent }]} />
-                  <View style={styles.entryBody}>
-                    <Text style={styles.entryText}>{entry.text}</Text>
-                    <Text style={styles.entryDate}>
-                      {new Date(entry.createdAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          );
-        },
-      }));
-
-return (
+  return (
     <SafeAreaView style={styles.container}>
-<FadeInView style={styles.container}>
-<FlatList
-        data={sections}
-        keyExtractor={(item) => item.key}
-        ListHeaderComponent={header}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void loadBundle('refresh')} tintColor={colors.textSecondary} />
-        }
-        renderItem={({ item }) => item.render() as React.ReactElement}
-      />
-      <ErrorBanner error={error} />
+      <FadeInView style={styles.container}>
+        <FlatList
+          data={sections}
+          keyExtractor={(item) => item.key}
+          ListHeaderComponent={header}
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load('refresh')}
+              tintColor={colors.textSecondary}
+            />
+          }
+          renderItem={({ item }) => item.render() as React.ReactElement}
+        />
+        <ErrorBanner error={error} />
       </FadeInView>
     </SafeAreaView>
   );
 }
 
-function v2Sections(
-  v2: TasteV2Response,
-  sensorySummary: { dimension: string; count: number; top: string }[],
-  topPrefs: { liked: string[]; disliked: string[] } | null,
-  recentEvents: TasteV2Response['recentEvents'],
-): { key: string; render: () => React.ReactElement }[] {
-  const sections: { key: string; render: () => React.ReactElement }[] = [];
+type SectionItemShape = { key: string; render: () => React.ReactElement };
 
-  if (sensorySummary.length > 0) {
-    sections.push({
-      key: 'sensory-snapshot',
-      render: () => (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-<View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
-              <Ionicons name="flask" size={16} color={colors.softAlert} />
-            </View>
-            <View style={styles.sectionHeaderText}>
-              <Text style={styles.sectionTitle}>Sensory Snapshot</Text>
-              <Text style={styles.sectionHint}>What your palate leans toward</Text>
-            </View>
+function renderInsightSection(
+  key: string,
+  insights: TasteJournalInsight[],
+  handlers: InsightHandlers,
+): SectionItemShape {
+  const meta = SECTION_META[key];
+  return {
+    key,
+    render: () => (
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={[styles.sectionIcon, { backgroundColor: meta.accent }]}>
+            <Ionicons name={meta.name} size={16} color="#FFFFFF" />
           </View>
-          <View style={styles.snapshotGrid}>
-            {sensorySummary.map((s) => (
-              <View key={s.dimension} style={styles.snapshotCard}>
-                <Text style={styles.snapshotDim}>{s.dimension}</Text>
-                <Text style={styles.snapshotCount}>{s.count} beliefs</Text>
-                <Text style={styles.snapshotTop}>{s.top}</Text>
-              </View>
-            ))}
+          <View style={styles.sectionHeaderText}>
+            <Text style={styles.sectionTitle}>{meta.title}</Text>
+            <Text style={styles.sectionHint}>{meta.hint}</Text>
           </View>
         </View>
-      ),
-    });
-  }
-
-  if (topPrefs && (topPrefs.liked.length > 0 || topPrefs.disliked.length > 0)) {
-    sections.push({
-      key: 'love-avoid',
-      render: () => (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-<View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
-              <Ionicons name="heart" size={16} color={colors.softAlert} />
-            </View>
-            <View style={styles.sectionHeaderText}>
-              <Text style={styles.sectionTitle}>Love &amp; Avoid</Text>
-              <Text style={styles.sectionHint}>Ingredients you gravitate toward — and away from</Text>
-            </View>
-          </View>
-          {topPrefs.liked.length > 0 && (
-            <View style={styles.pillGroup}>
-              <Text style={styles.pillGroupLabel}>Love</Text>
-              <View style={styles.pillRow}>
-                {topPrefs.liked.map((id) => (
-                  <View key={id} style={[styles.pill, styles.pillLove]}>
-                    <Text style={styles.pillText}>{id}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-          {topPrefs.disliked.length > 0 && (
-            <View style={styles.pillGroup}>
-              <Text style={styles.pillGroupLabel}>Avoid</Text>
-              <View style={styles.pillRow}>
-                {topPrefs.disliked.map((id) => (
-                  <View key={id} style={[styles.pill, styles.pillAvoid]}>
-                    <Text style={[styles.pillText, styles.pillTextAvoid]}>{id}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-      ),
-    });
-  }
-
-  if (v2.combinations.length > 0) {
-    sections.push({
-      key: 'combinations',
-      render: () => (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.secondary }]}>
-              <Ionicons name="git-merge" size={16} color="#FFFFFF" />
-            </View>
-            <View style={styles.sectionHeaderText}>
-              <Text style={styles.sectionTitle}>Combination Memory</Text>
-              <Text style={styles.sectionHint}>Pairs and groups that work for you</Text>
-            </View>
-          </View>
-          {v2.combinations.slice(0, 5).map((c, i) => (
-            <View key={i} style={styles.comboCard}>
-              <Text style={styles.comboMembers}>{c.members.join(' + ')}</Text>
-              <View style={styles.comboMeta}>
-                <Text style={styles.comboConf}>
-                  {Math.round(c.confidence * 100)}% confident
-                </Text>
-                <Text style={styles.comboObs}>{c.observationCount}x observed</Text>
-              </View>
-            </View>
+        <View style={styles.sectionBody}>
+          {insights.map((insight) => (
+            <InsightCard key={insight.id} insight={insight} handlers={handlers} />
           ))}
         </View>
-      ),
-    });
-  }
+      </View>
+    ),
+  };
+}
 
-  if (v2.overexposed.length > 0) {
-    sections.push({
-      key: 'exposure',
-      render: () => (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.textSecondary }]}>
-              <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
-            </View>
-            <View style={styles.sectionHeaderText}>
-              <Text style={styles.sectionTitle}>Exposure Dashboard</Text>
-              <Text style={styles.sectionHint}>Getting too much airtime lately</Text>
-            </View>
-          </View>
-          <View style={styles.pillRow}>
-            {v2.overexposed.map((id) => (
-              <View key={id} style={[styles.pill, styles.pillOverexposed]}>
-                <Text style={styles.pillText}>{id}</Text>
+function renderBoundaries(
+  groups: TasteBoundaryGroup[],
+  handlers: InsightHandlers,
+): React.ReactElement {
+  const ordered: TasteBoundaryGroupKind[] = ['USUALLY_WORKS', 'DEPENDS', 'USUALLY_AVOID'];
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeaderRow}>
+        <View style={[styles.sectionIcon, { backgroundColor: colors.text }]}>
+          <Ionicons name="compass" size={16} color="#FFFFFF" />
+        </View>
+        <View style={styles.sectionHeaderText}>
+          <Text style={styles.sectionTitle}>Your boundaries</Text>
+          <Text style={styles.sectionHint}>The edges of what you will happily eat</Text>
+        </View>
+      </View>
+      <View style={styles.sectionBody}>
+        {ordered.flatMap((group) => {
+          const match = groups.find((g) => g.group === group);
+          if (!match || match.items.length === 0) return [];
+          return [
+            <View key={group} style={styles.boundaryGroup}>
+              <Text style={styles.boundaryTitle}>{match.title}</Text>
+              <Text style={styles.boundarySubtitle}>{match.subtitle}</Text>
+              <View style={styles.boundaryItems}>
+                {match.items.map((insight) => (
+                  <InsightCard key={insight.id} insight={insight} handlers={handlers} />
+                ))}
               </View>
-            ))}
+            </View>,
+          ];
+        })}
+      </View>
+    </View>
+  );
+}
+
+function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; handlers: InsightHandlers }) {
+  const [evidence, setEvidence] = useState<TasteJournalEvidenceDetail | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const busy = handlers.busyId === insight.id;
+
+  const openEvidence = useCallback(async () => {
+    setEvidenceOpen(true);
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    try {
+      const detail = await getJournalEvidence(insight.id);
+      setEvidence(detail);
+    } catch (err) {
+      setEvidenceError(toApiError(err).message);
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, [insight.id]);
+
+  return (
+    <View style={styles.insightCard}>
+      <Text style={styles.insightTitle}>{insight.title}</Text>
+      <Text style={styles.insightBody}>{insight.body}</Text>
+      <Text style={styles.insightFooter}>
+        {sourceAttribution(insight.sourceTypes)}
+        {insight.lastObservedAt ? ` Â· ${formatDate(insight.lastObservedAt)}` : ''}
+        {` Â· ${insight.evidenceCount} ${insight.evidenceCount === 1 ? 'observation' : 'observations'}`}
+      </Text>
+      <View style={styles.insightActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Why do you think this?"
+          onPress={() => void openEvidence()}
+          style={styles.insightAction}
+        >
+          <Ionicons name="help-circle-outline" size={15} color={colors.primary} />
+          <Text style={styles.insightActionText}>Why do you think this?</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="That is not me"
+          disabled={busy}
+          onPress={() => setCorrectOpen(true)}
+          style={styles.insightAction}
+        >
+          <Ionicons name="close-circle-outline" size={15} color={colors.softAlert} />
+          <Text style={styles.insightActionText}>That&apos;s not me</Text>
+        </Pressable>
+      </View>
+
+      <Modal
+        visible={evidenceOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEvidenceOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              onPress={() => setEvidenceOpen(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </Pressable>
+            <Text style={styles.modalTitle}>Why do you think this?</Text>
+            <Text style={styles.modalSubtitle}>{insight.title}</Text>
+            {evidenceLoading ? (
+              <View style={styles.evidenceLoading}>
+                <Skeleton.Block width="100%" height={14} />
+                <Skeleton.Block width="80%" height={14} />
+                <Skeleton.Block width="90%" height={14} />
+              </View>
+            ) : evidenceError ? (
+              <Text style={styles.evidenceError}>{evidenceError}</Text>
+            ) : evidence ? (
+              <ScrollView style={styles.evidenceList}>
+                {evidence.evidence.map((item, i) => (
+                  <View key={i} style={styles.evidenceItem}>
+                    <View style={styles.evidenceItemHeader}>
+                      <Text style={styles.evidencePolarity}>{POLARITY_LABELS[item.polarity]}</Text>
+                      <Text style={styles.evidenceDate}>{formatDate(item.occurredAt)}</Text>
+                    </View>
+                    <Text style={styles.evidenceSource}>{item.sourceLabel}</Text>
+                    {item.context && (
+                      <Text style={styles.evidenceContext}>
+                        in {item.context.contextValue.replace(/_/g, ' ')}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+                <Text style={styles.evidenceNote}>
+                  Every entry is a real signal we recorded - nothing here is invented.
+                </Text>
+              </ScrollView>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setEvidenceOpen(false);
+                  setCorrectOpen(true);
+                }}
+                style={styles.modalActionButton}
+              >
+                <Text style={styles.modalActionText}>That&apos;s not me</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setEvidenceOpen(false);
+                  handlers.onForget(insight);
+                }}
+                style={[styles.modalActionButton, styles.modalActionDanger]}
+              >
+                <Text style={styles.modalActionDangerText}>Forget this</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
-      ),
-    });
-  }
+      </Modal>
 
-  if (recentEvents.length > 0) {
-    sections.push({
-      key: 'timeline',
-      render: () => (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-<View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
-              <Ionicons name="time" size={16} color={colors.softAlert} />
-            </View>
-            <View style={styles.sectionHeaderText}>
-              <Text style={styles.sectionTitle}>Recent Activity</Text>
-              <Text style={styles.sectionHint}>Your latest taste moments</Text>
-            </View>
+      <Modal
+        visible={correctOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCorrectOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.correctCard}>
+            <Text style={styles.modalTitle}>That&apos;s not me</Text>
+            <Text style={styles.modalSubtitle}>How would you put it?</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setCorrectOpen(false);
+                void handlers.onCorrect(insight, 'positive');
+              }}
+              style={styles.correctOption}
+            >
+              <Ionicons name="heart" size={20} color={colors.softAlert} />
+              <Text style={styles.correctOptionText}>Actually, I like this</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setCorrectOpen(false);
+                void handlers.onCorrect(insight, 'negative');
+              }}
+              style={[styles.correctOption, styles.correctOptionAvoid]}
+            >
+              <Ionicons name="leaf" size={20} color={colors.softCool} />
+              <Text style={styles.correctOptionText}>Actually, I avoid this</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setCorrectOpen(false);
+                void handlers.onDismiss(insight);
+              }}
+              style={styles.correctCancel}
+            >
+              <Text style={styles.correctCancelText}>Just hide this one</Text>
+            </Pressable>
           </View>
-          {recentEvents.map((ev, i) => (
-            <View key={ev.id ?? i} style={styles.timelineItem}>
-              <View style={styles.timelineDot} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineLabel}>{getEventLabel(ev.eventType)}</Text>
-                <Text style={styles.timelineTarget}>
-                  {ev.targetId}
-                  {ev.contextKey ? ` · ${ev.contextKey}` : ''}
-                </Text>
-                <Text style={styles.timelineDate}>
-                  {new Date(ev.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-            </View>
-          ))}
         </View>
-      ),
-    });
-  }
-
-  return sections;
+      </Modal>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -559,7 +616,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-heroEmblem: {
+  heroEmblem: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -575,38 +632,20 @@ heroEmblem: {
     lineHeight: 22,
     marginBottom: spacing.lg,
   },
-  heroStatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  heroStat: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
-  heroStatNum: { fontSize: 28, fontWeight: '800', color: colors.text },
-  heroStatLabel: { fontSize: 13, color: colors.textSecondary },
+  heroStatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroStat: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs, flexShrink: 1 },
+  heroStatNum: { fontSize: 26, fontWeight: '800', color: colors.text },
+  heroStatLabel: { fontSize: 12, color: colors.textSecondary },
   heroDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  heroTrait: { flexShrink: 1 },
-  heroTraitLabel: { fontSize: 15, fontWeight: '700', color: colors.text },
-  heroTraitSub: { fontSize: 12, color: colors.textSecondary },
-  traitCard: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: 14,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  traitCardTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  traitRow: { marginBottom: spacing.xs },
-  traitLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
-  traitDesc: { fontSize: 13, color: colors.textSecondary },
-  traitBio: {
-    marginTop: spacing.sm,
-    fontSize: 13,
+  heroFreshness: {
+    marginTop: spacing.md,
+    fontSize: 12,
     color: colors.textSecondary,
     fontStyle: 'italic',
+    lineHeight: 18,
   },
   section: { marginBottom: spacing.xl },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   sectionIcon: {
     width: 28,
     height: 28,
@@ -618,98 +657,107 @@ heroEmblem: {
   sectionHeaderText: { flex: 1 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   sectionHint: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  sectionCount: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xs,
-  },
-  sectionCountText: { fontSize: 13, fontWeight: '700' },
-  entry: {
+  sectionBody: { marginTop: spacing.sm },
+  insightCard: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
-    flexDirection: 'row',
-    overflow: 'hidden',
   },
-  entryPreference: { backgroundColor: colors.primaryLight },
-  entryAccent: { width: 3, borderRadius: 2, marginRight: spacing.md, alignSelf: 'stretch' },
-  entryBody: { flex: 1 },
-  entryText: { fontSize: 14, color: colors.text, lineHeight: 20 },
-  entryDate: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs },
-  empty: { alignItems: 'center', padding: spacing.xl },
-  emptyText: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
-  emptySub: {
+  insightTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
+  insightBody: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
+  insightFooter: {
+    marginTop: spacing.sm,
+    fontSize: 12,
     color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
   },
-  snapshotGrid: {
+  insightActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
-  snapshotCard: {
+  insightAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  insightActionText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  boundaryGroup: { marginBottom: spacing.lg },
+  boundaryTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  boundarySubtitle: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm },
+  boundaryItems: { gap: spacing.sm },
+  empty: { alignItems: 'center', padding: spacing.xl },
+  emptyText: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
+  emptySub: { color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
     backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+    minHeight: 320,
+  },
+  modalClose: {
+    alignSelf: 'flex-end',
+    padding: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  evidenceLoading: { gap: spacing.sm, paddingVertical: spacing.md },
+  evidenceError: { color: colors.softAlert, fontSize: 14 },
+  evidenceList: { maxHeight: 360 },
+  evidenceItem: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingVertical: spacing.md,
+  },
+  evidenceItemHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  evidencePolarity: { fontSize: 14, fontWeight: '700', color: colors.text },
+  evidenceDate: { fontSize: 12, color: colors.textSecondary },
+  evidenceSource: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+  evidenceContext: { fontSize: 13, color: colors.secondary, marginTop: 2, fontStyle: 'italic' },
+  evidenceNote: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.lg, fontStyle: 'italic' },
+  modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  modalActionButton: {
+    flex: 1,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    width: '48%',
+    paddingVertical: spacing.md,
+    alignItems: 'center',
   },
-  snapshotDim: { fontSize: 13, fontWeight: '700', color: colors.text, textTransform: 'capitalize' },
-  snapshotCount: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  snapshotTop: { fontSize: 12, color: colors.secondary, marginTop: spacing.xs, fontStyle: 'italic' },
-  pillGroup: { marginBottom: spacing.md },
-  pillGroupLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.xs },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  pill: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: 16,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pillLove: { backgroundColor: colors.primaryLight, borderColor: colors.borderStrong },
-  pillAvoid: { backgroundColor: colors.surface, borderColor: colors.border },
-  pillOverexposed: { backgroundColor: colors.surface, borderColor: colors.textSecondary },
-  pillText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  pillTextAvoid: { color: colors.textSecondary },
-  comboCard: {
+  modalActionText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  modalActionDanger: { borderColor: colors.softAlert },
+  modalActionDangerText: { fontSize: 14, fontWeight: '600', color: colors.softAlert },
+  correctCard: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    borderRadius: 24,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
   },
-  comboMembers: { fontSize: 15, fontWeight: '700', color: colors.text },
-  comboMeta: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  comboConf: { fontSize: 12, color: colors.textSecondary },
-  comboObs: { fontSize: 12, color: colors.textSecondary },
-  timelineItem: {
+  correctOption: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: spacing.md,
     marginBottom: spacing.sm,
-    gap: spacing.sm,
   },
-timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.text,
-    marginTop: 6,
-  },
-  timelineContent: { flex: 1 },
-  timelineLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
-  timelineTarget: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  timelineDate: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  correctOptionAvoid: { backgroundColor: colors.primaryLight },
+  correctOptionText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  correctCancel: { alignItems: 'center', paddingVertical: spacing.sm },
+  correctCancelText: { fontSize: 14, color: colors.textSecondary },
 });
-

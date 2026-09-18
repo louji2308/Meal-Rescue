@@ -11,7 +11,6 @@ import { Text } from '../../components/AppText';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
-import type { HouseholdMemberProfile } from '@meal-rescue/shared-types';
 import { toApiError } from '../../services/api';
 import {
   getSharedMeal,
@@ -25,24 +24,13 @@ import { FadeInView } from '../../components/motion/FadeInView';
 /**
  * Common Table home — one unified "Your Table" screen.
  *
- * The roster IS the selection: everyone you cook for is listed once, with a
- * check for "eating tonight?" and a tap-to-edit (constraints live behind the
- * person). Finding a meal uses the people you checked.
+ * The roster IS the selection: everyone you cook for is listed once. Tapping
+ * a person includes them (charcoal border = selected); the ">" opens their
+ * editor where allergies and avoid lists live. Finding a meal uses the people
+ * you selected.
  *
  * Flow: Your Table (pick who's eating) → Ingredients → Plan & Cook → How did it go.
  */
-
-function constraintSummary(member: HouseholdMemberProfile): {
-  label: string;
-  danger: boolean;
-} | null {
-  const { allergies, avoidIngredients, dietaryRestrictions } = member.constraints;
-  if (allergies.length > 0) return { label: `allergy: ${allergies[0]}`, danger: true };
-  if (avoidIngredients.length > 0) return { label: `avoids ${avoidIngredients[0]}`, danger: false };
-  if (dietaryRestrictions.length > 0)
-    return { label: dietaryRestrictions[0], danger: false };
-  return null;
-}
 
 export function CommonTableHomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
@@ -185,35 +173,24 @@ export function CommonTableHomeScreen() {
             <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Who's eating tonight?</Text>
-                <Text style={styles.sectionHint}>Check the box · tap the card to edit</Text>
+                <Text style={styles.sectionHint}>Tap to include · tap › for details</Text>
               </View>
 
               <View style={styles.memberList}>
                 {activeSorted.map((member) => {
                   const isSelected = selected.includes(member.id);
                   const photo = photos[member.id];
-                  const constraint = constraintSummary(member);
                   return (
-                    <View key={member.id} style={styles.memberCard}>
+                    <View
+                      key={member.id}
+                      style={[styles.memberCard, isSelected && styles.memberCardSelected]}
+                    >
                       <Pressable
-                        style={styles.checkBox}
+                        style={styles.memberBody}
                         onPress={() => toggleSelected(member.id)}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: isSelected }}
                         accessibilityLabel={`${member.displayName} eating tonight`}
-                      >
-                        <View style={[styles.checkCircle, isSelected && styles.checkCircleOn]}>
-                          {isSelected && (
-                            <Ionicons name="checkmark" size={14} color={colors.surface} />
-                          )}
-                        </View>
-                      </Pressable>
-
-                      <Pressable
-                        style={styles.memberBody}
-                        onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${member.displayName}`}
                       >
                         <View style={[styles.avatar, photo && styles.avatarPhoto]}>
                           {photo ? (
@@ -233,33 +210,16 @@ export function CommonTableHomeScreen() {
                               .filter(Boolean)
                               .join(' · ')}
                           </Text>
-                          {constraint ? (
-                            <View style={[styles.constraintChip, constraint.danger && styles.constraintDanger]}>
-                              <Ionicons
-                                name={constraint.danger ? 'warning' : 'leaf'}
-                                size={11}
-                                color={constraint.danger ? colors.error : colors.secondary}
-                              />
-                              <Text
-                                style={[
-                                  styles.constraintText,
-                                  constraint.danger && styles.constraintTextDanger,
-                                ]}
-                              >
-                                {constraint.label}
-                              </Text>
-                            </View>
-                          ) : null}
                         </View>
                       </Pressable>
 
                       <Pressable
-                        style={styles.editBtn}
+                        style={styles.chevronBtn}
                         onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
                         accessibilityRole="button"
                         accessibilityLabel={`Edit ${member.displayName}`}
                       >
-                        <Ionicons name="create-outline" size={17} color={colors.textSecondary} />
+                        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                       </Pressable>
                     </View>
                   );
@@ -434,28 +394,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     paddingVertical: spacing.md,
-    paddingLeft: spacing.sm,
+    paddingLeft: spacing.md,
     paddingRight: spacing.xs,
     gap: spacing.xs,
   },
-  checkBox: {
-    padding: spacing.sm,
-  },
-  checkCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  checkCircleOn: {
-    backgroundColor: colors.homeInk,
+  memberCardSelected: {
     borderColor: colors.homeInk,
   },
   memberBody: {
@@ -521,30 +467,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: 'capitalize',
   },
-  constraintChip: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primaryLight,
-    borderRadius: 10,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginTop: 6,
-  },
-  constraintDanger: {
-    backgroundColor: colors.errorSoft,
-  },
-  constraintText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    textTransform: 'capitalize',
-  },
-  constraintTextDanger: {
-    color: colors.error,
-    fontWeight: '600',
-  },
-  editBtn: {
+  chevronBtn: {
     padding: spacing.sm,
   },
 

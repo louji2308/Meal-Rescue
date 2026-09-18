@@ -13,6 +13,7 @@ import type {
 import type { Db } from '../../database/models';
 import type { TasteSignalEvidence as TasteSignalEvidenceRow } from '../../database/models/taste-signal-evidence.model';
 import { AppError } from '../../lib/errors';
+import { tasteJournalConfig } from '../../config/taste-journal';
 import { TasteMemoryService } from '../taste-memory.service';
 import { ContextualPatternService } from './contextual-pattern.service';
 import { PreferenceAggregationService, parseStrandId, strandId } from './preference-aggregation.service';
@@ -62,40 +63,37 @@ export class TasteJournalService {
 
   async getJournal(userId: string): Promise<TasteJournal> {
     const [signals, overrides] = await this.loadState(userId);
-    const visible = this.applyOverridesToSignals(signals, overrides);
+    const visible = this.applyOverrides(signals, overrides);
     const landscape = this.aggregation.buildLandscape(userId, visible);
 
     return {
       summary: this.buildSummary(landscape.active),
-      progress: landscape.emerging.map((s) =>
-        this.insights.renderProgressive(this.withCorrection(s, overrides)),
-      ),
-      patterns: landscape.patterns.map((s) =>
-        this.insights.renderPattern(this.withCorrection(s, overrides)),
-      ),
+      progress: landscape.emerging.map((s) => this.insights.renderProgressive(s)),
+      patterns: landscape.patterns.map((s) => this.insights.renderPattern(s)),
       dependentPatterns: this.contextual
         .buildDependentPatterns(visible, 3)
         .map((dep) => this.insights.renderDependent(dep)),
-      discoveries: landscape.discoveries.map((s) =>
-        this.insights.renderDiscovery(this.withCorrection(s, overrides)),
+      discoveries: landscape.discoveries.map((s) => this.insights.renderDiscovery(s)),
+      stillLearning: landscape.stillLearning.map((s) => this.insights.renderStillLearning(s)),
+      boundaries: await this.buildBoundaries(
+        userId,
+        landscape.patterns,
+        landscape.avoidances,
+        landscape.contextual,
       ),
-      stillLearning: landscape.stillLearning.map((s) =>
-        this.insights.renderStillLearning(this.withCorrection(s, overrides)),
-      ),
-      boundaries: await this.buildBoundaries(userId, landscape.patterns, landscape.avoidances, landscape.contextual, overrides),
     };
   }
 
   async getSummary(userId: string): Promise<TasteJournalSummary> {
     const [signals, overrides] = await this.loadState(userId);
-    const visible = this.applyOverridesToSignals(signals, overrides);
+    const visible = this.applyOverrides(signals, overrides);
     const landscape = this.aggregation.buildLandscape(userId, visible);
     return this.buildSummary(landscape.active);
   }
 
   async getPatterns(userId: string): Promise<TasteJournalInsight[]> {
-    const { landscape, overrides } = await this.buildLandscape(userId);
-    return landscape.patterns.map((s) => this.insights.renderPattern(this.withCorrection(s, overrides)));
+    const landscape = await this.buildLandscape(userId);
+    return landscape.patterns.map((s) => this.insights.renderPattern(s));
   }
 
   async getDependentPatterns(userId: string): Promise<TasteJournalInsight[]> {
@@ -106,27 +104,22 @@ export class TasteJournalService {
   }
 
   async getDiscoveries(userId: string): Promise<TasteJournalInsight[]> {
-    const { landscape, overrides } = await this.buildLandscape(userId);
-    return landscape.discoveries.map((s) =>
-      this.insights.renderDiscovery(this.withCorrection(s, overrides)),
-    );
+    const landscape = await this.buildLandscape(userId);
+    return landscape.discoveries.map((s) => this.insights.renderDiscovery(s));
   }
 
   async getStillLearning(userId: string): Promise<TasteJournalInsight[]> {
-    const { landscape, overrides } = await this.buildLandscape(userId);
-    return landscape.stillLearning.map((s) =>
-      this.insights.renderStillLearning(this.withCorrection(s, overrides)),
-    );
+    const landscape = await this.buildLandscape(userId);
+    return landscape.stillLearning.map((s) => this.insights.renderStillLearning(s));
   }
 
   async getBoundaries(userId: string): Promise<TasteBoundaryGroup[]> {
-    const { landscape, overrides } = await this.buildLandscape(userId);
+    const landscape = await this.buildLandscape(userId);
     return this.buildBoundaries(
       userId,
       landscape.patterns,
       landscape.avoidances,
       landscape.contextual,
-      overrides,
     );
   }
 
@@ -233,36 +226,34 @@ export class TasteJournalService {
         correctedValue: row.correctedValue ?? undefined,
       });
     }
-    return [signals, overrides, this.applyOverridesToSignals(signals, overrides)];
+    return [signals, overrides, this.applyOverrides(signals, overrides)];
   }
 
   private async buildLandscape(userId: string) {
     const [signals, overrides, visible] = await this.loadState(userId);
-    return {
-      landscape: this.aggregation.buildLandscape(userId, visible),
-      overrides,
-      visible,
-    };
+    return this.aggregation.buildLandscape(userId, visible);
   }
 
-  private applyOverridesToSignals(
-    signals: TasteSignal[],
-    overrides: Map<string, ModelOverride>,
-  ): TasteSignal[] {
-    return signals.filter((s) => {
-      const override = overrides.get(strandId(s.dimension, s.value));
-      return !(override && HIDDEN_OVERRIDES.includes(override.action));
-    });
-  }
-
-  private withCorrection(signal: TasteSignal, overrides: Map<string, ModelOverride>): TasteSignal {
-    const override = overrides.get(strandId(signal.dimension, signal.value));
-    if (!override || override.action !== 'CORRECTED') return signal;
-    return {
-      ...signal,
-      polarity: override.correctedPolarity ?? signal.polarity,
-      value: override.correctedValue ?? signal.value,
-    };
+  /**
+   * The journal's view of a user's strands: hidden overrides (dismissed or
+   * forgotten) are filtered out, and corrected overrides re-shape the strand's
+   * rendered direction/value BEFORE aggregation so it lands in the right bucket.
+   */
+  private applyOverrides(signals: TasteSignal[], overrides: Map<string, ModelOverride>): TasteSignal[] {
+    return signals
+      .filter((s) => {
+        const override = overrides.get(strandId(s.dimension, s.value));
+        return !(override && HIDDEN_OVERRIDES.includes(override.action));
+      })
+      .map((s) => {
+        const override = overrides.get(strandId(s.dimension, s.value));
+        if (!override || override.action !== 'CORRECTED') return s;
+        return {
+          ...s,
+          polarity: override.correctedPolarity ?? s.polarity,
+          value: override.correctedValue ?? s.value,
+        };
+      });
   }
 
   private buildSummary(active: TasteSignal[]): TasteJournalSummary {
@@ -294,7 +285,6 @@ export class TasteJournalService {
     patterns: TasteSignal[],
     avoidances: TasteSignal[],
     contextual: TasteSignal[],
-    overrides: Map<string, ModelOverride>,
   ): Promise<TasteBoundaryGroup[]> {
     // Explicit onboarding cuisines ("you told us") are always USUALLY_WORKS.
     const cuisineAffinities = await this.tasteMemory.getCuisineAffinities(userId);
@@ -314,7 +304,7 @@ export class TasteJournalService {
       const strand = patterns.find((s) => s.dimension === 'cuisine' && s.value === family);
       works.push(
         strand
-          ? this.insights.renderBoundary(this.withCorrection(strand, overrides))
+          ? this.insights.renderBoundary(strand)
           : this.insights.renderExplicitCuisineBoundary(family),
       );
     }
@@ -323,7 +313,7 @@ export class TasteJournalService {
       const id = strandId(signal.dimension, signal.value);
       if (seenWorks.has(id) || signal.polarity === 'negative') continue;
       seenWorks.add(id);
-      works.push(this.insights.renderBoundary(this.withCorrection(signal, overrides)));
+      works.push(this.insights.renderBoundary(signal));
     }
 
     const avoid: TasteJournalInsight[] = [];
@@ -334,7 +324,7 @@ export class TasteJournalService {
       seenAvoid.add(id);
       const strand = avoidances.find((s) => s.dimension === 'cuisine' && s.value === family);
       if (strand) {
-        avoid.push(this.insights.renderBoundary(this.withCorrection(strand, overrides)));
+        avoid.push(this.insights.renderBoundary(strand));
       } else {
         const signal: TasteSignal = {
           id,
@@ -362,12 +352,10 @@ export class TasteJournalService {
       const id = strandId(signal.dimension, signal.value);
       if (seenAvoid.has(id)) continue;
       seenAvoid.add(id);
-      avoid.push(this.insights.renderBoundary(this.withCorrection(signal, overrides)));
+      avoid.push(this.insights.renderBoundary(signal));
     }
 
-    const depends = contextual.map((s) =>
-      this.insights.renderContextual(this.withCorrection(s, overrides)),
-    );
+    const depends = contextual.map((s) => this.insights.renderContextual(s));
 
     return [
       {
@@ -430,6 +418,7 @@ export class TasteJournalService {
           sourceEventKey: `onboardingcuisine:${data.contextValue}`,
           occurredAt: new Date(),
           backfill: true,
+          evidenceWeightFactor: tasteJournalConfig.BACKFILL_WEIGHT_MULTIPLIER,
         });
         evidenceCreated += 1;
       }
@@ -462,6 +451,7 @@ export class TasteJournalService {
         sourceEventKey: `event:${m.id}`,
         occurredAt: m.createdAt,
         backfill: true,
+        evidenceWeightFactor: tasteJournalConfig.BACKFILL_WEIGHT_MULTIPLIER,
       });
       evidenceCreated += 1;
     }
@@ -488,6 +478,7 @@ export class TasteJournalService {
         sourceEventKey: `onboarding:${data.id}`,
         occurredAt: data.createdAt,
         backfill: true,
+        evidenceWeightFactor: tasteJournalConfig.BACKFILL_WEIGHT_MULTIPLIER,
       });
       evidenceCreated += 1;
     }
