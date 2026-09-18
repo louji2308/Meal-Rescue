@@ -24,5 +24,5 @@ export function loginWithGoogle(idToken: string): Promise<AuthTokens> {
 }
 
 export function completeOnboarding(): Promise<{ onboardingCompleted: boolean }> {
-  return api.post<{ onboardingCompleted: boolean }>('/api/v1/auth/complete-onboarding').then((res) => res.data);
+  return api.post<{ onboardingCompleted: boolean }>('/api/v1/user/complete-onboarding').then((res) => res.data);
 }

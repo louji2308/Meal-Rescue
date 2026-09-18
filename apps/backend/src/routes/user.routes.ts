@@ -19,6 +19,12 @@ import { buildServices, dbModels } from '../services/composition';
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   const { preferenceLearning } = buildServices(app.redis);
 
+  app.post('/complete-onboarding', async (request, reply) => {
+    const userId = request.user.sub;
+    await User.update({ onboardingCompleted: true }, { where: { id: userId } });
+    return reply.send({ onboardingCompleted: true });
+  });
+
   app.get('/preferences', async (request, reply) => {
     const userId = request.user.sub;
     const prefs = await preferenceLearning.getLearnedPreferences(userId);
