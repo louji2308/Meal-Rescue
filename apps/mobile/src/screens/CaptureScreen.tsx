@@ -188,6 +188,7 @@ export function CaptureScreen() {
       navigation.navigate('AiRescue', {
         foods: foods.length > 0 ? foods : [text.trim() || 'meal'],
         ingredients,
+        mealId: analysis.mealId,
       });
     } catch (err) {
       setError(toApiError(err));
@@ -198,6 +199,16 @@ export function CaptureScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
+      <View style={styles.header}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Ionicons name="chevron-back" size={24} color={colors.homeInk} />
+        </Pressable>
+      </View>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -223,6 +234,7 @@ export function CaptureScreen() {
             <View style={styles.photoActions}>
               <Pressable
                 style={styles.photoAction}
+                tintBorderRadius={12}
                 onPress={() => void takePhoto()}
                 accessibilityRole="button"
                 accessibilityLabel="Take a photo of your meal"
@@ -232,6 +244,7 @@ export function CaptureScreen() {
               </Pressable>
               <Pressable
                 style={styles.photoAction}
+                tintBorderRadius={12}
                 onPress={() => void pickPhoto()}
                 accessibilityRole="button"
                 accessibilityLabel="Choose a photo from library"
@@ -314,6 +327,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(22, 22, 22, 0.08)',
   },
   content: {
     flexGrow: 1,

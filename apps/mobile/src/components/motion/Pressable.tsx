@@ -23,6 +23,12 @@ interface PressableProps2 extends Omit<PressableProps, 'style'> {
   pressedTintColor?: string;
   /** Opacity of the tint wash (default 0.06). */
   pressedTintOpacity?: number;
+  /**
+   * Border radius of the pressed tint wash. Defaults to fully rounded (pill).
+   * Set to the button's own borderRadius so a rounded-rectangle button gets a
+   * rounded-rectangle press shape instead of a pill.
+   */
+  tintBorderRadius?: number;
   /** Disable haptic feedback. */
   disableHaptics?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -41,6 +47,7 @@ export function Pressable({
   scaleTo = 0.96,
   pressedTintColor = '#161616',
   pressedTintOpacity = 0.06,
+  tintBorderRadius = 999,
   disableHaptics = false,
   style,
   children,
@@ -78,6 +85,7 @@ export function Pressable({
         <AnimatedTint
           color={pressedTintColor}
           opacity={pressedTintOpacity}
+          borderRadius={tintBorderRadius}
           pressed={pressed}
         />
       ) : null}
@@ -89,10 +97,12 @@ export function Pressable({
 function AnimatedTint({
   color,
   opacity: maxOpacity,
+  borderRadius,
   pressed,
 }: {
   color: string;
   opacity: number;
+  borderRadius: number;
   pressed: SharedValue<number>;
 }) {
   const style = useAnimatedStyle(() => ({
@@ -107,7 +117,7 @@ function AnimatedTint({
           position: 'absolute',
           inset: 0,
           backgroundColor: color,
-          borderRadius: 999,
+          borderRadius,
         },
         style,
       ]}

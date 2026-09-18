@@ -84,12 +84,8 @@ Time: ${req.timeOfDay}${req.userMood ? `. Mood: ${req.userMood}` : ''}${kitchenC
 
 Suggest the best move.`;
 
-    try {
-      const result = await this.callOpenRouter(systemPrompt, userMessage);
-      return this.parseResponse(result);
-    } catch {
-      return this.fallbackResponse(req.foods, req.timeOfDay);
-    }
+    const result = await this.callOpenRouter(systemPrompt, userMessage);
+    return this.parseResponse(result);
   }
 
   /**
@@ -131,87 +127,27 @@ User's latest pushback: "${req.pushback}"
 
 Adapt your suggestion.`;
 
-    try {
-      const result = await this.callOpenRouter(systemPrompt, userMessage);
-      return this.parseResponse(result);
-    } catch {
-      return this.fallbackResponse(req.originalFoods, 'afternoon');
-    }
-  }
-
-  private fallbackResponse(foods: string[], timeOfDay: string): AiRescueResponse {
-    const joined = foods.join(' + ');
-    const lower = foods.map((f) => f.toLowerCase());
-
-    const hasEgg = lower.some((f) => f.includes('egg'));
-    const hasNoodle = lower.some((f) => f.includes('noodle') || f.includes('pasta') || f.includes('rice'));
-    const hasVeggie = lower.some((f) => f.includes('spinach') || f.includes('broccoli') || f.includes('tomato') || f.includes('onion') || f.includes('pepper'));
-    const hasMeat = lower.some((f) => f.includes('chicken') || f.includes('beef') || f.includes('pork') || f.includes('fish') || f.includes('shrimp'));
-    const hasBread = lower.some((f) => f.includes('bread') || f.includes('tortilla') || f.includes('wrap'));
-
-    if (hasNoodle && hasEgg && hasVeggie) {
-      return {
-        bestMove: `Stir-fry the ${joined} into a quick egg noodle bowl — toss noodles with scrambled egg and wilted greens, add soy sauce and a pinch of sesame oil.`,
-        reasoning: `Noodles, egg, and greens are a classic combo — quick, satisfying, and uses everything you have.`,
-        timeMinutes: 12,
-        effort: 'low',
-        whatYouKept: foods,
-        whatYouAdded: ['soy sauce', 'sesame oil', 'garlic'],
-        alternatives: [
-          { name: 'Egg drop noodle soup', reasoning: 'Boil noodles in broth, swirl in beaten egg for a comforting soup' },
-          { name: 'Noodle omelette', reasoning: 'Mix noodles into beaten egg and pan-fry into a crispy noodle pancake' },
-          { name: 'Cold noodle salad', reasoning: 'Chill the noodles, toss with raw spinach, egg slices, and a light dressing' },
-        ],
-      };
-    }
-
-    if (hasEgg) {
-      return {
-        bestMove: `Make a quick fried egg rice bowl — scramble the egg over rice with whatever veggies you have, season with soy sauce.`,
-        reasoning: `Egg is incredibly versatile — this takes 8 minutes and always tastes great.`,
-        timeMinutes: 8,
-        effort: 'low',
-        whatYouKept: foods,
-        whatYouAdded: ['rice', 'soy sauce', 'green onion'],
-        alternatives: [
-          { name: 'Egg fried noodles', reasoning: 'Same idea but with noodles instead of rice' },
-          { name: 'Veggie egg scramble', reasoning: 'Scramble everything together with some cheese on top' },
-        ],
-      };
-    }
-
-    if (hasMeat) {
-      return {
-        bestMove: `Sear the ${joined} quickly — high heat, simple seasoning, rest for 2 minutes before serving.`,
-        reasoning: `Simple cooking lets the protein shine — don't overcomplicate it.`,
-        timeMinutes: 15,
-        effort: 'medium',
-        whatYouKept: foods,
-        whatYouAdded: ['salt', 'pepper', 'olive oil'],
-        alternatives: [
-          { name: 'Stir-fry everything together', reasoning: 'Quick high-heat cook with soy sauce and garlic' },
-          { name: 'Sheet pan roast', reasoning: 'Toss on a pan, oven roast at 400°F for 15 minutes' },
-        ],
-      };
-    }
-
-    return {
-      bestMove: `Combine ${joined} into a simple bowl — cook the main ingredient, season well, and serve with a drizzle of olive oil.`,
-      reasoning: `Keeping it simple is sometimes the best approach — let the ingredients speak for themselves.`,
-      timeMinutes: 10,
-      effort: 'low',
-      whatYouKept: foods,
-      whatYouAdded: ['olive oil', 'salt', 'pepper'],
-      alternatives: [
-        { name: 'Quick stir-fry', reasoning: 'Toss everything in a hot pan with your favorite sauce' },
-        { name: 'Simple bowl', reasoning: 'Cook each ingredient separately, assemble in a bowl' },
-      ],
-    };
+    const result = await this.callOpenRouter(systemPrompt, userMessage);
+    return this.parseResponse(result);
   }
 
   private async callOpenRouter(systemPrompt: string, userMessage: string): Promise<string> {
     if (!OPENROUTER_KEY) {
       throw new Error('OPENROUTER_API_KEY not configured');
+    }
+
+    const body: Record<string, unknown> = {
+      model: MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 1500,
+    };
+    // GLM-family (and other reasoning) models on OpenRouter spend the output
+    // budget on hidden reasoning and return content:null unless disabled.
+    if (MODEL.startsWith('z-ai/') || MODEL.startsWith('deepseek/')) {
+      body.reasoning = { enabled: false };
     }
 
     const response = await fetch(OPENROUTER_URL, {
@@ -221,14 +157,7 @@ Adapt your suggestion.`;
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://mealrescue.app',
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        max_tokens: 800,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -237,10 +166,15 @@ Adapt your suggestion.`;
     }
 
     const data = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>;
+      choices: Array<{ message: { content: string | null } }>;
     };
 
-    return data.choices?.[0]?.message?.content ?? '';
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenRouter returned empty content');
+    }
+
+    return content;
   }
 
   private parseResponse(raw: string): AiRescueResponse {

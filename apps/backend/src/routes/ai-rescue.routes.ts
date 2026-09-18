@@ -87,34 +87,39 @@ export async function aiRescueRoutes(app: FastifyInstance) {
       });
 
       // Persist a Rescue record so feedback can reference a real DB row.
+      // Persistence is best-effort: a DB hiccup must never sink the AI answer.
       const rescueId = randomUUID();
       const userId = authedUserId(request);
       if (userId) {
-        await Rescue.create({
-          id: rescueId,
-          mealId: randomUUID(), // placeholder — AI rescue has no Meal record
-          userId,
-          originalMeal: { foods },
-          detectedIngredients: (body.ingredients as string[] | undefined) ?? [],
-          constraints: {},
-          candidatesGenerated: { feasible: 1, rankedCount: 1 },
-          selectedRecommendation: {
-            candidate: {
-              id: 'ai-best',
-              actionType: 'RESCUE',
-              additions: result.whatYouAdded.map((name) => ({ name })),
-              substitutions: [],
-              estimatedMinutes: result.timeMinutes,
-              estimatedCostLevel: 'low',
+        try {
+          await Rescue.create({
+            id: rescueId,
+            mealId: (body.mealId as string | undefined) ?? randomUUID(),
+            userId,
+            originalMeal: { foods },
+            detectedIngredients: (body.ingredients as string[] | undefined) ?? [],
+            constraints: {},
+            candidatesGenerated: { feasible: 1, rankedCount: 1 },
+            selectedRecommendation: {
+              candidate: {
+                id: 'ai-best',
+                actionType: 'RESCUE',
+                additions: result.whatYouAdded.map((name) => ({ name })),
+                substitutions: [],
+                estimatedMinutes: result.timeMinutes,
+                estimatedCostLevel: 'low',
+              },
+              reasoning: result.reasoning,
+              score: 1,
             },
             reasoning: result.reasoning,
-            score: 1,
-          },
-          reasoning: result.reasoning,
-          userDecision: 'pending',
-          processingTimeMs: 0,
-          modelVersion: 'ai-rescue:v1',
-        });
+            userDecision: 'pending',
+            processingTimeMs: 0,
+            modelVersion: 'ai-rescue:v1',
+          });
+        } catch (persistErr) {
+          request.log.error({ err: persistErr }, 'AI rescue record persist failed (non-fatal)');
+        }
       }
 
       return reply.send({ success: true, data: { ...result, rescueId } });

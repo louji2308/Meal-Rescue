@@ -15,13 +15,13 @@ import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { HomeStackParamList } from '../navigation/AppNavigator';
+import { useDayPhase } from '../hooks/useDayPhase';
 import { toApiError } from '../services/api';
 import {
   type AiRescueData,
   generateAiRescue,
   negotiateAiRescue,
 } from '../services/ai-rescue.api';
-import { useDayPhase } from '../hooks/useDayPhase';
 import { colors, spacing, typography } from '../theme';
 import { FadeInView } from '../components/motion/FadeInView';
 
@@ -43,29 +43,13 @@ function stripMarkdown(text: string): string {
     .replace(/^\s*\d+\.\s/gm, (m) => m.trim() + ' ') // numbered lists
     .trim();
 }
-function fallbackRescue(foods: string[]): AiRescueData {
-  const joined = foods.join(' and ');
-  return {
-    rescueId: 'fallback-' + Date.now(),
-    bestMove: `Toss ${joined} together in a hot pan with garlic, a splash of soy sauce, and a drizzle of sesame oil. Scramble the egg through while the noodles warm — dinner in under 10 minutes.`,
-    reasoning: `This is the fastest way to turn ${joined} into a complete, satisfying meal with minimal cleanup.`,
-    timeMinutes: 10,
-    effort: 'low',
-    whatYouKept: foods,
-    whatYouAdded: ['garlic', 'soy sauce', 'sesame oil'],
-    alternatives: [
-      { name: 'Egg drop noodle soup', reasoning: 'Simmer noodles in broth, then swirl in beaten egg for a light, warming bowl' },
-      { name: 'Crispy noodle omelette', reasoning: 'Fold noodles into beaten egg and pan-fry until golden on both sides' },
-    ],
-  };
-}
 
 export function AiRescueScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<RouteProp<HomeStackParamList, 'AiRescue'>>();
   const { phase } = useDayPhase();
 
-  const { foods, ingredients } = route.params;
+  const { foods, ingredients, mealId } = route.params;
 
   const [result, setResult] = useState<AiRescueData | null>(null);
   const [busy, setBusy] = useState(true);
@@ -106,13 +90,12 @@ export function AiRescueScreen() {
         foods,
         ingredients,
         timeOfDay: phase,
+        mealId,
       });
       setResult(data);
       setConversation([{ role: 'ai', content: data.bestMove }]);
-    } catch {
-      const data = fallbackRescue(foods);
-      setResult(data);
-      setConversation([{ role: 'ai', content: data.bestMove }]);
+    } catch (err) {
+      setError(toApiError(err));
     } finally {
       setBusy(false);
     }
@@ -122,6 +105,7 @@ export function AiRescueScreen() {
     if (!pushback.trim() || negotiating) return;
     setNegotiating(true);
     setPushbackText('');
+    setError(null);
 
     const userMsg = { role: 'user' as const, content: pushback };
     const newConversation = [...conversation, userMsg];
@@ -135,11 +119,8 @@ export function AiRescueScreen() {
       });
       setResult(data);
       setConversation([...newConversation, { role: 'ai', content: data.bestMove }]);
-    } catch {
-      const fb = fallbackRescue(foods);
-      fb.bestMove = `How about a simple broth bowl instead — simmer the ${foods.join(' and ')} in chicken broth with a pinch of ginger and green onion. Ready in 8 minutes, zero stress.`;
-      setResult(fb);
-      setConversation([...newConversation, { role: 'ai', content: fb.bestMove }]);
+    } catch (err) {
+      setError(toApiError(err));
     } finally {
       setNegotiating(false);
     }

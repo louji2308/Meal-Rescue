@@ -30,6 +30,7 @@ export async function generateAiRescue(params: {
   timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
   userMood?: string;
   kitchenItems?: Array<{ name: string; state: string; expiresSoon: boolean }>;
+  mealId?: string;
 }): Promise<AiRescueData> {
   const res = await api.post<AiRescueResponse>('/api/v1/ai-rescue/generate', params);
   return res.data.data;

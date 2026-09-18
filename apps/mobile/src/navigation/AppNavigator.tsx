@@ -232,7 +232,7 @@ export type HomeStackParamList = {
     ingredients?: string[];
     tips?: string[];
   };
-  AiRescue: { foods: string[]; ingredients?: string[] };
+  AiRescue: { foods: string[]; ingredients?: string[]; mealId?: string };
   Review: { analysis: MealAnalysisResponse };
   Intent: { analysis: MealAnalysisResponse; editedMealText?: string };
   Reality: { intentLabel: string; mealId: string; foods: string[] };
