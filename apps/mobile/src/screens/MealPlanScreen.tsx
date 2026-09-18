@@ -4,6 +4,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -36,8 +37,9 @@ const SLOT_LABELS: Record<MealSlot, string> = {
 
 const SLOT_ORDER: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-const DAY_ITEM_WIDTH = 56;
-const MONTH_ITEM_WIDTH = 72;
+/** Bounds for the month header: no wrap-around — stop at -24/+12 months. */
+const MIN_MONTH_DELTA = -24;
+const MAX_MONTH_DELTA = 12;
 
 function addDays(dateKey: string, days: number): string {
   const d = new Date(`${dateKey}T00:00:00.000Z`);
@@ -63,11 +65,36 @@ function localeWeekday(dateKey: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
 }
 
-function getMountainStyle(distance: number) {
-  if (distance === 0) return { scale: 1, opacity: 1, isCenter: true };
-  if (distance === 1) return { scale: 0.82, opacity: 0.65, isCenter: false };
-  if (distance === 2) return { scale: 0.68, opacity: 0.4, isCenter: false };
-  return { scale: 0.55, opacity: 0.2, isCenter: false };
+function ymKey(dateKey: string): string {
+  return dateKey.slice(0, 7);
+}
+
+function addMonthsYM(ym: string, delta: number): string {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y ?? 2000, (m ?? 1) - 1 + delta, 1));
+  return d.toISOString().slice(0, 7);
+}
+
+function monthDeltaBetween(fromYM: string, toYM: string): number {
+  const [fy, fm] = fromYM.split('-').map(Number);
+  const [ty, tm] = toYM.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+/** First Monday inside the month, so a loaded week always sits in that month. */
+function firstMondayInMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const dow = new Date(Date.UTC(y ?? 2000, (m ?? 1) - 1, 1)).getUTCDay();
+  const day = 1 + ((8 - dow) % 7);
+  return `${ym}-${String(day).padStart(2, '0')}`;
+}
+
+function prettyMonth(ym: string): string {
+  return new Date(`${ym}-01T00:00:00.000Z`).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function statusLabel(intent: MealMemoryIntentResponse | null): string {
@@ -148,7 +175,13 @@ export function MealPlanScreen() {
 
   const today = todayKey();
   const dayScrollRef = useRef<ScrollView>(null);
-  const monthScrollRef = useRef<ScrollView>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const [stripWidth, setStripWidth] = useState(0);
+
+  const currentYM = ymKey(today);
+  const viewedYM = weekStart ? ymKey(weekStart) : currentYM;
+  const monthDelta = monthDeltaBetween(currentYM, viewedYM);
+  const cellW = stripWidth > 0 ? Math.floor(stripWidth / 7) : 0;
 
   const scopeLabel = useMemo(() => {
     if (selectedMemberIds.length !== 1) return null;
@@ -210,43 +243,10 @@ export function MealPlanScreen() {
   );
 
   useEffect(() => {
-    if (dayScrollRef.current && weekDays.length > 0) {
-      const offset = focusedDayIndex * DAY_ITEM_WIDTH;
-      dayScrollRef.current.scrollTo({ x: offset, animated: true });
+    if (cellW > 0 && dayScrollRef.current && weekDays.length > 0) {
+      dayScrollRef.current.scrollTo({ x: focusedDayIndex * cellW, animated: true });
     }
-  }, [focusedDayIndex, weekDays]);
-
-  const months = useMemo(() => {
-    if (!weekStart) return [];
-    const result: { key: string; label: string; year: string; monthOffset: number }[] = [];
-    const baseDate = new Date(`${weekStart}T00:00:00.000Z`);
-    for (let i = -6; i <= 6; i++) {
-      const d = new Date(baseDate);
-      d.setUTCMonth(d.getUTCMonth() + i);
-      const isoMonth = d.toISOString().slice(0, 7);
-      result.push({
-        key: isoMonth,
-        label: d.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }),
-        year: d.getUTCFullYear().toString(),
-        monthOffset: i,
-      });
-    }
-    return result;
-  }, [weekStart]);
-
-  const selectedMonthIndex = useMemo(() => {
-    if (!weekStart) return 6;
-    const currentMonth = weekStart.slice(0, 7);
-    const idx = months.findIndex((m) => m.key === currentMonth);
-    return idx >= 0 ? idx : 6;
-  }, [weekStart, months]);
-
-  useEffect(() => {
-    if (monthScrollRef.current && months.length > 0) {
-      const offset = selectedMonthIndex * MONTH_ITEM_WIDTH;
-      monthScrollRef.current.scrollTo({ x: offset, animated: true });
-    }
-  }, [selectedMonthIndex, months]);
+  }, [focusedDayIndex, cellW, weekDays]);
 
   async function handleSend() {
     const text = input.trim();
@@ -312,25 +312,34 @@ export function MealPlanScreen() {
   }
 
   const handleDayMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-    const contentOffset = e.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffset / DAY_ITEM_WIDTH);
-    const clamped = Math.max(0, Math.min(index, weekDays.length - 1));
-    const newKey = weekDays[clamped];
+    const x = e.nativeEvent.contentOffset.x;
+    if (cellW <= 0) return;
+    const rawIndex = Math.round(x / cellW);
+    if (rawIndex < 0) {
+      void shiftWeek(-1);
+      return;
+    }
+    if (rawIndex > weekDays.length - 1) {
+      void shiftWeek(1);
+      return;
+    }
+    const newKey = weekDays[rawIndex];
     if (newKey && newKey !== focusedKey) {
       setFocusedKey(newKey);
       setExpanded(null);
     }
   };
 
-  const handleMonthMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-    const contentOffset = e.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffset / MONTH_ITEM_WIDTH);
-    const clamped = Math.max(0, Math.min(index, months.length - 1));
-    const selectedMonth = months[clamped];
-    if (selectedMonth && selectedMonth.monthOffset !== 0) {
-      void shiftWeek(selectedMonth.monthOffset * 4);
-    }
-  };
+  function handleDayTap(index: number, key: string) {
+    setFocusedKey(key);
+    setExpanded(null);
+    dayScrollRef.current?.scrollTo({ x: index * cellW, animated: true });
+  }
+
+  function goToMonth(delta: number) {
+    const targetYM = addMonthsYM(currentYM, delta);
+    void loadWeek(firstMondayInMonth(targetYM));
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -371,164 +380,120 @@ export function MealPlanScreen() {
         >
           <ErrorBanner error={error} />
 
-          {/* Month carousel */}
-          <View style={styles.carouselWithArrows}>
+          {/* Month header — simple < September >, no wrap-around */}
+          <View style={styles.monthHeader}>
             <Pressable
-              style={styles.carouselArrow}
-              onPress={() => void shiftWeek(-4)}
+              style={[
+                styles.monthArrow,
+                monthDelta <= MIN_MONTH_DELTA && styles.monthArrowDisabled,
+              ]}
+              onPress={() => goToMonth(monthDelta - 1)}
+              disabled={monthDelta <= MIN_MONTH_DELTA}
               accessibilityLabel="Previous month"
             >
-              <Ionicons name="chevron-back" size={20} color={colors.textSecondary} />
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
             </Pressable>
-            <View style={styles.carouselSection}>
-              <ScrollView
-                ref={monthScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={MONTH_ITEM_WIDTH}
-                decelerationRate="fast"
-                onMomentumScrollEnd={handleMonthMomentumScrollEnd}
-                contentContainerStyle={styles.carouselContent}
-              >
-                {months.map((month, index) => {
-                  const distance = Math.abs(index - selectedMonthIndex);
-                  const style = getMountainStyle(distance);
-                  const isCurrentMonth = month.monthOffset === 0;
-                  return (
-                    <Pressable
-                      key={month.key}
-                      style={[
-                        styles.monthItem,
-                        {
-                          width: MONTH_ITEM_WIDTH,
-                          opacity: style.opacity,
-                          transform: [{ scale: style.scale }],
-                        },
-                        isCurrentMonth && styles.monthItemSelected,
-                      ]}
-                      onPress={() => {
-                        if (month.monthOffset !== 0) {
-                          void shiftWeek(month.monthOffset * 4);
-                        }
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.monthLabel,
-                          isCurrentMonth && styles.monthLabelSelected,
-                          { fontSize: isCurrentMonth ? 18 : 14 },
-                        ]}
-                      >
-                        {month.label}
-                      </Text>
-                      <Text style={[styles.monthYear, isCurrentMonth && styles.monthYearSelected]}>
-                        {month.year}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+            <View style={styles.monthTitleWrap}>
+              <Text style={styles.monthTitle}>{prettyMonth(viewedYM)}</Text>
             </View>
             <Pressable
-              style={styles.carouselArrow}
-              onPress={() => void shiftWeek(4)}
+              style={[
+                styles.monthArrow,
+                monthDelta >= MAX_MONTH_DELTA && styles.monthArrowDisabled,
+              ]}
+              onPress={() => goToMonth(monthDelta + 1)}
+              disabled={monthDelta >= MAX_MONTH_DELTA}
               accessibilityLabel="Next month"
             >
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              <Ionicons name="chevron-forward" size={22} color={colors.text} />
             </Pressable>
           </View>
 
-          {/* Day carousel */}
-          <View style={styles.carouselWithArrows}>
-            <Pressable
-              style={styles.carouselArrow}
-              onPress={() => {
-                if (focusedDayIndex > 0) {
-                  setFocusedKey(weekDays[focusedDayIndex - 1]);
-                  setExpanded(null);
-                } else {
-                  void shiftWeek(-1);
-                }
-              }}
-              accessibilityLabel="Previous day"
-            >
-              <Ionicons name="chevron-back" size={20} color={colors.textSecondary} />
-            </Pressable>
-            <View style={styles.carouselSection}>
+          {/* Day strip — 7 per line, static center, the centered day is selected */}
+          <View
+            style={styles.dayStripWrap}
+            onLayout={(e) => setStripWidth(Math.round(e.nativeEvent.layout.width))}
+          >
+            <View
+              pointerEvents="none"
+              style={[styles.dayCenterMarker, { left: (stripWidth - cellW) / 2, width: cellW }]}
+            />
+            {cellW > 0 && (
               <ScrollView
                 ref={dayScrollRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                snapToInterval={DAY_ITEM_WIDTH}
+                snapToInterval={cellW}
                 decelerationRate="fast"
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+                  useNativeDriver: true,
+                })}
+                scrollEventThrottle={16}
                 onMomentumScrollEnd={handleDayMomentumScrollEnd}
-                contentContainerStyle={styles.carouselContent}
+                contentContainerStyle={{
+                  paddingHorizontal: (stripWidth - cellW) / 2,
+                }}
               >
                 {weekDays.map((key, index) => {
-                  const distance = Math.abs(index - focusedDayIndex);
-                  const style = getMountainStyle(distance);
                   const isToday = key === today;
                   const isSelected = key === focusedKey;
                   const hasMeals = (plannedCountByDate[key] ?? 0) > 0;
+                  const offsetFromCenter = Animated.subtract(scrollX, index * cellW);
+                  const scale = offsetFromCenter.interpolate({
+                    inputRange: [
+                      -2.5 * cellW,
+                      -cellW,
+                      -cellW / 2,
+                      0,
+                      cellW / 2,
+                      cellW,
+                      2.5 * cellW,
+                    ],
+                    outputRange: [0.55, 0.72, 0.9, 1, 0.9, 0.72, 0.55],
+                  });
+                  const opacity = offsetFromCenter.interpolate({
+                    inputRange: [
+                      -2.5 * cellW,
+                      -cellW,
+                      -cellW / 2,
+                      0,
+                      cellW / 2,
+                      cellW,
+                      2.5 * cellW,
+                    ],
+                    outputRange: [0.25, 0.42, 0.72, 1, 0.72, 0.42, 0.25],
+                  });
                   return (
                     <Pressable
                       key={key}
-                      style={[
-                        styles.dayItem,
-                        {
-                          width: DAY_ITEM_WIDTH,
-                          opacity: style.opacity,
-                          transform: [{ scale: style.scale }],
-                        },
-                        isSelected && styles.dayItemSelected,
-                      ]}
-                      onPress={() => {
-                        setFocusedKey(key);
-                        setExpanded(null);
-                      }}
+                      style={styles.dayItem}
+                      scaleTo={0.94}
+                      onPress={() => handleDayTap(index, key)}
                       accessibilityLabel={`${localeWeekday(key)} ${dayNumber(key)}`}
                     >
-                      <Text style={[styles.dayWeekday, isSelected && styles.dayWeekdaySelected]}>
-                        {localeWeekday(key)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dayNumber,
-                          isSelected && styles.dayNumberSelected,
-                          { fontSize: isSelected ? 26 : 16 },
-                        ]}
-                      >
-                        {dayNumber(key)}
-                      </Text>
-                      <View style={styles.dayDotRow}>
-                        <View
-                          style={[
-                            styles.dayDot,
-                            isToday && styles.dotToday,
-                            hasMeals && !isToday && styles.dotPlanned,
-                            !isToday && !hasMeals && styles.dotEmpty,
-                          ]}
-                        />
-                      </View>
+                      <Animated.View style={{ width: cellW, opacity, transform: [{ scale }] }}>
+                        <Text style={[styles.dayWeekday, isSelected && styles.dayWeekdaySelected]}>
+                          {localeWeekday(key)}
+                        </Text>
+                        <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
+                          {dayNumber(key)}
+                        </Text>
+                        <View style={styles.dayDotRow}>
+                          <View
+                            style={[
+                              styles.dayDot,
+                              isToday && styles.dotToday,
+                              hasMeals && !isToday && styles.dotPlanned,
+                              !isToday && !hasMeals && styles.dotEmpty,
+                            ]}
+                          />
+                        </View>
+                      </Animated.View>
                     </Pressable>
                   );
                 })}
               </ScrollView>
-            </View>
-            <Pressable
-              style={styles.carouselArrow}
-              onPress={() => {
-                if (focusedDayIndex < weekDays.length - 1) {
-                  setFocusedKey(weekDays[focusedDayIndex + 1]);
-                  setExpanded(null);
-                } else {
-                  void shiftWeek(1);
-                }
-              }}
-              accessibilityLabel="Next day"
-            >
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </Pressable>
+            )}
           </View>
 
           {/* Week meta */}
@@ -773,59 +738,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: 120,
   },
-  carouselWithArrows: {
+  monthHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  carouselArrow: {
-    width: 32,
-    height: 32,
+  monthArrow: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  carouselSection: {
+  monthArrowDisabled: {
+    opacity: 0.3,
+  },
+  monthTitleWrap: {
     flex: 1,
-  },
-  carouselContent: {
-    paddingHorizontal: spacing.xl,
-  },
-  monthItem: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: 14,
-    marginHorizontal: 4,
   },
-  monthItemSelected: {
-    backgroundColor: colors.primaryLight,
-  },
-  monthLabel: {
-    fontWeight: '700',
-    color: colors.text,
-  },
-  monthLabelSelected: {
+  monthTitle: {
+    fontSize: 20,
     fontWeight: '800',
     color: colors.text,
+    textTransform: 'capitalize',
+    letterSpacing: 0.3,
   },
-  monthYear: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginTop: 2,
+  dayStripWrap: {
+    height: 112,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    marginHorizontal: -spacing.lg,
   },
-  monthYearSelected: {
-    color: colors.text,
+  dayCenterMarker: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.primary + '22',
   },
   dayItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.sm + 2,
-    borderRadius: 14,
-    marginHorizontal: 4,
-  },
-  dayItemSelected: {
-    backgroundColor: colors.primaryLight,
+    paddingVertical: spacing.sm + 6,
   },
   dayWeekday: {
     fontSize: 11,
@@ -834,7 +795,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   dayWeekdaySelected: {
-    color: colors.text,
+    color: colors.primary,
   },
   dayNumber: {
     fontWeight: '800',
@@ -842,7 +803,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dayNumberSelected: {
-    color: colors.text,
+    color: colors.primary,
   },
   dayDotRow: {
     height: 8,
