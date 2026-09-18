@@ -98,23 +98,100 @@ const ALL_STEPS: StepId[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Progress indicator
+// Step progress with question labels + answers
 // ---------------------------------------------------------------------------
 
-function ProgressDots({ total, current }: { total: number; current: number }) {
+const STEP_LABELS: Record<string, string> = {
+  cuisine: 'Cuisine',
+  hardNos: 'Hard no\'s',
+  flavorPersonality: 'Flavor',
+  texturePairs: 'Texture',
+  adventurousness: 'Adventure',
+  rescueNeed: 'Rescue',
+  priorities: 'Priorities',
+};
+
+function getStepAnswer(step: string, state: {
+  cuisineSelections: Set<CulinaryFamily>;
+  hardNoSelections: Set<string>;
+  flavorSelection: Set<string>;
+  textureSelections: Record<string, string>;
+  adventurousness: string | null;
+  rescueNeed: Set<string>;
+  priorities: Set<string>;
+}): string | null {
+  switch (step) {
+    case 'cuisine':
+      return state.cuisineSelections.size > 0 ? `${state.cuisineSelections.size} selected` : null;
+    case 'hardNos':
+      return state.hardNoSelections.size > 0 ? `${state.hardNoSelections.size} rules` : null;
+    case 'flavorPersonality':
+      return state.flavorSelection.size > 0 ? `${state.flavorSelection.size} picked` : null;
+    case 'texturePairs': {
+      const count = Object.keys(state.textureSelections).length;
+      return count > 0 ? `${count}/4` : null;
+    }
+    case 'adventurousness':
+      return state.adventurousness ? state.adventurousness.replace(/_/g, ' ') : null;
+    case 'rescueNeed':
+      return state.rescueNeed.size > 0 ? `${state.rescueNeed.size} picked` : null;
+    case 'priorities':
+      return state.priorities.size > 0 ? `${state.priorities.size} picked` : null;
+    default:
+      return null;
+  }
+}
+
+function StepProgress({
+  steps,
+  currentIndex,
+  answerState,
+}: {
+  steps: string[];
+  currentIndex: number;
+  answerState: {
+    cuisineSelections: Set<CulinaryFamily>;
+    hardNoSelections: Set<string>;
+    flavorSelection: Set<string>;
+    textureSelections: Record<string, string>;
+    adventurousness: string | null;
+    rescueNeed: Set<string>;
+    priorities: Set<string>;
+  };
+}) {
   return (
-    <View style={styles.dotsRow}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.dot,
-            i === current ? styles.dotActive : null,
-            i < current ? styles.dotDone : null,
-          ]}
-        />
-      ))}
-    </View>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.stepProgressRow}
+    >
+      {steps.map((step, i) => {
+        const isCurrent = i === currentIndex;
+        const isDone = i < currentIndex;
+        const label = STEP_LABELS[step] ?? step;
+        const answer = isDone ? getStepAnswer(step, answerState) : null;
+        return (
+          <View key={step} style={styles.stepBadgeWrap}>
+            <View style={[
+              styles.stepBadge,
+              isCurrent && styles.stepBadgeCurrent,
+              isDone && styles.stepBadgeDone,
+            ]}>
+              <Text style={[
+                styles.stepBadgeLabel,
+                isCurrent && styles.stepBadgeLabelCurrent,
+                isDone && styles.stepBadgeLabelDone,
+              ]}>
+                {isDone ? '✓ ' : ''}{label}
+              </Text>
+            </View>
+            {answer && (
+              <Text style={styles.stepAnswer}>{answer}</Text>
+            )}
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -709,7 +786,19 @@ export function OnboardingScreen() {
     <SafeAreaView style={styles.container}>
       <FadeInView key={currentStep} style={styles.flex}>
         {currentStep !== 'welcome' && currentStep !== 'cuisine' && currentStep !== 'done' && (
-          <ProgressDots total={ALL_STEPS.length - 1} current={stepIndex - 1} />
+          <StepProgress
+            steps={ALL_STEPS.filter((s) => s !== 'welcome' && s !== 'done')}
+            currentIndex={stepIndex - 1}
+            answerState={{
+              cuisineSelections,
+              hardNoSelections,
+              flavorSelection,
+              textureSelections,
+              adventurousness,
+              rescueNeed,
+              priorities,
+            }}
+          />
         )}
 
         {currentStep === 'welcome' && (
@@ -811,26 +900,47 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
 
-  // Progress dots
-  dotsRow: {
+  // Step progress badges
+  stepProgressRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    alignItems: 'flex-start',
+    gap: 6,
     paddingTop: spacing.md,
     paddingHorizontal: spacing.lg,
   },
-  dot: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
+  stepBadgeWrap: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  stepBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
     backgroundColor: SMOKE,
   },
-  dotActive: {
+  stepBadgeCurrent: {
     backgroundColor: CHARCOAL,
-    flex: 1.8,
   },
-  dotDone: {
-    backgroundColor: CHARCOAL,
+  stepBadgeDone: {
+    backgroundColor: '#E8E8E4',
+  },
+  stepBadgeLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  stepBadgeLabelCurrent: {
+    color: '#FFFFFF',
+  },
+  stepBadgeLabelDone: {
+    color: CHARCOAL,
+  },
+  stepAnswer: {
+    fontFamily: fonts.regular,
+    fontSize: 9,
+    color: colors.homeTextSecondary,
+    maxWidth: 70,
+    textAlign: 'center',
   },
 
   // Welcome screen
