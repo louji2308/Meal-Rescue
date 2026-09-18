@@ -116,4 +116,16 @@ describe('TasteMemoryService', () => {
     expect(snap.favoriteFoods).toContain('avocado');
     expect(snap.avoidedFoods).toContain('cilantro');
   });
+
+  it("seeds hard no's as onboarding_pref borders that surface as avoidedFoods", async () => {
+    const { models, store } = fakeModels();
+    const svc = new TasteMemoryService(models as never);
+    await svc.seedOnboardingHardNos('u1', ['Peanuts', ' peanuts ', 'Shellfish']);
+    const borders = store.filter((r) => r.contextType === 'onboarding_pref');
+    expect(borders).toHaveLength(2);
+    expect(borders.map((r) => r.ingredient).sort()).toEqual(['peanuts', 'shellfish']);
+    expect(borders.every((r) => r.affinity <= -0.5)).toBe(true);
+    const snap = await svc.buildPreferenceSnapshot('u1');
+    expect(snap.avoidedFoods).toEqual(expect.arrayContaining(['peanuts', 'shellfish']));
+  });
 });

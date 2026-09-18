@@ -148,10 +148,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const user = await User.findByPk(userId, {
       attributes: ['onboardingCompleted'],
     });
-    const state = await mealCompletion.startOnboarding(
-      userId,
-      user?.onboardingCompleted ?? false,
-    );
+    const state = await mealCompletion.startOnboarding(userId, user?.onboardingCompleted ?? false);
     return reply.send(state);
   });
 
@@ -187,10 +184,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const user = await User.findByPk(userId, {
       attributes: ['onboardingCompleted'],
     });
-    const state = await mealCompletion.startOnboarding(
-      userId,
-      user?.onboardingCompleted ?? false,
-    );
+    const state = await mealCompletion.startOnboarding(userId, user?.onboardingCompleted ?? false);
     return reply.send(state);
   });
 
@@ -241,8 +235,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     // Journal evidence: the chosen completion addition is a soft onboarding "like".
     if (result.createdEventId && parsed.data.answer.selected) {
       const pair = getPair(parsed.data.answer.pairId);
-      const chosen =
-        parsed.data.answer.selected === 'A' ? pair?.optionA.name : pair?.optionB.name;
+      const chosen = parsed.data.answer.selected === 'A' ? pair?.optionA.name : pair?.optionB.name;
       if (chosen) {
         await tasteJournal.addSignal({
           userId,
@@ -262,26 +255,32 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/taste/onboarding/preferences', async (request, reply) => {
+    const { onboarding } = buildServices(app.redis);
     const userId = request.user.sub;
     const parsed = z
       .object({
-        hardNos: z.object({
-          allergies: z.array(z.string()).optional(),
-          avoidIngredients: z.array(z.string()).optional(),
-          dietaryRestrictions: z.array(z.string()).optional(),
-          religiousCultural: z.array(z.string()).optional(),
-          strongDislikes: z.array(z.string()).optional(),
-        }).optional(),
-        flavorPersonality: z.array(z.string()).optional(),
-        texturePreferences: z.object({
-          crunchiness: z.enum(['crunchy', 'soft']).optional(),
-          creaminess: z.enum(['creamy', 'crisp']).optional(),
-          moistness: z.enum(['juicy', 'dry']).optional(),
-          chewiness: z.enum(['chewy', 'tender']).optional(),
-        }).optional(),
-        adventurousness: z.string().optional(),
-        rescueNeed: z.array(z.string()).optional(),
-        priorities: z.array(z.string()).optional(),
+        hardNos: z
+          .object({
+            allergies: z.array(z.string().max(80)).max(40).optional(),
+            avoidIngredients: z.array(z.string().max(80)).max(40).optional(),
+            dietaryRestrictions: z.array(z.string().max(80)).max(40).optional(),
+            religiousCultural: z.array(z.string().max(80)).max(40).optional(),
+            strongDislikes: z.array(z.string().max(80)).max(40).optional(),
+          })
+          .optional(),
+        flavorPersonality: z.array(z.string().max(40)).max(6).optional(),
+        texturePreferences: z
+          .object({
+            crunchiness: z.enum(['crunchy', 'soft']).optional(),
+            creaminess: z.enum(['creamy', 'crisp']).optional(),
+            moistness: z.enum(['juicy', 'dry']).optional(),
+            chewiness: z.enum(['chewy', 'tender']).optional(),
+          })
+          .optional(),
+        adventurousness: z.string().max(40).optional(),
+        rescueNeed: z.array(z.string().max(40)).max(8).optional(),
+        priorities: z.array(z.string().max(60)).max(6).optional(),
+        questions: z.record(z.string().max(300)).optional(),
       })
       .safeParse(request.body);
     if (!parsed.success) {
@@ -292,8 +291,24 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         statusCode: 400,
       });
     }
+    const result = await onboarding.save(userId, parsed.data);
     await User.update({ onboardingCompleted: true }, { where: { id: userId } });
-    return reply.send({ saved: true });
+    return reply.send(result);
+  });
+
+  app.get('/taste/onboarding/preferences', async (request, reply) => {
+    const { onboarding } = buildServices(app.redis);
+    const userId = request.user.sub;
+    const prefs = await onboarding.get(userId);
+    if (!prefs) {
+      throw new AppError({
+        category: ErrorCategory.INPUT_VALIDATION,
+        code: 'NOT_FOUND',
+        message: 'No saved onboarding preferences yet',
+        statusCode: 404,
+      });
+    }
+    return reply.send(prefs);
   });
 
   app.post('/taste/compass', async (request, reply) => {
@@ -322,13 +337,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/taste/v2', async (request, reply) => {
     const userId = request.user.sub;
-    const {
-      tasteSensory,
-      tasteTreatment,
-      tasteExposure,
-      tasteEvents,
-      tasteMemory,
-    } = buildServices(app.redis);
+    const { tasteSensory, tasteTreatment, tasteExposure, tasteEvents, tasteMemory } = buildServices(
+      app.redis,
+    );
 
     const [sensoryBeliefs, treatmentBeliefs, overexposed, recentEvents, journal] =
       await Promise.all([

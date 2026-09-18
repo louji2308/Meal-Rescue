@@ -85,14 +85,16 @@ export interface OnboardingPreferences {
   adventurousness?: string;
   rescueNeed?: string[];
   priorities?: string[];
+  /** The verbatim question copy each answer corresponds to. */
+  questions?: Record<string, string>;
 }
 
 export async function submitOnboardingPreferences(
   prefs: OnboardingPreferences,
-): Promise<{ saved: boolean }> {
-  const res = await api.post<{ saved: boolean }>(
-    '/api/v1/user/taste/onboarding/preferences',
-    prefs,
-  );
+): Promise<{ saved: boolean; recorded?: { flavors: number; textures: number; hardNos: number } }> {
+  const res = await api.post<{
+    saved: boolean;
+    recorded?: { flavors: number; textures: number; hardNos: number };
+  }>('/api/v1/user/taste/onboarding/preferences', prefs);
   return res.data;
 }

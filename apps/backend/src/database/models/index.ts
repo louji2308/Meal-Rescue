@@ -34,23 +34,27 @@ import { TableEvent, defineTableEventModel } from './table-event.model';
 import { TableOutcome, defineTableOutcomeModel } from './table-outcome.model';
 import { TasteCombination, defineTasteCombinationModel } from './taste-combination.model';
 import { TasteEvent, defineTasteEventModel } from './taste-event.model';
-import { TasteJournalMeta, defineTasteJournalMetaModel } from './taste-journal-meta.model';
-import { TasteInsightOverride, defineTasteInsightOverrideModel } from './taste-insight-override.model';
-import {
-  TasteSignalEvidence,
-  defineTasteSignalEvidenceModel,
-} from './taste-signal-evidence.model';
-import { TasteSignal, defineTasteSignalModel } from './taste-signal.model';
 import { TasteExposure, defineTasteExposureModel } from './taste-exposure.model';
+import {
+  TasteInsightOverride,
+  defineTasteInsightOverrideModel,
+} from './taste-insight-override.model';
+import { TasteJournalMeta, defineTasteJournalMetaModel } from './taste-journal-meta.model';
 import { TasteMemory, defineTasteMemoryModel } from './taste-memory.model';
 import {
   TasteSensoryPreference,
   defineTasteSensoryPreferenceModel,
 } from './taste-sensory-preference.model';
+import { TasteSignalEvidence, defineTasteSignalEvidenceModel } from './taste-signal-evidence.model';
+import { TasteSignal, defineTasteSignalModel } from './taste-signal.model';
 import {
   TasteTreatmentPreference,
   defineTasteTreatmentPreferenceModel,
 } from './taste-treatment-preference.model';
+import {
+  UserTastePreferences,
+  defineUserTastePreferencesModel,
+} from './user-taste-preferences.model';
 import { User, defineUserModel } from './user.model';
 
 export interface DbModels {
@@ -88,6 +92,7 @@ export interface DbModels {
   MealRule: typeof MealRule;
   InventoryReservation: typeof InventoryReservation;
   MealInventoryAllocation: typeof MealInventoryAllocation;
+  UserTastePreferences: typeof UserTastePreferences;
 }
 
 export interface Db {
@@ -135,6 +140,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     MealRule: defineMealRuleModel(sequelize),
     InventoryReservation: defineInventoryReservationModel(sequelize),
     MealInventoryAllocation: defineMealInventoryAllocationModel(sequelize),
+    UserTastePreferences: defineUserTastePreferencesModel(sequelize),
   };
 
   // --- Associations (implementation plan Step 1.2) ---
@@ -243,6 +249,13 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
   models.TasteJournalMeta.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
+  models.User.hasOne(models.UserTastePreferences, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.UserTastePreferences.belongsTo(models.User, {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
@@ -442,4 +455,5 @@ export const dbModels = {
   MealRule,
   InventoryReservation,
   MealInventoryAllocation,
+  UserTastePreferences,
 };

@@ -12,6 +12,7 @@ import type {
 } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
+import type { UserTastePreferences } from '../database/models/user-taste-preferences.model';
 import {
   CULINARY_FAMILIES,
   detectCuisineIntent,
@@ -308,7 +309,8 @@ export class TasteMemoryService {
 
   async buildPersonality(userId: string): Promise<FoodPersonality | null> {
     const profile = await this.getTasteProfile(userId);
-    if (profile.length === 0) return null;
+    const onboarding = await this.models.UserTastePreferences.findOne({ where: { userId } });
+    if (profile.length === 0 && !onboarding) return null;
 
     const traits: FoodPersonalityTrait[] = [];
     const spiceRange = profile.filter((m) => /spice|chili|hot|pepper/i.test(m.ingredient));
@@ -360,6 +362,15 @@ export class TasteMemoryService {
       });
     }
 
+    // Merge the flavors a user asserted during setup. Self-reported picks
+    // outrank inference: the user said these outright rather than us inferring
+    // them from past meals, so they win ties on strength too.
+    for (const claim of onboardingFlavorClaims(onboarding)) {
+      const existing = traits.findIndex((t) => t.id === claim.id);
+      if (existing === -1) traits.push(claim);
+      else if (claim.strength > traits[existing]!.strength) traits[existing] = claim;
+    }
+
     if (traits.length === 0) return null;
     const top = traits[0]!.label;
     return {
@@ -388,6 +399,27 @@ export class TasteMemoryService {
       favoriteFoods: favorites.length ? [...new Set(favorites)] : undefined,
       avoidedFoods: avoided.length ? [...new Set(avoided)] : undefined,
     };
+  }
+
+  /**
+   * Seed never-suggest borders for the onboarding hard no's.
+   * Uses the generic `onboarding_pref`/`overall` context so the rows flow
+   * straight into buildPreferenceSnapshot -> avoidedFoods, which steers
+   * candidate generation and ranking away from them.
+   */
+  async seedOnboardingHardNos(userId: string, ingredients: string[]): Promise<void> {
+    for (const ingredient of [...new Set(ingredients.map((i) => i.trim().toLowerCase()))]) {
+      if (!ingredient) continue;
+      await this.applySignal({
+        userId,
+        ingredient,
+        contextType: 'onboarding_pref',
+        contextValue: 'overall',
+        affinityDelta: -0.5,
+        confidenceDelta: 0.3,
+        source: 'profile',
+      });
+    }
   }
 
   async seedCompass(userId: string, seed: CulinaryCompassSeed): Promise<void> {
@@ -515,4 +547,56 @@ function isCulinaryFamily(value: string): value is CulinaryFamily {
 
 function avgAffinity(rows: TasteMemoryEntry[]): number {
   return rows.reduce((sum, r) => sum + r.affinity, 0) / rows.length;
+}
+
+const ONBOARDING_FLAVOR_TRAITS: Record<string, Omit<FoodPersonalityTrait, 'strength'>> = {
+  bright_tangy: {
+    id: 'tangy',
+    label: 'Bright & Tangy',
+    description: 'You reach for bright, citrusy, punchy flavors.',
+  },
+  deep_savory: {
+    id: 'savory',
+    label: 'Savory Deep-Diver',
+    description: 'Roasted, umami-rich, deeply savory dishes are your home turf.',
+  },
+  hot_spicy: {
+    id: 'spice',
+    label: 'Spice Adventurer',
+    description: 'You love heat when it fits the meal - and often chase it.',
+  },
+  fresh_light: {
+    id: 'fresh',
+    label: 'Fresh Palate',
+    description: 'Light, herby, vegetable-forward plates win you over.',
+  },
+  creamy_comforting: {
+    id: 'cream',
+    label: 'Comfort Seeker',
+    description: 'Rich, creamy textures and sauces land well for you.',
+  },
+  mild_familiar: {
+    id: 'mild',
+    label: 'Mild & Steady',
+    description: 'You prefer familiar, gentle flavors.',
+  },
+};
+
+function onboardingFlavorClaims(onboarding: UserTastePreferences | null): FoodPersonalityTrait[] {
+  if (!onboarding) return [];
+  const claims: FoodPersonalityTrait[] = [];
+  for (const pick of onboarding.flavorPersonality ?? []) {
+    const template = ONBOARDING_FLAVOR_TRAITS[pick];
+    if (!template) continue;
+    claims.push({ ...template, strength: 0.85 });
+  }
+  if (onboarding.adventurousness === 'surprise_me') {
+    claims.push({
+      id: 'curious',
+      label: 'Curious Taster',
+      description: 'You told us to surprise you - we remember that.',
+      strength: 0.8,
+    });
+  }
+  return claims;
 }

@@ -9,7 +9,7 @@ import type { Redis } from 'ioredis';
 
 import { dbModels } from '../database/models';
 import { Pantry } from '../database/models/pantry.model';
-import { createLlmClient } from './ai/llm-factory';
+import { createLlmClient, createVisionLlmClient } from './ai/llm-factory';
 import { CommonTableService } from './common-table/common-table.service';
 import { HouseholdMemberService } from './common-table/household-member.service';
 import { HouseholdTasteService } from './common-table/household-taste.service';
@@ -21,23 +21,24 @@ import { LeftoverAlchemistService } from './leftover-alchemist.service';
 import { MealAnalyzerService } from './meal-analyzer.service';
 import { MealCompletionService } from './meal-completion.service';
 import { AccountingService } from './meal-memory/accounting.service';
-import { MealMemoryAiService } from './meal-memory/meal-memory-ai.service';
 import { MealIntelligenceService } from './meal-memory/meal-intelligence.service';
+import { MealMemoryAiService } from './meal-memory/meal-memory-ai.service';
 import { MealMemoryService } from './meal-memory/meal-memory.service';
 import { MemoryLearningService } from './meal-memory/memory-learning.service';
 import { PlanningEngine } from './meal-memory/planning-engine';
 import { WorldStateService } from './meal-memory/world-state.service';
 import { ModificationMagnitudeService } from './modification-magnitude.service';
+import { OnboardingPreferencesService } from './onboarding/onboarding-preferences.service';
 import { PantryService } from './pantry.service';
 import { PreferenceLearningService } from './preference-learning.service';
 import { type PantryProvider, RescuePipelineService } from './rescue-pipeline.service';
 import { RescueTasteContextBuilder } from './rescue-taste-context.service';
 import { TasteEventService } from './taste-event.service';
 import { TasteExposureService } from './taste-exposure.service';
+import { TasteJournalService } from './taste-journal/taste-journal.service';
 import { TasteMemoryService } from './taste-memory.service';
 import { TasteSensoryService } from './taste-sensory.service';
 import { TasteTreatmentService } from './taste-treatment.service';
-import { TasteJournalService } from './taste-journal/taste-journal.service';
 import { AftercareService } from './v2/aftercare.service';
 import { DecisionEventService } from './v2/decision-events.service';
 import { DecisionService } from './v2/decision.service';
@@ -92,8 +93,10 @@ export function buildServices(redis: Redis | null): {
   mealMemory: MealMemoryService;
   mealIntelligence: MealIntelligenceService;
   tasteJournal: TasteJournalService;
+  onboarding: OnboardingPreferencesService;
 } {
   const llm = createLlmClient();
+  const visionLlm = createVisionLlmClient();
   const tasteMemory = new TasteMemoryService(models);
   const tasteEvents = new TasteEventService(models);
   const tasteExposure = new TasteExposureService(models);
@@ -148,7 +151,7 @@ export function buildServices(redis: Redis | null): {
   });
 
   return {
-    mealAnalyzer: new MealAnalyzerService(llm, redis),
+    mealAnalyzer: new MealAnalyzerService(llm, redis, visionLlm),
     rescuePipeline: new RescuePipelineService(
       llm,
       pantryProvider,
@@ -173,11 +176,16 @@ export function buildServices(redis: Redis | null): {
     decision: new DecisionService(models),
     pantry: pantryService,
     leftoverAlchemist: new LeftoverAlchemistService(),
-    commonTable: new CommonTableService(dbModels, llm, redis),
+    commonTable: new CommonTableService(dbModels, llm, redis, visionLlm),
     households: householdService,
     householdMembers: new HouseholdMemberService(dbModels),
     mealMemory: mealMemoryService,
     mealIntelligence: mealIntelligenceService,
     tasteJournal: new TasteJournalService(models),
+    onboarding: new OnboardingPreferencesService(
+      models,
+      new TasteJournalService(models),
+      tasteMemory,
+    ),
   };
 }

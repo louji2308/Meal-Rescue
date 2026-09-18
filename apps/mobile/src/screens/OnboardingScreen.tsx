@@ -2,28 +2,23 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import React, { useState } from 'react';
-import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
-import { Text } from '../components/AppText';
-import { Pressable } from '../components/motion/Pressable';
+import { Dimensions, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { CulinaryFamily } from '@meal-rescue/shared-types';
+
+import { Text } from '../components/AppText';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import {
+  type OnboardingPreferences,
   submitCuisinePreferences,
   submitOnboardingPreferences,
-  type OnboardingPreferences,
 } from '../services/taste.api';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
-import { FadeInView } from '../components/motion/FadeInView';
 
 // ---------------------------------------------------------------------------
 // Cuisine grid data
@@ -42,9 +37,17 @@ const CUISINE_OPTIONS: CuisineOption[] = [
   { id: 'east_asian', label: 'East Asian', image: require('../../assets/cuisines/east_asian.jpg') },
   { id: 'indian', label: 'Indian', image: require('../../assets/cuisines/indian.jpg') },
   { id: 'italian', label: 'Italian', image: require('../../assets/cuisines/italian.jpg') },
-  { id: 'mediterranean', label: 'Mediterranean', image: require('../../assets/cuisines/mediterranean.jpg') },
+  {
+    id: 'mediterranean',
+    label: 'Mediterranean',
+    image: require('../../assets/cuisines/mediterranean.jpg'),
+  },
   { id: 'mexican', label: 'Mexican', image: require('../../assets/cuisines/mexican.jpg') },
-  { id: 'middle_eastern', label: 'Middle Eastern', image: require('../../assets/cuisines/middle_eastern.jpg') },
+  {
+    id: 'middle_eastern',
+    label: 'Middle Eastern',
+    image: require('../../assets/cuisines/middle_eastern.jpg'),
+  },
   { id: 'thai', label: 'Thai', image: require('../../assets/cuisines/thai.jpg') },
 ];
 
@@ -103,7 +106,7 @@ const ALL_STEPS: StepId[] = [
 
 const STEP_LABELS: Record<string, string> = {
   cuisine: 'Cuisine',
-  hardNos: 'Hard no\'s',
+  hardNos: "Hard no's",
   flavorPersonality: 'Flavor',
   texturePairs: 'Texture',
   adventurousness: 'Adventure',
@@ -111,15 +114,18 @@ const STEP_LABELS: Record<string, string> = {
   priorities: 'Priorities',
 };
 
-function getStepAnswer(step: string, state: {
-  cuisineSelections: Set<CulinaryFamily>;
-  hardNoSelections: Set<string>;
-  flavorSelection: Set<string>;
-  textureSelections: Record<string, string>;
-  adventurousness: string | null;
-  rescueNeed: Set<string>;
-  priorities: Set<string>;
-}): string | null {
+function getStepAnswer(
+  step: string,
+  state: {
+    cuisineSelections: Set<CulinaryFamily>;
+    hardNoSelections: Set<string>;
+    flavorSelection: Set<string>;
+    textureSelections: Record<string, string>;
+    adventurousness: string | null;
+    rescueNeed: Set<string>;
+    priorities: Set<string>;
+  },
+): string | null {
   switch (step) {
     case 'cuisine':
       return state.cuisineSelections.size > 0 ? `${state.cuisineSelections.size} selected` : null;
@@ -172,22 +178,25 @@ function StepProgress({
         const answer = isDone ? getStepAnswer(step, answerState) : null;
         return (
           <View key={step} style={styles.stepBadgeWrap}>
-            <View style={[
-              styles.stepBadge,
-              isCurrent && styles.stepBadgeCurrent,
-              isDone && styles.stepBadgeDone,
-            ]}>
-              <Text style={[
-                styles.stepBadgeLabel,
-                isCurrent && styles.stepBadgeLabelCurrent,
-                isDone && styles.stepBadgeLabelDone,
-              ]}>
-                {isDone ? '✓ ' : ''}{label}
+            <View
+              style={[
+                styles.stepBadge,
+                isCurrent && styles.stepBadgeCurrent,
+                isDone && styles.stepBadgeDone,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.stepBadgeLabel,
+                  isCurrent && styles.stepBadgeLabelCurrent,
+                  isDone && styles.stepBadgeLabelDone,
+                ]}
+              >
+                {isDone ? '✓ ' : ''}
+                {label}
               </Text>
             </View>
-            {answer && (
-              <Text style={styles.stepAnswer}>{answer}</Text>
-            )}
+            {answer && <Text style={styles.stepAnswer}>{answer}</Text>}
           </View>
         );
       })}
@@ -203,9 +212,7 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
   return (
     <View style={styles.welcomeWrap}>
       <View style={styles.welcomeSpacer} />
-      <Text style={styles.welcomeTitle}>
-        We're going to learn{'\n'}what you love.
-      </Text>
+      <Text style={styles.welcomeTitle}>We're going to learn{'\n'}what you love.</Text>
       <Text style={styles.welcomeSubtitle}>
         Not a diet plan. Not calorie counting.{'\n\n'}
         Just the flavors, textures, and moods that{'\n'}
@@ -260,12 +267,18 @@ function CuisineGridScreen({
               accessibilityState={{ selected: isSelected }}
             >
               <Image source={cuisine.image} style={styles.cuisineImage} contentFit="cover" />
-              <View style={[styles.cuisineLabelWrap, isSelected && styles.cuisineLabelWrapSelected]}>
+              <View
+                style={[styles.cuisineLabelWrap, isSelected && styles.cuisineLabelWrapSelected]}
+              >
                 <Text style={[styles.cuisineLabel, isSelected && styles.cuisineLabelSelected]}>
                   {cuisine.label}
                 </Text>
               </View>
-              {isSelected && <View style={styles.cuisineCheck}><Text style={styles.checkmark}>✓</Text></View>}
+              {isSelected && (
+                <View style={styles.cuisineCheck}>
+                  <Text style={styles.checkmark}>✓</Text>
+                </View>
+              )}
             </Pressable>
           );
         })}
@@ -277,7 +290,9 @@ function CuisineGridScreen({
         scaleTo={1}
         disabled={selected.size === 0}
       >
-        <Text style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}>
+        <Text
+          style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}
+        >
           Continue
         </Text>
       </Pressable>
@@ -310,7 +325,7 @@ function HardNosScreen({
     { id: 'dietary_restrictions', label: 'Dietary restrictions' },
     { id: 'religious_cultural', label: 'Religious/cultural restrictions' },
     { id: 'strong_dislikes', label: 'Foods I strongly dislike' },
-    { id: 'nothing', label: 'Nothing \u2014 I\'m pretty open' },
+    { id: 'nothing', label: "Nothing \u2014 I'm pretty open" },
   ];
 
   return (
@@ -363,7 +378,9 @@ function HardNosScreen({
         scaleTo={1}
         disabled={selected.size === 0}
       >
-        <Text style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}>
+        <Text
+          style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}
+        >
           Continue
         </Text>
       </Pressable>
@@ -501,7 +518,9 @@ function MultiSelectScreen({
         scaleTo={1}
         disabled={selected.size === 0}
       >
-        <Text style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}>
+        <Text
+          style={[styles.continueBtnText, selected.size === 0 && styles.continueBtnTextDisabled]}
+        >
           Continue
         </Text>
       </Pressable>
@@ -539,24 +558,42 @@ function TexturePairsScreen({
           <React.Fragment key={pair.a}>
             <View style={styles.pairRow}>
               <Pressable
-                style={[styles.chip, styles.pairChip, selections[pair.a] === pair.a && styles.chipSelected]}
+                style={[
+                  styles.chip,
+                  styles.pairChip,
+                  selections[pair.a] === pair.a && styles.chipSelected,
+                ]}
                 onPress={() => onSelect(pair.a, pair.a)}
                 scaleTo={1}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selections[pair.a] === pair.a }}
               >
-                <Text style={[styles.chipLabel, selections[pair.a] === pair.a && styles.chipLabelSelected]}>
+                <Text
+                  style={[
+                    styles.chipLabel,
+                    selections[pair.a] === pair.a && styles.chipLabelSelected,
+                  ]}
+                >
                   {pair.labelA}
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.chip, styles.pairChip, selections[pair.a] === pair.b && styles.chipSelected]}
+                style={[
+                  styles.chip,
+                  styles.pairChip,
+                  selections[pair.a] === pair.b && styles.chipSelected,
+                ]}
                 onPress={() => onSelect(pair.a, pair.b)}
                 scaleTo={1}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selections[pair.a] === pair.b }}
               >
-                <Text style={[styles.chipLabel, selections[pair.a] === pair.b && styles.chipLabelSelected]}>
+                <Text
+                  style={[
+                    styles.chipLabel,
+                    selections[pair.a] === pair.b && styles.chipLabelSelected,
+                  ]}
+                >
                   {pair.labelB}
                 </Text>
               </Pressable>
@@ -695,19 +732,34 @@ export function OnboardingScreen() {
     try {
       const hardNos: OnboardingPreferences['hardNos'] = {};
       if (hardNoSelections.has('allergies') && hardNoTextInputs.allergies) {
-        hardNos.allergies = hardNoTextInputs.allergies.split(',').map((s) => s.trim()).filter(Boolean);
+        hardNos.allergies = hardNoTextInputs.allergies
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
       if (hardNoSelections.has('avoid_ingredients') && hardNoTextInputs.avoid_ingredients) {
-        hardNos.avoidIngredients = hardNoTextInputs.avoid_ingredients.split(',').map((s) => s.trim()).filter(Boolean);
+        hardNos.avoidIngredients = hardNoTextInputs.avoid_ingredients
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
       if (hardNoSelections.has('dietary_restrictions') && hardNoTextInputs.dietary_restrictions) {
-        hardNos.dietaryRestrictions = hardNoTextInputs.dietary_restrictions.split(',').map((s) => s.trim()).filter(Boolean);
+        hardNos.dietaryRestrictions = hardNoTextInputs.dietary_restrictions
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
       if (hardNoSelections.has('religious_cultural') && hardNoTextInputs.religious_cultural) {
-        hardNos.religiousCultural = hardNoTextInputs.religious_cultural.split(',').map((s) => s.trim()).filter(Boolean);
+        hardNos.religiousCultural = hardNoTextInputs.religious_cultural
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
       if (hardNoSelections.has('strong_dislikes') && hardNoTextInputs.strong_dislikes) {
-        hardNos.strongDislikes = hardNoTextInputs.strong_dislikes.split(',').map((s) => s.trim()).filter(Boolean);
+        hardNos.strongDislikes = hardNoTextInputs.strong_dislikes
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
 
       // Build texture preferences
@@ -735,6 +787,14 @@ export function OnboardingScreen() {
         adventurousness: adventurousness ?? undefined,
         rescueNeed: rescueNeed.size > 0 ? Array.from(rescueNeed) : undefined,
         priorities: priorities.size > 0 ? Array.from(priorities) : undefined,
+        questions: {
+          hardNos: 'What should Meal Rescue never suggest?',
+          flavorPersonality: 'Which direction usually wins? Pick up to 3.',
+          texturePairs: 'Texture matters too. Pick one from each pair.',
+          adventurousness: 'When I rescue your meal, I should usually...',
+          rescueNeed: 'My meal usually needs... Pick up to 3.',
+          priorities: 'What should I prioritize when I suggest something?',
+        },
       });
     } catch {
       // Proceed even if backend fails
@@ -751,14 +811,22 @@ export function OnboardingScreen() {
     { id: 'deep_savory', label: 'Deep & Savory', desc: 'umami, roasted, rich flavors' },
     { id: 'hot_spicy', label: 'Hot & Spicy', desc: 'chilli, pepper, heat' },
     { id: 'fresh_light', label: 'Fresh & Light', desc: 'herbs, vegetables, citrus' },
-    { id: 'creamy_comforting', label: 'Creamy & Comforting', desc: 'yogurt, sauces, creamy textures' },
+    {
+      id: 'creamy_comforting',
+      label: 'Creamy & Comforting',
+      desc: 'yogurt, sauces, creamy textures',
+    },
     { id: 'mild_familiar', label: 'Mild & Familiar', desc: 'simple, comforting flavors' },
   ];
 
   const adventurousOptions = [
-    { id: 'stay_familiar', label: 'Stay familiar', desc: 'Give me something I already understand.' },
+    {
+      id: 'stay_familiar',
+      label: 'Stay familiar',
+      desc: 'Give me something I already understand.',
+    },
     { id: 'familiar_twist', label: 'Keep it familiar, add a twist', desc: 'Surprise me a little.' },
-    { id: 'surprise_me', label: 'Surprise me', desc: 'I\'m happy to discover new combinations.' },
+    { id: 'surprise_me', label: 'Surprise me', desc: "I'm happy to discover new combinations." },
   ];
 
   const rescueNeedOptions = [
@@ -769,11 +837,11 @@ export function OnboardingScreen() {
     { id: 'something_rich', label: 'Something rich' },
     { id: 'something_light', label: 'Something light' },
     { id: 'side', label: 'A side to round it out' },
-    { id: 'figure_out', label: 'I don\'t know \u2014 figure it out for me' },
+    { id: 'figure_out', label: "I don't know \u2014 figure it out for me" },
   ];
 
   const priorityOptions = [
-    { id: 'enjoy', label: 'Something I\'ll genuinely enjoy' },
+    { id: 'enjoy', label: "Something I'll genuinely enjoy" },
     { id: 'filling', label: 'Something that makes the meal more filling' },
     { id: 'freshness_priority', label: 'Something that adds freshness' },
     { id: 'balance', label: 'Something that balances the meal' },
@@ -801,9 +869,7 @@ export function OnboardingScreen() {
           />
         )}
 
-        {currentStep === 'welcome' && (
-          <WelcomeScreen onContinue={goNext} />
-        )}
+        {currentStep === 'welcome' && <WelcomeScreen onContinue={goNext} />}
 
         {currentStep === 'cuisine' && (
           <CuisineGridScreen
@@ -853,7 +919,10 @@ export function OnboardingScreen() {
             subtitle="When I rescue your meal, I should usually..."
             options={adventurousOptions}
             selected={adventurousness}
-            onSelect={(id) => { haptics.light(); setAdventurousness(id); }}
+            onSelect={(id) => {
+              haptics.light();
+              setAdventurousness(id);
+            }}
             onContinue={goNext}
             onBack={goBack}
           />
