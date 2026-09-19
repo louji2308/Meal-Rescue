@@ -42,6 +42,12 @@ export async function authHook(request: FastifyRequest, _reply: FastifyReply): P
   try {
     await request.jwtVerify();
   } catch {
+    // SECURITY: Log the failed auth attempt for monitoring/alerting.
+    // Never log the token value itself.
+    request.log.warn(
+      { ip: request.ip, url: request.url, method: request.method },
+      'Auth failed — invalid or missing JWT',
+    );
     throw AppError.unauthorized();
   }
 }

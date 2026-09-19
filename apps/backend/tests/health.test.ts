@@ -1,7 +1,7 @@
 import { buildApp } from '../src/app';
 
 describe('GET /health', () => {
-  it('returns ok with timestamp and version', async () => {
+  it('returns ok with timestamp (no version or uptime — security hardening)', async () => {
     const app = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/health' });
 
@@ -10,7 +10,10 @@ describe('GET /health', () => {
     expect(body.status).toBe('ok');
     expect(body.timestamp).toBeTruthy();
     expect(new Date(body.timestamp).toString()).not.toBe('Invalid Date');
-    expect(typeof body.uptimeSeconds).toBe('number');
+    // SECURITY: version and uptimeSeconds removed to prevent information
+    // leakage to attackers (software version fingerprinting, uptime attacks).
+    expect(body.version).toBeUndefined();
+    expect(body.uptimeSeconds).toBeUndefined();
 
     await app.close();
   });

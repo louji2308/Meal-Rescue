@@ -34,17 +34,19 @@ export function registerErrorHandler(app: FastifyInstance): void {
   });
 
   // Fastify's own 404 for unknown routes gets the same shape.
-  app.setNotFoundHandler((request, reply) => {
+  // SECURITY: Do not leak the request path — it can reveal internal routes
+  // to attackers. Return a generic "route not found" message instead.
+  app.setNotFoundHandler((_request, reply) => {
     void reply.status(404).send({
       success: false,
       error: {
         category: ErrorCategory.NOT_FOUND,
         code: 'ROUTE_NOT_FOUND',
-        message: `Route ${request.method} ${request.url} does not exist`,
+        message: 'The requested endpoint does not exist',
         recoverable: true,
         suggestedAction: 'Check the API documentation at /docs',
       },
-      requestId: request.id,
+      requestId: _request.id,
       timestamp: new Date().toISOString(),
     } satisfies ErrorResponse);
   });

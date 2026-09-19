@@ -4,10 +4,12 @@ export const registerSchema = z.object({
   email: z.string().email().max(255),
   password: z
     .string()
-    .min(8, 'Password must be at least 8 characters')
+    .min(10, 'Password must be at least 10 characters')
     .max(128)
-    .regex(/[a-zA-Z]/, 'Password must contain a letter')
-    .regex(/[0-9]/, 'Password must contain a number'),
+    .regex(/[a-z]/, 'Password must contain a lowercase letter')
+    .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+    .regex(/[0-9]/, 'Password must contain a number')
+    .regex(/[^a-zA-Z0-9]/, 'Password must contain a special character'),
   timezone: z.string().max(50).optional(),
   locale: z.string().max(10).default('en-US'),
   verificationToken: z.string().min(1, 'Email verification required'),
@@ -23,6 +25,9 @@ export const googleLoginSchema = z.object({
   code: z.string().min(1),
   redirectUri: z.string().min(1),
   codeVerifier: z.string().min(1).optional(),
+  // SECURITY: CSRF state parameter — the client must generate a random
+  // state before redirecting to Google and echo it back on callback.
+  state: z.string().min(16, 'CSRF state parameter required').optional(),
 });
 
 export const sendCodeSchema = z.object({

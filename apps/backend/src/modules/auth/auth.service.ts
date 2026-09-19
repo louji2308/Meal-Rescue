@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import bcrypt from 'bcryptjs';
 
@@ -49,11 +49,35 @@ export class AuthService {
 
     // Constant-shape failure: never reveal whether the email exists.
     if (!user || !user.passwordHash) {
+      // SECURITY: Log failed login for brute-force detection.
+      // Never log the password or email in plaintext in production.
+      if (env.NODE_ENV !== 'test') {
+        console.warn(
+          JSON.stringify({
+            level: 'warn',
+            msg: 'Login failed — unknown email or missing password hash',
+            emailHash: createHash('sha256')
+              .update(input.email.toLowerCase())
+              .digest('hex')
+              .slice(0, 16),
+          }),
+        );
+      }
       throw AppError.unauthorized('Invalid email or password');
     }
 
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
+      // SECURITY: Log failed password attempt for brute-force detection.
+      if (env.NODE_ENV !== 'test') {
+        console.warn(
+          JSON.stringify({
+            level: 'warn',
+            msg: 'Login failed — incorrect password',
+            userId: user.id,
+          }),
+        );
+      }
       throw AppError.unauthorized('Invalid email or password');
     }
 

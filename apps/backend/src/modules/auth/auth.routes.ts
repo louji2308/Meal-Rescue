@@ -1,5 +1,9 @@
 import { FastifyInstance } from 'fastify';
 
+import { User } from '../../database/models/user.model';
+import { AppError } from '../../lib/errors';
+import { isDisposableEmail } from '../../services/disposable-emails';
+import { emailVerificationService } from '../../services/email-verification.service';
 import {
   googleLoginSchema,
   loginSchema,
@@ -8,10 +12,6 @@ import {
   verifyCodeSchema,
 } from './auth.schemas';
 import { authService } from './auth.service';
-import { User } from '../../database/models/user.model';
-import { isDisposableEmail } from '../../services/disposable-emails';
-import { emailVerificationService } from '../../services/email-verification.service';
-import { AppError } from '../../lib/errors';
 
 /**
  * Auth routes (public - excluded from the JWT hook):
@@ -21,11 +21,16 @@ import { AppError } from '../../lib/errors';
  *   POST /api/v1/auth/register
  *   POST /api/v1/auth/login
  *   POST /api/v1/auth/google
+ *
+ * SECURITY: Auth endpoints have stricter per-route rate limits (5 req/15min)
+ * to prevent brute-force, credential stuffing, and email bombing attacks.
  */
+const AUTH_RATE_LIMIT = { max: 5, timeWindow: 15 * 60 * 1000 } as const;
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/check-email',
     {
+      config: { rateLimit: AUTH_RATE_LIMIT },
       schema: {
         description: 'Check if an email is already registered',
         tags: ['auth'],
@@ -67,6 +72,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/send-code',
     {
+      config: { rateLimit: AUTH_RATE_LIMIT },
       schema: {
         description: 'Send a verification code to the given email',
         tags: ['auth'],
@@ -110,6 +116,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/verify-code',
     {
+      config: { rateLimit: AUTH_RATE_LIMIT },
       schema: {
         description: 'Verify a 6-digit code sent to the email',
         tags: ['auth'],
@@ -145,6 +152,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/register',
     {
+      config: { rateLimit: AUTH_RATE_LIMIT },
       schema: {
         description: 'Create a new account and receive an access token',
         tags: ['auth'],
@@ -189,7 +197,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         parsed.data.verificationToken,
       );
       if (!verifiedEmail || verifiedEmail !== parsed.data.email.toLowerCase()) {
-        throw AppError.badRequest('VERIFICATION_INVALID', 'Email verification is required. Please verify your email first.');
+        throw AppError.badRequest(
+          'VERIFICATION_INVALID',
+          'Email verification is required. Please verify your email first.',
+        );
       }
 
       const tokens = await authService.register(parsed.data);
@@ -200,6 +211,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/login',
     {
+      config: { rateLimit: AUTH_RATE_LIMIT },
       schema: {
         description: 'Exchange credentials for an access token',
         tags: ['auth'],
@@ -242,7 +254,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         parsed.data.verificationToken,
       );
       if (!verifiedEmail || verifiedEmail !== parsed.data.email.toLowerCase()) {
-        throw AppError.badRequest('VERIFICATION_INVALID', 'Email verification is required. Please verify your email first.');
+        throw AppError.badRequest(
+          'VERIFICATION_INVALID',
+          'Email verification is required. Please verify your email first.',
+        );
       }
 
       const tokens = await authService.login(parsed.data);
@@ -253,6 +268,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/google',
     {
+      config: { rateLimit: AUTH_RATE_LIMIT },
       schema: {
         description: 'Sign in with Google authorization code',
         tags: ['auth'],

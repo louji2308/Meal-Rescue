@@ -82,7 +82,8 @@ const envSchema = z.object({
   // Storage (Phase 2+)
   GCS_BUCKET_NAME: z.string().optional(),
 
-  // CORS
+  // CORS - MUST be explicitly set in production (comma-separated origins).
+  // Wildcard (*) is only allowed in development/test for convenience.
   CORS_ORIGIN: z.string().default('*'),
 
   // Rate limiting
@@ -124,6 +125,11 @@ function loadEnv(): Env {
     }
     if (!process.env.DATABASE_URL) {
       productionErrors.push('  DATABASE_URL must be explicitly set in production');
+    }
+    if (env.CORS_ORIGIN === '*') {
+      productionErrors.push(
+        '  CORS_ORIGIN must be set to specific allowed origins in production (not *)',
+      );
     }
     if (productionErrors.length > 0) {
       throw new Error(

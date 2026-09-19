@@ -1,4 +1,4 @@
-﻿import { createHash, randomInt } from 'node:crypto';
+﻿import { createHash, randomBytes, randomInt } from 'node:crypto';
 
 import { env } from '../config/env';
 import { AppError } from '../lib/errors';
@@ -128,11 +128,12 @@ export class EmailVerificationService {
     if (!timingSafeCompare(inputHash, record.codeHash)) {
       record.attempts += 1;
       await redis.set(key, JSON.stringify(record), 'EX', CODE_TTL_SECONDS);
-      const remaining = MAX_ATTEMPTS - record.attempts;
-      if (remaining <= 0) {
+      // SECURITY: Do NOT reveal remaining attempts — it helps attackers
+      // know how close they are to brute-forcing the code.
+      if (record.attempts >= MAX_ATTEMPTS) {
         throw AppError.badRequest('CODE_LOCKED', 'Too many failed attempts. Request a new code.');
       }
-      throw AppError.badRequest('CODE_INVALID', `Invalid code. ${remaining} attempts left.`);
+      throw AppError.badRequest('CODE_INVALID', 'Invalid code. Please try again.');
     }
 
     // Mark consumed
@@ -163,8 +164,10 @@ export class EmailVerificationService {
 
   private generateToken(email: string): string {
     const ts = Date.now().toString(36);
+    // SECURITY: Use crypto.randomBytes for cryptographically secure tokens.
+    // Math.random() is predictable and could allow token forgery.
     const rand = createHash('sha256')
-      .update(`${email}:${ts}:${Math.random()}`)
+      .update(`${email}:${ts}:${randomBytes(32).toString('hex')}`)
       .digest('hex')
       .slice(0, 24);
     return `${ts}.${rand}`;
@@ -172,7 +175,9 @@ export class EmailVerificationService {
 
   private async sendEmail(to: string, code: string): Promise<void> {
     if (!env.ONESIGNAL_REST_KEY || !env.ONESIGNAL_APP_ID) {
-      console.warn(`[email-verify] OneSignal not configured - code for ${to}: ${code}`);
+      // SECURITY: Never log the actual verification code in any environment.
+      // In dev, show a placeholder; in production, codes go via email only.
+      console.warn(`[email-verify] OneSignal not configured - code delivery skipped for ${to}`);
       return;
     }
 

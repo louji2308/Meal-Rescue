@@ -23,9 +23,9 @@ import { kitchenRoutes } from './routes/kitchen.routes';
 import { leftoverRoutes } from './routes/leftover.routes';
 import { mealMemoryRoutes } from './routes/meal-memory.routes';
 import { mealRoutes } from './routes/meal.routes';
-import { planReviewRoutes } from './routes/plan-review.routes';
 import { notificationRoutes } from './routes/notification.routes';
 import { pantryRoutes } from './routes/pantry.routes';
+import { planReviewRoutes } from './routes/plan-review.routes';
 import { rescueRoutes } from './routes/rescue.routes';
 import { satisfactionRoutes } from './routes/satisfaction.routes';
 import { subscriptionRoutes } from './routes/subscription.routes';
@@ -46,6 +46,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
     requestIdHeader: 'x-request-id',
     trustProxy: true,
+    // SECURITY: Disable detailed HTTP error responses in production.
+    // Prevents Fastify from sending full stack traces or error objects.
+    disableRequestLogging: false,
+    bodyLimit: 1048576, // 1 MB global body limit
+    // SECURITY: Do not expose Node.js version in X-Powered-By header.
+    // helmet() handles this, but belt-and-suspenders.
+    http2: false,
   });
 
   // --- Plugins ---
@@ -54,7 +61,18 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(helmet, {
-    contentSecurityPolicy: false, // API only; revisit if we serve HTML
+    // SECURITY: API-only CSP; but enable HSTS, X-Frame-Options, etc.
+    contentSecurityPolicy: false,
+    // Force HTTPS in production (HSTS)
+    hsts: env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true } : false,
+    // Prevent MIME type sniffing
+    noSniff: true,
+    // Prevent clickjacking
+    frameguard: { action: 'deny' },
+    // XSS Protection header (legacy browsers)
+    xssFilter: true,
+    // Referrer policy — don't leak auth tokens in referer headers
+    referrerPolicy: { policy: 'no-referrer' },
   });
 
   // Redis first so downstream plugins (rate-limit) can use it.
@@ -109,7 +127,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     '/health',
     {
       schema: {
-        description: 'Liveness probe with dependency status',
+        description: 'Liveness probe — returns ok when the process is running',
         tags: ['system'],
         response: {
           200: {
@@ -117,8 +135,6 @@ export async function buildApp(): Promise<FastifyInstance> {
             properties: {
               status: { type: 'string' },
               timestamp: { type: 'string' },
-              version: { type: 'string' },
-              uptimeSeconds: { type: 'number' },
             },
           },
         },
@@ -127,8 +143,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     async () => ({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version ?? '0.0.0',
-      uptimeSeconds: Math.round(process.uptime()),
     }),
   );
 
