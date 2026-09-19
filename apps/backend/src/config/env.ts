@@ -100,9 +100,7 @@ const envSchema = z.object({
   GOOGLE_WEB_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
 
-  // Email verification (Resend)
-  RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().default('Meal Rescue <noreply@mealrescue.app>'),
+  // Email verification via OneSignal (uses existing ONESIGNAL_REST_KEY + ONESIGNAL_APP_ID)
 });
 
 export type Env = z.infer<typeof envSchema>;

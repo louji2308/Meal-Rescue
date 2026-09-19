@@ -49,7 +49,10 @@ function rateLimitKey(email: string): string {
 
 export class EmailVerificationService {
   async sendCode(
-    redis: { get: (k: string) => Promise<string | null>; set: (k: string, v: string, ...args: any[]) => Promise<any> } | null,
+    redis: {
+      get: (k: string) => Promise<string | null>;
+      set: (k: string, v: string, ...args: any[]) => Promise<any>;
+    } | null,
     email: string,
   ): Promise<{ sent: boolean }> {
     const normalizedEmail = email.toLowerCase().trim();
@@ -83,18 +86,18 @@ export class EmailVerificationService {
       await redis.set(rlKey, next.toString(), 'EX', RATE_LIMIT_WINDOW_SECONDS);
     }
 
-    // Send email via Resend or log in dev
-    if (env.RESEND_API_KEY) {
-      await this.sendEmail(normalizedEmail, code);
-    } else {
-      console.warn(`[email-verify] No RESEND_API_KEY - code for ${normalizedEmail}: ${code}`);
-    }
+    // Send email via OneSignal
+    await this.sendEmail(normalizedEmail, code);
 
     return { sent: true };
   }
 
   async verifyCode(
-    redis: { get: (k: string) => Promise<string | null>; set: (k: string, v: string, ...args: any[]) => Promise<any>; del: (...keys: string[]) => Promise<any> } | null,
+    redis: {
+      get: (k: string) => Promise<string | null>;
+      set: (k: string, v: string, ...args: any[]) => Promise<any>;
+      del: (...keys: string[]) => Promise<any>;
+    } | null,
     email: string,
     code: string,
   ): Promise<{ verified: boolean; token: string }> {
@@ -144,7 +147,10 @@ export class EmailVerificationService {
   }
 
   async validateToken(
-    redis: { get: (k: string) => Promise<string | null>; del: (...keys: string[]) => Promise<any> } | null,
+    redis: {
+      get: (k: string) => Promise<string | null>;
+      del: (...keys: string[]) => Promise<any>;
+    } | null,
     token: string,
   ): Promise<string | null> {
     if (!redis) return null;
@@ -165,40 +171,49 @@ export class EmailVerificationService {
   }
 
   private async sendEmail(to: string, code: string): Promise<void> {
-    const from = env.EMAIL_FROM || 'Meal Rescue <noreply@mealrescue.app>';
-    const res = await fetch('https://api.resend.com/emails', {
+    if (!env.ONESIGNAL_REST_KEY || !env.ONESIGNAL_APP_ID) {
+      console.warn(`[email-verify] OneSignal not configured - code for ${to}: ${code}`);
+      return;
+    }
+
+    const emailBody = `
+      <div style="font-family: -apple-system, sans-serif; max-width: 400px; margin: 0 auto; padding: 32px;">
+        <h2 style="color: #161616; margin-bottom: 8px;">Verify your email</h2>
+        <p style="color: #666; font-size: 15px; line-height: 1.5;">
+          Use this code to complete your sign-in. It expires in 10 minutes.
+        </p>
+        <div style="background: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #EA0F55;">${code}</span>
+        </div>
+        <p style="color: #999; font-size: 13px;">
+          If you didn't request this, you can safely ignore this email.
+        </p>
+      </div>
+    `;
+
+    const res = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        Authorization: `Basic ${env.ONESIGNAL_REST_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from,
-        to: [to],
-        subject: 'Your Meal Rescue verification code',
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 400px; margin: 0 auto; padding: 32px;">
-            <h2 style="color: #161616; margin-bottom: 8px;">Verify your email</h2>
-            <p style="color: #666; font-size: 15px; line-height: 1.5;">
-              Use this code to complete your sign-in. It expires in 10 minutes.
-            </p>
-            <div style="background: #f5f5f5; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
-              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #EA0F55;">${code}</span>
-            </div>
-            <p style="color: #999; font-size: 13px;">
-              If you didn't request this, you can safely ignore this email.
-            </p>
-          </div>
-        `,
-        text: `Your Meal Rescue verification code is: ${code}\n\nIt expires in 10 minutes. If you didn't request this, ignore this email.`,
+        app_id: env.ONESIGNAL_APP_ID,
+        include_email_tokens: [to],
+        email_subject: 'Your Meal Rescue verification code',
+        email_body: emailBody,
+        include_unsubscribed: true,
       }),
     });
 
+    const data = (await res.json()) as { id?: string; errors?: unknown[] };
+
     if (!res.ok) {
-      const errText = await res.text().catch(() => 'unknown');
-      console.error(`[email-verify] Resend failed (${res.status}): ${errText}`);
+      console.error(`[email-verify] OneSignal email failed (${res.status}):`, data);
       throw AppError.internal('Failed to send verification email');
     }
+
+    console.log(`[email-verify] OneSignal email sent to ${to}, id: ${data.id}`);
   }
 }
 
