@@ -39,6 +39,10 @@ interface EditableItem {
  * unit; prepared meals and leftovers get an extra servings stepper ("roughly
  * how many people can eat this"). Only photo captures land here - text
  * captures skip straight to AiRescue as before.
+ *
+ * Bottom bar has two buttons:
+ * - "Next" — accept and continue to rescue (hidden if no food recognized)
+ * - "Take Again" — return to camera/gallery for a new photo
  */
 export function MealReviewScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
@@ -90,7 +94,12 @@ export function MealReviewScreen() {
     });
   };
 
+  const handleTakeAgain = () => {
+    navigation.navigate('Capture');
+  };
+
   const keptCount = useMemo(() => items.filter((i) => i.name.trim()).length, [items]);
+  const nothingRecognized = items.length === 0 || keptCount === 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -211,13 +220,48 @@ export function MealReviewScreen() {
         ))}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <PrimaryButton
-          label={busy ? 'Working…' : `Looks good — rescue it (${keptCount})`}
-          disabled={busy || keptCount === 0}
-          onPress={handleContinue}
-        />
-      </View>
+      {nothingRecognized ? (
+        <View style={styles.footer}>
+          <Text style={styles.noFoodMsg}>
+            No food recognized — take another photo or type it instead.
+          </Text>
+          <Pressable
+            style={styles.takeAgainBtn}
+            onPress={handleTakeAgain}
+            accessibilityRole="button"
+            accessibilityLabel="Take another photo"
+          >
+            <Ionicons name="camera" size={18} color={colors.primary} />
+            <Text style={styles.takeAgainText}>Take Again</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.footer}>
+          <View style={styles.footerRow}>
+            <Pressable
+              style={styles.takeAgainBtn}
+              onPress={handleTakeAgain}
+              accessibilityRole="button"
+              accessibilityLabel="Take a different photo"
+            >
+              <Ionicons name="camera" size={18} color={colors.primary} />
+              <Text style={styles.takeAgainText}>Take Again</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.nextBtn, busy && styles.nextBtnDisabled]}
+              onPress={handleContinue}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with these items"
+            >
+              <Text style={styles.nextText}>
+                {busy ? 'Working…' : `Next · rescue ${keptCount}`}
+              </Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -405,5 +449,51 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  noFoodMsg: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  takeAgainBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: 'transparent',
+  },
+  takeAgainText: {
+    ...typography.subhead,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  nextBtn: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primary,
+  },
+  nextBtnDisabled: {
+    opacity: 0.5,
+  },
+  nextText: {
+    ...typography.subhead,
+    color: '#fff',
+    fontWeight: '700',
   },
 });

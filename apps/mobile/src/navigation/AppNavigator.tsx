@@ -277,7 +277,7 @@ function HomeStack() {
       screenOptions={{
         headerShown: false,
         animation: 'fade',
-        animationDuration: 150,
+        animationDuration: 250,
       }}
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} />

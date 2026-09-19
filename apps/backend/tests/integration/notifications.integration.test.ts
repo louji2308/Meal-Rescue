@@ -38,7 +38,7 @@ maybeDescribe('notification snooze route (integration)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/notifications/snooze',
-      payload: { kind: 'rescue_window', hours: 24 },
+      payload: { kind: 'spoiler_alert', hours: 24 },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -74,7 +74,7 @@ maybeDescribe('notification snooze route (integration)', () => {
       method: 'POST',
       url: '/api/v1/notifications/snooze',
       headers: { authorization: `Bearer ${token}` },
-      payload: { kind: 'rescue_window', hours: 24 },
+      payload: { kind: 'spoiler_alert', hours: 24 },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -83,15 +83,13 @@ maybeDescribe('notification snooze route (integration)', () => {
     const user = (await User.findByPk(userId))!;
     const outcome = await sendToUser({
       user,
-      kind: 'rescue_window',
-      title: 'Rescue window',
-      body: 'Your leftovers are ready for a comeback.',
+      kind: 'spoiler_alert',
+      title: 'Spinach expires soon',
+      body: 'Turn it into dinner in about 20 minutes.',
     });
     expect(outcome).toBe('snoozed');
 
-    // Suppression short-circuits BEFORE the dedupe mark: the row exists
-    // (created by snooze) but nothing was ever "sent".
-    const rows = await NotificationLog.findAll({ where: { userId, kind: 'rescue_window' } });
+    const rows = await NotificationLog.findAll({ where: { userId, kind: 'spoiler_alert' } });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.suppressedUntil!.getTime()).toBeGreaterThan(Date.now());
     expect(new Date(rows[0]!.sentAt).getTime()).toBeLessThanOrEqual(Date.now());

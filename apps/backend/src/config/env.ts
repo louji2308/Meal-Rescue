@@ -99,6 +99,10 @@ const envSchema = z.object({
   // Google OAuth
   GOOGLE_WEB_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+  // Email verification (Resend)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Meal Rescue <noreply@mealrescue.app>'),
 });
 
 export type Env = z.infer<typeof envSchema>;

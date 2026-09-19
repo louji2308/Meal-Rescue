@@ -19,10 +19,6 @@ export function usePaywallNudge(): string | null {
           setNudge(null);
         } else if (used >= 3) {
           setNudge("You've hit today's limit - unlimited is one tap away.");
-        } else if (used > 0) {
-          setNudge(
-            `You've rescued ${used} meal${used === 1 ? '' : 's'} today. Members never run out.`,
-          );
         } else {
           setNudge(null);
         }

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
@@ -17,6 +18,7 @@ import {
   submitCuisinePreferences,
   submitOnboardingPreferences,
 } from '../services/taste.api';
+import { createHousehold, updateHouseholdMember } from '../services/common-table.api';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
 
@@ -87,6 +89,7 @@ type StepId =
   | 'adventurousness'
   | 'rescueNeed'
   | 'priorities'
+  | 'name'
   | 'done';
 
 const ALL_STEPS: StepId[] = [
@@ -98,6 +101,7 @@ const ALL_STEPS: StepId[] = [
   'adventurousness',
   'rescueNeed',
   'priorities',
+  'name',
 ];
 
 // ---------------------------------------------------------------------------
@@ -110,7 +114,7 @@ const STEP_LABELS: Record<string, string> = {
   flavorPersonality: 'Flavor',
   texturePairs: 'Texture',
   adventurousness: 'Adventure',
-  rescueNeed: 'Rescue',
+  name: 'Your name',
   priorities: 'Priorities',
 };
 
@@ -124,6 +128,7 @@ function getStepAnswer(
     adventurousness: string | null;
     rescueNeed: Set<string>;
     priorities: Set<string>;
+    displayName: string;
   },
 ): string | null {
   switch (step) {
@@ -143,6 +148,8 @@ function getStepAnswer(
       return state.rescueNeed.size > 0 ? `${state.rescueNeed.size} picked` : null;
     case 'priorities':
       return state.priorities.size > 0 ? `${state.priorities.size} picked` : null;
+    case 'name':
+      return state.displayName || null;
     default:
       return null;
   }
@@ -163,6 +170,7 @@ function StepProgress({
     adventurousness: string | null;
     rescueNeed: Set<string>;
     priorities: Set<string>;
+    displayName: string;
   };
 }) {
   return (
@@ -618,6 +626,58 @@ function TexturePairsScreen({
 }
 
 // ---------------------------------------------------------------------------
+// Name step — asks what to call the user
+// ---------------------------------------------------------------------------
+
+function NameStep({
+  displayName,
+  onChangeName,
+  onContinue,
+  onBack,
+}: {
+  displayName: string;
+  onChangeName: (name: string) => void;
+  onContinue: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <ScrollView contentContainerStyle={styles.stepScroll} keyboardShouldPersistTaps="handled">
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <Ionicons name="chevron-back" size={22} color={colors.primary} />
+        <Text style={styles.backLabel}>Back</Text>
+      </Pressable>
+
+      <Text style={styles.stepTitle}>What should we call you?</Text>
+      <Text style={styles.stepSubtitle}>
+        This is how you'll appear in your household.
+      </Text>
+
+      <TextInput
+        style={styles.nameInput}
+        value={displayName}
+        onChangeText={onChangeName}
+        placeholder="Your name"
+        placeholderTextColor={colors.textSecondary}
+        autoFocus
+        autoCorrect={false}
+        returnKeyType="done"
+        onSubmitEditing={() => {
+          if (displayName.trim()) onContinue();
+        }}
+      />
+
+      <Pressable
+        style={[styles.continueBtn, !displayName.trim() && styles.continueBtnDisabled]}
+        onPress={onContinue}
+        disabled={!displayName.trim()}
+      >
+        <Text style={styles.continueBtnText}>Continue</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -634,6 +694,7 @@ export function OnboardingScreen() {
   const [adventurousness, setAdventurousness] = useState<string | null>(null);
   const [rescueNeed, setRescueNeed] = useState<Set<string>>(new Set());
   const [priorities, setPriorities] = useState<Set<string>>(new Set());
+  const [displayName, setDisplayName] = useState('');
   const [_submitting, setSubmitting] = useState(false);
 
   const currentStep = ALL_STEPS[stepIndex];
@@ -796,6 +857,19 @@ export function OnboardingScreen() {
           priorities: 'What should I prioritize when I suggest something?',
         },
       });
+
+      // Save display name to household owner member
+      if (displayName.trim()) {
+        try {
+          const household = await createHousehold();
+          const ownerMember = household?.members?.find((m: { isOwner?: boolean }) => m.isOwner);
+          if (ownerMember) {
+            await updateHouseholdMember(ownerMember.id, { displayName: displayName.trim() });
+          }
+        } catch {
+          // Non-critical — proceed even if this fails
+        }
+      }
     } catch {
       // Proceed even if backend fails
     } finally {
@@ -865,6 +939,7 @@ export function OnboardingScreen() {
               adventurousness,
               rescueNeed,
               priorities,
+              displayName,
             }}
           />
         )}
@@ -949,6 +1024,14 @@ export function OnboardingScreen() {
             selected={priorities}
             maxSelect={3}
             onToggle={togglePriority}
+            onContinue={goNext}
+            onBack={goBack}
+          />
+        )}
+        {currentStep === 'name' && (
+          <NameStep
+            displayName={displayName}
+            onChangeName={setDisplayName}
             onContinue={goNext}
             onBack={goBack}
           />
@@ -1217,5 +1300,46 @@ const styles = StyleSheet.create({
   },
   continueBtnTextDisabled: {
     color: '#8E8E93',
+  },
+
+  // Name step
+  nameInput: {
+    marginTop: 24,
+    height: 54,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: SMOKE,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 18,
+    fontSize: 17,
+    color: colors.text,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 20,
+  },
+  backLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  stepTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  stepSubtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    lineHeight: 22,
+  },
+  stepScroll: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
 });

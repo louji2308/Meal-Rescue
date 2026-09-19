@@ -10,11 +10,13 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Password must contain a number'),
   timezone: z.string().max(50).optional(),
   locale: z.string().max(10).default('en-US'),
+  verificationToken: z.string().min(1, 'Email verification required'),
 });
 
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  verificationToken: z.string().min(1, 'Email verification required'),
 });
 
 export const googleLoginSchema = z.object({
@@ -23,6 +25,17 @@ export const googleLoginSchema = z.object({
   codeVerifier: z.string().min(1).optional(),
 });
 
+export const sendCodeSchema = z.object({
+  email: z.string().email().max(255),
+});
+
+export const verifyCodeSchema = z.object({
+  email: z.string().email().max(255),
+  code: z.string().length(6, 'Code must be 6 digits'),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
+export type SendCodeInput = z.infer<typeof sendCodeSchema>;
+export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;

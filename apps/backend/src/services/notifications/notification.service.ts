@@ -27,9 +27,7 @@ const QUIET_DEFAULT_END = 8;
 const ONESIGNAL_ENDPOINT = 'https://api.onesignal.com/notifications';
 
 export const NOTIFICATION_KINDS = [
-  'rescue_window',
   'spoiler_alert',
-  'pick_for_me',
   'generic',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];

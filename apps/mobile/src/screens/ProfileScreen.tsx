@@ -24,7 +24,6 @@ import { FadeInView } from '../components/motion/FadeInView';
 import { PawStamp } from '../components/mascot/PawStamp';
 import {
   UsersIcon,
-  UtensilsIcon,
   SettingsIcon,
   BellIcon,
   MailIcon,
@@ -174,7 +173,7 @@ return (
             <Text style={typography.caption}>
               {isEffectivePro
                 ? 'Pro plan'
-                : `Free plan � 3 rescues/day${rescueCredits > 0 ? ` � +${rescueCredits} bonus` : ''}`}
+                : `Free plan \u2022 3 rescues/day${rescueCredits > 0 ? ` \u2022 +${rescueCredits} bonus` : ''}`}
             </Text>
           </View>
         </View>
@@ -185,6 +184,7 @@ return (
             accessibilityLabel="Upgrade to Meal Rescue Pro"
             onPress={() => navigation.navigate('Paywall')}
             style={styles.proRow}
+            tintBorderRadius={12}
             >
             <View style={styles.proLeft}>
               <PawStamp size={24} rotation={0} />
@@ -209,11 +209,12 @@ return (
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Common Table � add the people you cook for"
+            accessibilityLabel="Common Table — add the people you cook for"
             onPress={() => navigation.navigate('CommonTableStack')}
             style={styles.settingRow}
+            tintBorderRadius={12}
             >
-            <UtensilsIcon size={18} color={colors.homeInk} />
+            <UsersIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Add your partner</Text>
               <Text style={styles.settingSub}>
@@ -252,6 +253,7 @@ return (
             accessibilityLabel="Contact support"
             onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
             style={styles.settingRow}
+            tintBorderRadius={12}
             >
             <MailIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
@@ -274,6 +276,7 @@ return (
             accessibilityLabel="Open taste journal"
             onPress={() => navigation.navigate('TasteJournal')}
             style={styles.settingRow}
+            tintBorderRadius={12}
             >
             <BookIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>

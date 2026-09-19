@@ -32,7 +32,7 @@ const planConfirmSchema = z
 const DEFAULT_WEEK_MEAL_SLOTS: MealSlot[] = ['dinner', 'lunch'];
 
 function convertEventsToPlannedDays(
-  meals: Array<{ dateKey: string | null; concept: string | null; ingredients: string[] | null; id: UUID }>
+  meals: Array<{ dateKey: string | null; concept: string | null; ingredients: string[] | null; id: UUID; mealSlot: MealSlot }>
 ): PlannedDay[] {
   const dayMap = new Map<string, PlannedMeal[]>();
 
@@ -51,6 +51,7 @@ function convertEventsToPlannedDays(
       servings: 1,
       prepTimeMinutes: 15,
       cookTimeMinutes: 0,
+      mealSlot: meal.mealSlot,
     });
   }
 
@@ -71,8 +72,8 @@ function validationError(message: string): AppError {
 /**
  * Plan Review routes — preview and confirm meal plans.
  *
- * POST   /api/v1/plan-review/plan-preview   generate a plan preview (no persistence)
- * POST   /api/v1/plan-review/plan-confirm   confirm and save a previewed plan
+ * POST   /api/v1/meal-memory/plan-preview   generate a plan preview (no persistence)
+ * POST   /api/v1/meal-memory/plan-confirm   confirm and save a previewed plan
  */
 export async function planReviewRoutes(app: FastifyInstance): Promise<void> {
   const { households } = buildServices(app.redis);
@@ -144,16 +145,7 @@ export async function planReviewRoutes(app: FastifyInstance): Promise<void> {
 
     const { previewId, edits } = parsed.data;
 
-    let parsedEdits: { days?: PlannedDay[] } | undefined;
-    if (edits) {
-      try {
-        parsedEdits = JSON.parse(edits);
-      } catch {
-        throw validationError('edits must be valid JSON');
-      }
-    }
-
-    const result = await planPreviewService.confirmPreview(previewId as UUID, parsedEdits);
+    const result = await planPreviewService.confirmPreview(previewId as UUID, edits);
 
     return reply.send({ success: result.success });
   });

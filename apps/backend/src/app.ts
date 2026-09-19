@@ -152,7 +152,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(householdRoutes, { prefix: '/api/v1/households' });
   await app.register(commonTableRoutes, { prefix: '/api/v1/common-table' });
   await app.register(mealMemoryRoutes, { prefix: '/api/v1/meal-memory' });
-  await app.register(planReviewRoutes, { prefix: '/api/v1/plan-review' });
+  await app.register(planReviewRoutes, { prefix: '/api/v1/meal-memory' });
 
   return app;
 }

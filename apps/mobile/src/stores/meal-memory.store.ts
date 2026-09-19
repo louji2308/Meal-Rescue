@@ -167,14 +167,22 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   error: null,
 
   loadWeek: async (weekStart) => {
-    set({ busy: true, error: null });
+    const prevWeek = get().week;
+    const prevWeekStart = get().weekStart;
+    if (weekStart) {
+      set({ weekStart, busy: true, error: null });
+    } else {
+      set({ busy: true, error: null });
+    }
     try {
       const week = await getWeek(weekStart, activeSoloMemberId() ?? undefined);
-      set({ week, weekStart: week.weekStart });
+      set({ week, weekStart: week.weekStart, busy: false });
     } catch (err) {
-      set({ error: toApiError(err) });
-    } finally {
-      set({ busy: false });
+      if (!get().week && prevWeek) {
+        set({ week: prevWeek, weekStart: prevWeekStart, error: toApiError(err), busy: false });
+      } else {
+        set({ error: toApiError(err), busy: false });
+      }
     }
   },
 

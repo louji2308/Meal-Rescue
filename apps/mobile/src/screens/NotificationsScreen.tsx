@@ -9,14 +9,13 @@ import { Text } from '../components/AppText';
 import {
   BellIcon,
   ChevronLeftIcon,
-  ClockIcon,
   LeafIcon,
   SparkIcon,
 } from '../components/icons';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import { parseDeepLink } from '../services/onesignal.service';
-import { requestNotificationSnooze, dismissTonight } from '../services/notifications.api';
+import { requestNotificationSnooze } from '../services/notifications.api';
 import {
   InAppNotification,
   InAppNotificationKind,
@@ -26,9 +25,7 @@ import {
 import { colors, fonts } from '../theme';
 
 const KIND_META: Record<InAppNotificationKind, { label: string; hint: string }> = {
-  rescue_window: { label: 'Rescue window', hint: 'A good time to cook is open' },
   spoiler_alert: { label: 'Spoiler alert', hint: 'Something in your kitchen is about to turn' },
-  pick_for_me: { label: "Tonight's choice", hint: 'We picked a meal for you' },
   aftercare: { label: 'Check-in', hint: 'How did the rescue work out?' },
   promo: { label: 'Meal Rescue', hint: 'News and tips' },
   push: { label: 'Meal Rescue', hint: 'Update' },
@@ -49,9 +46,7 @@ function relativeTime(iso: string): string {
 function KindGlyph({ kind }: { kind: InAppNotificationKind }) {
   const size = 17;
   const color = colors.homeButton;
-  if (kind === 'rescue_window') return <ClockIcon size={size} color={color} />;
   if (kind === 'spoiler_alert') return <LeafIcon size={size} color={color} />;
-  if (kind === 'pick_for_me') return <SparkIcon size={size} color={color} />;
   if (kind === 'aftercare') return <SparkIcon size={size} color={color} />;
   return <BellIcon size={size} color={color} />;
 }
@@ -59,14 +54,11 @@ function KindGlyph({ kind }: { kind: InAppNotificationKind }) {
 function NotificationRow({ item }: { item: InAppNotification }) {
   const [snoozing, setSnoozing] = useState(false);
   const [snoozed, setSnoozed] = useState(false);
-  const [dismissing, setDismissing] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const snoozeable = item.kind === 'rescue_window' || item.kind === 'spoiler_alert';
-  const dismissable = item.kind === 'pick_for_me';
+  const snoozeable = item.kind === 'spoiler_alert';
 
   const handleSnooze = async () => {
     if (snoozing || snoozed) return;
-    if (item.kind !== 'rescue_window' && item.kind !== 'spoiler_alert') return;
+    if (item.kind !== 'spoiler_alert') return;
     setSnoozing(true);
     try {
       await requestNotificationSnooze(item.kind, 12);
@@ -75,19 +67,6 @@ function NotificationRow({ item }: { item: InAppNotification }) {
     } finally {
       setSnoozed(true);
       setSnoozing(false);
-    }
-  };
-
-  const handleDismiss = async () => {
-    if (dismissing || dismissed) return;
-    setDismissing(true);
-    try {
-      await dismissTonight();
-    } catch {
-      // Best-effort
-    } finally {
-      setDismissed(true);
-      setDismissing(false);
     }
   };
 
@@ -114,19 +93,6 @@ function NotificationRow({ item }: { item: InAppNotification }) {
           >
             <Text style={[styles.snoozeText, snoozed ? styles.snoozedText : null]}>
               {snoozed ? 'Snoozed for 12 hours' : 'Remind me later · 12h'}
-            </Text>
-          </Pressable>
-        ) : null}
-        {dismissable ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Not tonight"
-            onPress={handleDismiss}
-            disabled={dismissing || dismissed}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[styles.snoozeText, dismissed ? styles.snoozedText : null]}>
-              {dismissed ? 'Dismissed for tonight' : 'Not tonight'}
             </Text>
           </Pressable>
         ) : null}

@@ -8,8 +8,8 @@ import { TextStyle } from 'react-native';
  * reads light, simple and precise — no loud red, no decorative colour.
  */
 export const colors = {
-  /** Primary accent — elegant rose-red. Buttons and active icons only. */
-  primary: '#EA0F55',
+  /** Primary accent — muted smoke grey. Buttons and active icons only. */
+  primary: '#8E8E93',
   /** Light neutral fill for chips/pills/badges (deliberately NOT red). */
   primaryLight: '#F4F4F6',
   /** Secondary — muted neutral grey for subtle accents. */

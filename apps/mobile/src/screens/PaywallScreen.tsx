@@ -25,21 +25,24 @@ import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
 
 const VALUE_PROPS = [
-  'Unlimited daily rescues',
-  'Priority AI ranking for your meals',
-  'Zero ads - subscribers never see one',
-  'Early access to smart reminders',
+  'Unlimited daily meal rescues per day',
+  'Smart AI picks what you actually want to eat',
+  'Ad-free experience — zero interruptions',
+  'Personalized taste memory that gets smarter over time',
 ];
 
 const STATIC_PRICING = [
   { id: 'monthly', title: 'Monthly', price: '$4.99 / month' },
-  { id: 'annual', title: 'Annual', price: '$39.99 / year' },
-  { id: 'lifetime', title: 'Lifelong', price: '$79.99' },
+  { id: 'annual', title: 'Yearly', price: '$39.99 / year' },
+  { id: 'lifetime', title: 'Lifetime', price: '$79.99' },
 ];
 
 const TITLE_OVERRIDES: Record<string, string> = {
-  lifetime: 'Lifelong',
-  pro_lifetime: 'Lifelong',
+  monthly: 'Monthly',
+  annual: 'Yearly',
+  year: 'Yearly',
+  lifetime: 'Lifetime',
+  pro_lifetime: 'Lifetime',
 };
 
 /**
@@ -83,7 +86,11 @@ export function PaywallScreen() {
         setRestoredNote('No offering available yet.');
         return;
       }
-      await purchasePackage(target);
+      const granted = await purchasePackage(target);
+      if (granted) {
+        // Optimistic update — show Pro immediately while backend syncs
+        useMonetization.setState({ tier: 'pro', isPro: true });
+      }
       // Sync RevenueCat entitlement → backend DB so Profile/Home see pro
       await syncSubscription().catch(() => {});
       await refreshEntitlement();
@@ -104,6 +111,8 @@ export function PaywallScreen() {
       const ok = await restorePurchases();
       setRestoredNote(ok ? 'Purchases restored.' : 'Nothing to restore yet.');
       if (ok) {
+        // Optimistic update
+        useMonetization.setState({ tier: 'pro', isPro: true });
         // Sync RevenueCat entitlement → backend DB so Profile/Home see pro
         await syncSubscription().catch(() => {});
         await refreshEntitlement();
@@ -142,6 +151,7 @@ export function PaywallScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <FadeInView rise={16} duration={320}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close paywall"
@@ -165,15 +175,19 @@ export function PaywallScreen() {
         {nudge ? <Text style={styles.nudge}>{nudge}</Text> : null}
 
         <View style={styles.propsCard}>
-          {VALUE_PROPS.map((prop) => (
-            <View key={prop} style={styles.propRow}>
-              <Text style={styles.propBullet}>-</Text>
+          {VALUE_PROPS.map((prop, i) => (
+            <FadeInView key={prop} delay={120 + i * 60} rise={8}>
+            <View style={styles.propRow}>
+              <Text style={styles.propCheck}>{'✓'}</Text>
               <Text style={styles.propText}>{prop}</Text>
             </View>
+            </FadeInView>
           ))}
         </View>
 
+        <FadeInView delay={400} rise={10}>
         <Text style={styles.feedTheCat}>Feed the cat — pick a plan below</Text>
+        </FadeInView>
 
         {packagesLoading ? (
           <>
@@ -194,11 +208,13 @@ export function PaywallScreen() {
           const pkg = item as PurchasesPackage;
           const id = pkg.identifier ?? (item as { id: string }).id;
           const rawTitle = pkg.product?.title ?? (item as { title: string }).title;
-          const title = TITLE_OVERRIDES[id] ?? rawTitle;
+          const title = TITLE_OVERRIDES[id]
+            ?? TITLE_OVERRIDES[rawTitle.toLowerCase()]
+            ?? rawTitle;
           const price = pkg.product?.priceString ?? (item as { price: string }).price;
           const recommended = /annual|year/i.test(title) || id === 'annual';
           return (
-            <FadeInView key={id} delay={i * 90} rise={6}>
+            <FadeInView key={id} delay={500 + i * 100} rise={12}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Choose ${title} plan`}
@@ -253,6 +269,7 @@ export function PaywallScreen() {
         >
           <Text style={styles.restoreText}>Restore purchases</Text>
         </Pressable>
+        </FadeInView>
       </ScrollView>
     </SafeAreaView>
   );
@@ -312,16 +329,20 @@ const styles = StyleSheet.create({
   },
   propRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
-  propBullet: {
-    color: colors.textSecondary,
-    fontWeight: '700',
-    marginRight: spacing.sm,
+  propCheck: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 1,
   },
   propText: {
     flex: 1,
     fontSize: 15,
     color: colors.text,
+    lineHeight: 22,
   },
   feedTheCat: {
     textAlign: 'center',

@@ -15,7 +15,7 @@ module.exports = {
     splash: {
       image: './assets/mascot.png',
       resizeMode: 'contain',
-      backgroundColor: '#F8F8F0',
+      backgroundColor: '#FFFFFF',
     },
     userInterfaceStyle: 'automatic',
     scheme: 'mealrescue',
@@ -29,10 +29,14 @@ module.exports = {
     android: {
       package: 'com.mealrescue.app',
       adaptiveIcon: {
-        backgroundColor: '#F8F8F0',
+        backgroundColor: '#FFFFFF',
         foregroundImage: './assets/mascot.png',
         backgroundImage: './assets/android-icon-background.png',
         monochromeImage: './assets/mascot.png',
+      },
+      statusBar: {
+        barStyle: 'dark-content',
+        backgroundColor: '#FFFFFF',
       },
       intentFilters: [
         {

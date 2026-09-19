@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -7,17 +7,23 @@ import {
   Modal,
   Platform,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { Text } from '../components/AppText';
 import { Pressable } from '../components/motion/Pressable';
-import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { toApiError } from '../services/api';
-import { checkEmail, loginWithCredentials, registerAccount } from '../services/auth.api';
+import {
+  checkEmail,
+  loginWithCredentials,
+  registerAccount,
+  sendVerificationCode,
+  verifyCode,
+} from '../services/auth.api';
 import { signInWithGoogle } from '../services/google-auth';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
@@ -69,24 +75,33 @@ const googleStyles = StyleSheet.create({
   },
 });
 
-type EmailStep = 'email' | 'password';
+type FlowStep = 'email' | 'send-code' | 'verify-code' | 'password';
+
+const CODE_LENGTH = 6;
 
 export function LoginScreen() {
   const setSession = useAuthStore((state) => state.setSession);
   const [emailModalVisible, setEmailModalVisible] = useState(false);
-  const [step, setStep] = useState<EmailStep>('email');
+  const [step, setStep] = useState<FlowStep>('email');
   const [isNewUser, setIsNewUser] = useState<boolean | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
+  const [codeDigits, setCodeDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const codeInputRefs = useRef<(TextInput | null)[]>([]);
 
   function openEmailModal() {
     setStep('email');
     setIsNewUser(null);
     setEmail('');
     setPassword('');
+    setCodeDigits(Array(CODE_LENGTH).fill(''));
+    setVerificationToken('');
     setError(null);
+    setCooldown(0);
     setEmailModalVisible(true);
   }
 
@@ -96,7 +111,10 @@ export function LoginScreen() {
     setIsNewUser(null);
     setEmail('');
     setPassword('');
+    setCodeDigits(Array(CODE_LENGTH).fill(''));
+    setVerificationToken('');
     setError(null);
+    setCooldown(0);
   }
 
   async function handleGoogleSignIn() {
@@ -121,9 +139,85 @@ export function LoginScreen() {
     try {
       const result = await checkEmail(email.trim());
       setIsNewUser(!result.exists);
+      // Send verification code
+      await sendVerificationCode(email.trim());
+      setStep('verify-code');
+      startCooldown();
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResendCode() {
+    if (cooldown > 0) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await sendVerificationCode(email.trim());
+      startCooldown();
+    } catch (err) {
+      setError(toApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startCooldown() {
+    setCooldown(60);
+    const interval = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function handleCodeChange(text: string, index: number) {
+    if (text.length > 1) {
+      text = text.slice(-1);
+    }
+    const newDigits = [...codeDigits];
+    newDigits[index] = text;
+    setCodeDigits(newDigits);
+    setError(null);
+
+    // Auto-advance
+    if (text && index < CODE_LENGTH - 1) {
+      codeInputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-submit when all digits entered
+    if (newDigits.every((d) => d !== '') && newDigits.join('').length === CODE_LENGTH) {
+      void handleVerifyCode(newDigits.join(''));
+    }
+  }
+
+  function handleKeyPress(key: string, index: number) {
+    if (key === 'Backspace' && !codeDigits[index] && index > 0) {
+      const newDigits = [...codeDigits];
+      newDigits[index - 1] = '';
+      setCodeDigits(newDigits);
+      codeInputRefs.current[index - 1]?.focus();
+    }
+  }
+
+  async function handleVerifyCode(code: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await verifyCode(email.trim(), code);
+      setVerificationToken(result.token);
       setStep('password');
     } catch (err) {
       setError(toApiError(err));
+      // Clear code on error
+      setCodeDigits(Array(CODE_LENGTH).fill(''));
+      codeInputRefs.current[0]?.focus();
     } finally {
       setBusy(false);
     }
@@ -135,16 +229,33 @@ export function LoginScreen() {
     setBusy(true);
     try {
       if (isNewUser) {
-        const tokens = await registerAccount({ email: email.trim(), password });
+        const tokens = await registerAccount({
+          email: email.trim(),
+          password,
+          verificationToken,
+        });
         setSession(tokens.accessToken, tokens.user);
       } else {
-        const tokens = await loginWithCredentials({ email: email.trim(), password });
+        const tokens = await loginWithCredentials({
+          email: email.trim(),
+          password,
+          verificationToken,
+        });
         setSession(tokens.accessToken, { ...tokens.user, onboardingCompleted: true });
       }
     } catch (err) {
       setError(toApiError(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function getStepTitle(): string {
+    switch (step) {
+      case 'email': return 'Get Started';
+      case 'verify-code': return 'Verify Email';
+      case 'password': return isNewUser ? 'Create Account' : 'Welcome Back';
+      default: return 'Get Started';
     }
   }
 
@@ -218,9 +329,7 @@ export function LoginScreen() {
               >
                 <Text style={styles.modalCloseText}>Cancel</Text>
               </Pressable>
-              <Text style={styles.modalTitle}>
-                {step === 'email' ? 'Get Started' : isNewUser ? 'Create Account' : 'Welcome Back'}
-              </Text>
+              <Text style={styles.modalTitle}>{getStepTitle()}</Text>
               <View style={styles.modalCloseBtn} />
             </View>
 
@@ -257,6 +366,66 @@ export function LoginScreen() {
                     disabled={!email.includes('@')}
                     style={styles.submit}
                   />
+                </>
+              )}
+
+              {step === 'verify-code' && (
+                <>
+                  <Text style={styles.emailHint}>
+                    We sent a 6-digit code to{'\n'}
+                    <Text style={styles.emailBold}>{email}</Text>
+                  </Text>
+
+                  <View style={styles.codeRow}>
+                    {Array.from({ length: CODE_LENGTH }).map((_, i) => (
+                      <TextInput
+                        key={i}
+                        ref={(ref) => { codeInputRefs.current[i] = ref; }}
+                        style={[
+                          styles.codeDigit,
+                          codeDigits[i] ? styles.codeDigitFilled : null,
+                        ]}
+                        value={codeDigits[i]}
+                        onChangeText={(text) => handleCodeChange(text, i)}
+                        onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, i)}
+                        keyboardType="number-pad"
+                        maxLength={1}
+                        selectTextOnFocus
+                        autoFocus={i === 0}
+                      />
+                    ))}
+                  </View>
+
+                  <PrimaryButton
+                    label={busy ? 'Verifying...' : 'Verify Code'}
+                    onPress={() => void handleVerifyCode(codeDigits.join(''))}
+                    busy={busy}
+                    disabled={codeDigits.some((d) => d === '')}
+                    style={styles.submit}
+                  />
+
+                  <Pressable
+                    onPress={() => void handleResendCode()}
+                    style={styles.changeEmail}
+                    scaleTo={1}
+                    disabled={cooldown > 0}
+                  >
+                    <Text style={[styles.changeEmailText, cooldown > 0 && styles.disabledText]}>
+                      {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => {
+                      setStep('email');
+                      setCodeDigits(Array(CODE_LENGTH).fill(''));
+                      setError(null);
+                    }}
+                    style={styles.changeEmail}
+                    scaleTo={1}
+                  >
+                    <Text style={styles.changeEmailText}>Use a different email</Text>
+                  </Pressable>
                 </>
               )}
 
@@ -302,6 +471,8 @@ export function LoginScreen() {
                     onPress={() => {
                       setStep('email');
                       setPassword('');
+                      setCodeDigits(Array(CODE_LENGTH).fill(''));
+                      setVerificationToken('');
                       setError(null);
                     }}
                     style={styles.changeEmail}
@@ -446,6 +617,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: spacing.md,
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  emailBold: {
+    color: colors.textPrimary,
+    fontFamily: fonts.semiBold,
   },
   input: {
     backgroundColor: colors.surface,
@@ -475,5 +651,31 @@ const styles = StyleSheet.create({
   changeEmailText: {
     color: colors.textSecondary,
     fontSize: 14,
+  },
+  disabledText: {
+    opacity: 0.5,
+  },
+  codeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  codeDigit: {
+    width: 48,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    textAlign: 'center',
+    fontSize: 24,
+    fontFamily: fonts.semiBold,
+    color: colors.textPrimary,
+  },
+  codeDigitFilled: {
+    borderColor: colors.primary,
+    backgroundColor: '#FFF0F5',
   },
 });

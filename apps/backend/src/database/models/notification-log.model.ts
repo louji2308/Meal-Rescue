@@ -23,7 +23,7 @@ export class NotificationLog extends Model<
 > {
   declare id: UUID;
   declare userId: UUID;
-  /** Push category, e.g. 'rescue_window' | 'spoiler_alert' | 'generic'. */
+  /** Push category, e.g. 'spoiler_alert' | 'generic'. */
   declare kind: string;
   /** User-local day key (YYYY-MM-DD) anchoring the once-per-day cap. */
   declare dayKey: string;

@@ -13,6 +13,7 @@ import { useMealMemoryStore } from './meal-memory.store';
 export interface SessionUser {
   id: string;
   email: string;
+  displayName?: string;
   subscriptionTier: 'free' | 'pro';
   onboardingCompleted?: boolean;
 }

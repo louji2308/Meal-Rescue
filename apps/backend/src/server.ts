@@ -8,17 +8,9 @@ import {
   stopMealMemoryScheduler,
 } from './services/meal-memory/scheduler';
 import {
-  startRescueWindowScheduler,
-  stopRescueWindowScheduler,
-} from './services/notifications/rescue-window.scheduler';
-import {
   startSpoilerAlertScheduler,
   stopSpoilerAlertScheduler,
 } from './services/notifications/spoiler-alert.service';
-import {
-  startPickForMeScheduler,
-  stopPickForMeScheduler,
-} from './services/notifications/pick-for-me.scheduler';
 import { validateOneSignalCredentials } from './services/notifications/notification.service';
 
 /**
@@ -43,9 +35,7 @@ async function main(): Promise<void> {
     const credCheck = await validateOneSignalCredentials();
     if (credCheck.valid) {
       app.log.info('OneSignal credentials validated');
-      startRescueWindowScheduler();
       startSpoilerAlertScheduler();
-      startPickForMeScheduler();
       startMealMemoryScheduler();
       app.log.info('Notification schedulers started');
     } else {
@@ -59,9 +49,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'Shutting down gracefully');
     try {
-      await stopRescueWindowScheduler();
       await stopSpoilerAlertScheduler();
-      await stopPickForMeScheduler();
       await stopMealMemoryScheduler();
       await app.close();
       await closeDatabase();

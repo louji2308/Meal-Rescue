@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
+import { WaveLoading } from '../components/WaveLoading';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
@@ -78,7 +79,7 @@ export function RescueLoadingScreen({
       <View style={styles.content}>
         <Text style={[typography.heading, styles.title]}>Finding your best move…</Text>
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.rescueAccent} />
+          <WaveLoading />
         </View>
         <ErrorBanner error={error} />
         {error ? (

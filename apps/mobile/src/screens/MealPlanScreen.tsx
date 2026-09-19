@@ -888,7 +888,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   dayWeekdayToday: {
-    color: colors.primary,
+    color: colors.accent,
   },
   dayNumber: {
     fontSize: 16,
@@ -901,7 +901,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   dayNumberToday: {
-    color: colors.primary,
+    color: colors.accent,
   },
   dayDotRow: {
     height: 8,

@@ -28,7 +28,7 @@ import {
   deleteKitchenItem,
   markKitchenItemUsed,
 } from '../services/kitchen.api';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing, typography } from '../theme';
 import EMPTY_KITCHEN from '../../assets/empty-kitchen.png';
 import KitchenCaptureBottomSheet from './KitchenCaptureBottomSheet';
 import KitchenCaptureReviewScreen from './KitchenCaptureReviewScreen';
@@ -480,13 +480,13 @@ export function KitchenScreen() {
         {/* Leftovers section — only shown when there are leftovers */}
         {leftovers.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Leftovers</Text>
+            <Text style={[styles.sectionTitle, { fontFamily: fonts.display }]}>Leftovers</Text>
             <View style={styles.list}>
               {leftovers.map((item) => (
                 <React.Fragment key={item.id}>{renderLeftover({ item })}</React.Fragment>
               ))}
             </View>
-            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>In your kitchen</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced, { fontFamily: fonts.display, fontWeight: '600' }]}>In your kitchen</Text>
           </>
         )}
 
@@ -521,7 +521,7 @@ export function KitchenScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[typography.heading, styles.title]}>Kitchen</Text>
+        <Text style={[typography.heading, styles.title, { fontFamily: fonts.display }]}>Kitchen</Text>
       </View>
 
       {/* Manage view (only view) */}

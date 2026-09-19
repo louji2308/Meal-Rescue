@@ -8,7 +8,6 @@ import type {
 } from 'expo-speech-recognition';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -23,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { MealAnalysisResponse } from '@meal-rescue/shared-types';
 
+import { WaveLoading } from '../components/WaveLoading';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { useDayPhase } from '../hooks/useDayPhase';
@@ -322,7 +322,7 @@ export function CaptureScreen() {
           )}
           {busy && (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={colors.rescueAccent} />
+              <WaveLoading />
             </View>
           )}
         </ScrollView>

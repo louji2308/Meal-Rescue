@@ -13,14 +13,12 @@ import { isQuietHours, localDayKey, sendToUser, wasNotified } from './notificati
 /**
  * Spoiler Alert - expiry-driven nudges.
  *
- * Scans pantry rows whose `expiresAt` lands within the next 48 hours and
- * that have gone untouched for a week (or were never used after being
- * added more than a week ago). One notification per user per day max,
- * naming the ingredient that will spoil first.
+ * Scans pantry rows whose `expiresAt` lands within the next 48 hours.
+ * One notification per user per day max, naming the ingredient that will
+ * spoil first.
  */
 
 const EXPIRY_WINDOW_MS = 48 * 3_600_000;
-const STALE_AFTER_MS = 7 * 24 * 3_600_000;
 const MAX_USERS_PER_TICK = 50;
 
 export interface ExpiringItem {
@@ -34,14 +32,9 @@ export async function findSpoilerCandidates(
   models: Pick<DbModels, 'Pantry'>,
   now: Date = new Date(),
 ): Promise<ExpiringItem[]> {
-  const weekAgo = new Date(now.getTime() - STALE_AFTER_MS);
   const rows = await models.Pantry.findAll({
     where: {
       expiresAt: { [Op.ne]: null, [Op.between]: [now, new Date(now.getTime() + EXPIRY_WINDOW_MS)] },
-      [Op.or]: [
-        { lastUsedAt: { [Op.ne]: null, [Op.lt]: weekAgo } },
-        { lastUsedAt: null, addedAt: { [Op.lt]: weekAgo } },
-      ],
     },
     order: [['expiresAt', 'ASC']],
     attributes: ['id', 'userId', 'ingredientName'],

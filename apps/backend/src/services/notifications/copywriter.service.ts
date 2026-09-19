@@ -29,7 +29,7 @@ export interface PushCopy {
 }
 
 export interface WritePushCopyInput {
-  kind: 'rescue_window' | 'spoiler_alert' | 'pick_for_me' | 'generic';
+  kind: 'spoiler_alert' | 'generic';
   context?: Record<string, unknown>;
 }
 
@@ -60,17 +60,6 @@ function clamp(text: string, max: number): string {
   return flat.length <= max ? flat : `${flat.slice(0, Math.max(0, max - 1))}\u2026`;
 }
 
-function listFoods(context: Record<string, unknown>): string {
-  const raw = context.foods;
-  const foods = Array.isArray(raw)
-    ? raw.filter((f): f is string => typeof f === 'string' && Boolean(f.trim()))
-    : [];
-  const names = foods.map((f) => f.trim());
-  if (names.length === 0) return str(context, 'item') ?? 'your leftovers';
-  if (names.length === 1) return names[0]!;
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
-}
-
 /**
  * Deterministic per-kind templates. These are seen by real users whenever
  * the model is unavailable, so each one reads like product copy.
@@ -80,36 +69,12 @@ export function fallbackCopy(
   ctx: Record<string, unknown>,
 ): PushCopy {
   switch (kind) {
-    case 'rescue_window': {
-      const mealtimeLabel = str(ctx, 'mealtimeLabel') ?? 'your usual time';
-      const dish = str(ctx, 'dish') ?? 'something good';
-      const mins = num(ctx, 'mins') ?? 15;
-      return {
-        title: clamp(`Quick win before ${mealtimeLabel}`, PUSH_TITLE_MAX),
-        body: clamp(
-          `Your ${listFoods(ctx)} can become ${dish} in about ${mins} min.`,
-          PUSH_BODY_MAX,
-        ),
-      };
-    }
     case 'spoiler_alert': {
       const item = str(ctx, 'item') ?? 'an ingredient';
       const mins = num(ctx, 'mins') ?? 20;
       return {
         title: clamp(`${item} expires soon`, PUSH_TITLE_MAX),
         body: clamp(`Turn it into dinner in about ${mins} minutes - here's how.`, PUSH_BODY_MAX),
-      };
-    }
-    case 'pick_for_me': {
-      const dish = str(ctx, 'dish') ?? 'something tasty';
-      const mins = num(ctx, 'mins') ?? 20;
-      const foods = listFoods(ctx);
-      return {
-        title: clamp("Can't decide tonight?", PUSH_TITLE_MAX),
-        body: clamp(
-          `We picked one for you: ${dish}. ${mins} min \u00b7 uses ${foods}.`,
-          PUSH_BODY_MAX,
-        ),
       };
     }
     default:
