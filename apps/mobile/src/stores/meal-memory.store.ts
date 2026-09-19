@@ -10,6 +10,7 @@ import type {
   MealMemoryUpdateMealRequest,
   MealMemoryWeekResponse,
   MealRule,
+  PlanPreviewResponse,
   PlanWeekRequest,
 } from '@meal-rescue/shared-types';
 
@@ -25,6 +26,8 @@ import {
   planWeek,
   postFeedback,
   postIntent,
+  postPlanConfirm,
+  postPlanPreview,
   recordActual,
   remember,
   removeMeal,
@@ -71,6 +74,10 @@ interface MealMemoryState {
   lastMessage: string | null;
   /** Recently eaten meals (for quick re-planning). */
   recentMeals: MealEvent[];
+  /** Plan preview for review before confirmation. */
+  planPreview: PlanPreviewResponse | null;
+  /** Whether the plan review modal is visible. */
+  showPlanReview: boolean;
   /** Auto-save flush indicator (debounced cell/ingredient edits). */
   saveStatus: SaveStatus;
 
@@ -94,6 +101,9 @@ interface MealMemoryState {
   loadRules: () => Promise<void>;
   addRule: (input: MealMemoryCreateRuleRequest) => Promise<void>;
   deactivateRule: (ruleId: string) => Promise<void>;
+  requestPlanPreview: (text: string) => Promise<void>;
+  confirmPlan: (previewId: string, edits?: string) => Promise<void>;
+  cancelPlanReview: () => void;
   clearError: () => void;
   reset: () => void;
 }
@@ -162,6 +172,8 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   rules: [],
   lastMessage: null,
   recentMeals: [],
+  planPreview: null,
+  showPlanReview: false,
   saveStatus: 'idle',
   busy: false,
   error: null,
@@ -206,6 +218,14 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
     set({ busy: true, error: null });
     try {
       const response = await postIntent({ text });
+      const intent = response.resolution?.intent;
+      const isPlanningIntent = intent === 'PLAN_WEEK' || intent === 'REPLAN';
+      
+      if (isPlanningIntent) {
+        await get().requestPlanPreview(text);
+        return response;
+      }
+      
       set({ pendingIntent: response, lastMessage: response.result?.message ?? null });
       await get().loadWeek();
       await get().loadRules();
@@ -239,6 +259,38 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
     } finally {
       set({ busy: false });
     }
+  },
+
+  requestPlanPreview: async (text) => {
+    set({ busy: true, error: null });
+    try {
+      const preview = await postPlanPreview(text);
+      set({ planPreview: preview, showPlanReview: true, lastMessage: preview.message });
+    } catch (err) {
+      set({ error: toApiError(err) });
+      throw err;
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  confirmPlan: async (previewId, edits) => {
+    set({ busy: true, error: null });
+    try {
+      await postPlanConfirm({ previewId, edits });
+      set({ planPreview: null, showPlanReview: false, lastMessage: 'Plan confirmed.' });
+      await get().loadWeek();
+      await get().loadRecents();
+    } catch (err) {
+      set({ error: toApiError(err) });
+      throw err;
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  cancelPlanReview: () => {
+    set({ planPreview: null, showPlanReview: false });
   },
 
   planThisWeek: async (input) => {
@@ -468,6 +520,8 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
       rules: [],
       lastMessage: null,
       recentMeals: [],
+      planPreview: null,
+      showPlanReview: false,
       saveStatus: 'idle',
       busy: false,
       error: null,
