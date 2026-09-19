@@ -22,8 +22,9 @@ import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { MealPlanLoading } from '../components/meal-plan';
+import { PlanReviewPopup } from '../components/PlanReviewPopup';
 import { Pressable } from '../components/motion/Pressable';
-import type { HomeStackParamList } from '../navigation/AppNavigator';
+import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
 import { useCommonTableStore } from '../stores/common-table.store';
 import { useMealMemoryStore } from '../stores/meal-memory.store';
 import { colors, fonts, spacing, typography } from '../theme';
@@ -156,12 +157,6 @@ function SlotConceptEditor({ meal }: { meal: MealEvent }) {
  */
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<string>);
 
-/**
- * A single day cell in the month strip. Memoized so busy/save-status/typing
- * re-renders don't rebuild all ~31 cells; each cell only re-renders when its
- * own props change, while the shared scrollX Animated value keeps the
- * distance-based scale/opacity running on the UI thread.
- */
 const DayCell = React.memo(function DayCell({
   dateKey,
   index,
@@ -230,6 +225,7 @@ export function MealPlanScreen() {
   const bottomInset = Math.max(insets.bottom, 14);
   const composerBottomPad = bottomInset + 86 - insets.bottom + spacing.sm;
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [input, setInput] = useState('');
   const [answer, setAnswer] = useState('');
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
@@ -242,6 +238,8 @@ export function MealPlanScreen() {
   const busy = useMealMemoryStore((s) => s.busy);
   const error = useMealMemoryStore((s) => s.error);
   const saveStatus = useMealMemoryStore((s) => s.saveStatus);
+  const planPreview = useMealMemoryStore((s) => s.planPreview);
+  const showPlanReview = useMealMemoryStore((s) => s.showPlanReview);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadWeek = useMealMemoryStore((s) => s.loadWeek);
@@ -253,6 +251,9 @@ export function MealPlanScreen() {
   const markActual = useMealMemoryStore((s) => s.markActual);
   const feedBack = useMealMemoryStore((s) => s.feedBack);
   const loadRecents = useMealMemoryStore((s) => s.loadRecents);
+  const requestPlanPreview = useMealMemoryStore((s) => s.requestPlanPreview);
+  const confirmPlan = useMealMemoryStore((s) => s.confirmPlan);
+  const cancelPlanReview = useMealMemoryStore((s) => s.cancelPlanReview);
 
   const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
   const householdMembers = useCommonTableStore((s) => s.members);
@@ -461,6 +462,15 @@ export function MealPlanScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <PlanReviewPopup
+        visible={showPlanReview}
+        preview={planPreview}
+        onAccept={() => confirmPlan(planPreview!.previewId)}
+        onEdit={(edits) => requestPlanPreview(edits)}
+        onUpgrade={() => rootNavigation.navigate('Paywall')}
+        onCancel={cancelPlanReview}
+        busy={busy}
+      />
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
@@ -555,7 +565,7 @@ export function MealPlanScreen() {
                   })}
                   onScroll={Animated.event(
                     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                    { useNativeDriver: true },
+                    { useNativeDriver: false },
                   )}
                   scrollEventThrottle={16}
                   onMomentumScrollEnd={handleDayMomentumScrollEnd}
