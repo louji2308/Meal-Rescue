@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
 import type { UUID } from '@meal-rescue/shared-types';
+import { z } from 'zod';
 
 import { env } from '../config/env';
 import type { Db } from '../database/models';
-import { AppError, ErrorCategory } from '../lib/errors';
 import type { LlmClient } from './ai/llm-client';
+import type { KitchenVisionContext } from './ai/prompts';
 import { VisionService } from './ai/vision.service';
-import { TextExtractionService } from './ai/text-extraction.service';
 import { PantryService, canonicalizeIngredientName } from './pantry.service';
 
 // ---------------------------------------------------------------------------
@@ -15,7 +15,6 @@ import { PantryService, canonicalizeIngredientName } from './pantry.service';
 // ---------------------------------------------------------------------------
 
 export type CaptureSource = 'CAMERA' | 'PHOTO' | 'MANUAL';
-
 export type ItemType = 'INGREDIENT' | 'PREPARED_MEAL' | 'LEFTOVER' | 'PACKAGED_FOOD';
 export type ItemState = 'RAW' | 'COOKED' | 'READY_TO_EAT' | 'UNKNOWN';
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
@@ -27,16 +26,17 @@ export interface CapturedItem {
   state: ItemState;
   quantity: number | null;
   unit: string | null;
+  /** Approx. people this prepared meal / leftover feeds. Null otherwise. */
+  servings: number | null;
   confidence: number;
   confidenceTier: ConfidenceTier;
   source: CaptureSource;
-  /** If this item matches an existing pantry item */
+  estimatedExpiryDays: number | null;
   duplicateOf?: {
     id: string;
     currentQuantity: number | null;
     currentUnit: string | null;
   };
-  /** User clarification needed */
   clarification?: {
     question: string;
     options: string[];
@@ -64,6 +64,8 @@ export interface CaptureConfirmRequest {
     state?: ItemState;
     quantity?: number | null;
     unit?: string | null;
+    servings?: number | null;
+    estimatedExpiryDays?: number | null;
     duplicateAction?: 'UPDATE' | 'ADD_MORE' | 'SKIP';
   }>;
 }
@@ -75,85 +77,93 @@ export interface CaptureConfirmResult {
 }
 
 // ---------------------------------------------------------------------------
-// Capture prompt for combined vision + kitchen context
+// Expiry inference lookup — maps ingredient names to estimated shelf life
 // ---------------------------------------------------------------------------
 
-const CAPTURE_VISION_PROMPT = `You are a kitchen vision AI. Analyze this image and identify ALL food items visible.
+const EXPIRY_DAYS: Record<string, number> = {
+  // Dairy
+  milk: 7, 'whole milk': 7, '2% milk': 7, yogurt: 14, 'greek yogurt': 14,
+  cheese: 21, cheddar: 21, mozzarella: 14, butter: 30, cream: 7,
+  'sour cream': 14, 'cream cheese': 14,
 
-For each item, provide:
-- name: specific food name (e.g., "eggs" not "food")
-- confidence: 0.0-1.0 how sure you are
-- state: "raw" (uncooked ingredient), "cooked" (prepared), "processed" (packaged), "mixed"
-- estimatedQuantity: number if countable, null if uncertain
-- unit: "pieces", "cups", "grams", "ml", etc. if determinable, null otherwise
-- itemType: "INGREDIENT" (raw food item), "PREPARED_MEAL" (cooked dish), "LEFTOVER" (previously cooked), "PACKAGED_FOOD" (store-bought package)
+  // Eggs
+  egg: 28, eggs: 28,
 
-RULES:
-- Be specific: "eggs" not "protein source"
-- Count visible items when possible (6 eggs, 3 tomatoes)
-- If something is ambiguous, lower confidence and suggest what it might be
-- Do NOT invent items you cannot see
-- For leftovers, note "leftover" in the name if context suggests it
-- For packaged items, note the brand if visible
+  // Meat
+  'chicken breast': 2, chicken: 2, 'ground beef': 2, beef: 3, pork: 3,
+  fish: 2, salmon: 2, shrimp: 2, turkey: 3, bacon: 7, sausage: 7,
+  'deli meat': 5, ham: 7,
 
-Respond ONLY with JSON:
-{
-  "items": [
-    {
-      "name": "string",
-      "confidence": 0.0-1.0,
-      "state": "raw|cooked|processed|mixed",
-      "estimatedQuantity": number|null,
-      "unit": "string|null",
-      "itemType": "INGREDIENT|PREPARED_MEAL|LEFTOVER|PACKAGED_FOOD"
-    }
-  ]
-}`;
+  // Produce — vegetables
+  tomato: 5, tomatoes: 5, onion: 21, onions: 21, garlic: 30, potato: 21,
+  potatoes: 21, carrot: 21, carrots: 21, cucumber: 7, lettuce: 5,
+  spinach: 3, broccoli: 5, 'bell pepper': 7, 'green beans': 5, corn: 3,
+  celery: 14, mushroom: 5, mushrooms: 5, zucchini: 5, avocado: 3,
 
-const CAPTURE_TEXT_PROMPT = `You are a kitchen text parser. Convert this natural-language description of food items into structured data.
+  // Produce — fruits
+  apple: 14, apples: 14, banana: 5, bananas: 5, orange: 14, oranges: 14,
+  lemon: 21, limes: 21, strawberry: 3, strawberries: 3, blueberry: 5,
+  grapes: 7, mango: 5, peach: 3,
 
-Input examples:
-- "4 eggs, some leftover rice and half an onion"
-- "2 eggs + cucumber + leftover biryani"
-- "I have some cooked rice, tomato and yogurt"
-- "whatever is in my fridge"
-- "leftover chicken curry from lunch"
+  // Grains / pantry
+  bread: 5, 'sliced bread': 5, rice: 365, 'white rice': 365, 'brown rice': 180,
+  pasta: 365, spaghetti: 365, flour: 180, sugar: 365, oats: 180,
+  cereal: 90, 'tortilla': 14, tortillas: 14,
 
-For each item, provide:
-- name: canonical food name
-- confidence: 0.0-1.0
-- state: "raw", "cooked", "processed", "mixed"
-- estimatedQuantity: number if specified (handle "some", "a little", "half" as approximate), null if unknown
-- unit: "pieces", "cups", "grams", etc. if inferable, null otherwise
-- itemType: "INGREDIENT", "PREPARED_MEAL", "LEFTOVER", "PACKAGED_FOOD"
+  // Condiments
+  'soy sauce': 365, ketchup: 90, mustard: 90, mayo: 60, 'olive oil': 365,
+  vinegar: 365, 'hot sauce': 365, sriracha: 365,
 
-RULES:
-- Normalize quantities: "some" → null quantity, "half an onion" → 0.5
-- "leftover X" → itemType: "LEFTOVER", state: "cooked"
-- "cooked X" → state: "cooked"
-- "raw X" → state: "raw"
-- Be specific: "biryani" → "biryani", not "rice dish"
-- If input is too vague ("whatever is in my fridge"), return empty items array
+  // Leftovers (default short shelf life)
+  leftover: 3, biryani: 3, curry: 3, 'stir fry': 3, soup: 4, stew: 3,
+  'fried rice': 3, 'pasta dish': 3,
+};
 
-Respond ONLY with JSON:
-{
-  "items": [
-    {
-      "name": "string",
-      "confidence": 0.0-1.0,
-      "state": "raw|cooked|processed|mixed",
-      "estimatedQuantity": number|null,
-      "unit": "string|null",
-      "itemType": "INGREDIENT|PREPARED_MEAL|LEFTOVER|PACKAGED_FOOD"
-    }
-  ]
-}`;
+// ---------------------------------------------------------------------------
+// Default units / quantities per item type
+// ---------------------------------------------------------------------------
+
+const DEFAULT_UNITS: Record<string, { unit: string; quantity: number }> = {
+  egg: { unit: 'pcs', quantity: 6 },
+  eggs: { unit: 'pcs', quantity: 6 },
+  milk: { unit: 'L', quantity: 1 },
+  'whole milk': { unit: 'L', quantity: 1 },
+  yogurt: { unit: 'g', quantity: 500 },
+  cheese: { unit: 'g', quantity: 200 },
+  butter: { unit: 'g', quantity: 250 },
+  tomato: { unit: 'pcs', quantity: 3 },
+  tomatoes: { unit: 'pcs', quantity: 3 },
+  onion: { unit: 'pcs', quantity: 2 },
+  onions: { unit: 'pcs', quantity: 2 },
+  garlic: { unit: 'pcs', quantity: 1 },
+  potato: { unit: 'pcs', quantity: 4 },
+  potatoes: { unit: 'pcs', quantity: 4 },
+  carrot: { unit: 'pcs', quantity: 3 },
+  carrots: { unit: 'pcs', quantity: 3 },
+  rice: { unit: 'g', quantity: 500 },
+  pasta: { unit: 'g', quantity: 500 },
+  bread: { unit: 'pcs', quantity: 1 },
+  apple: { unit: 'pcs', quantity: 3 },
+  banana: { unit: 'pcs', quantity: 4 },
+  chicken: { unit: 'g', quantity: 500 },
+  'chicken breast': { unit: 'g', quantity: 500 },
+  beef: { unit: 'g', quantity: 500 },
+  fish: { unit: 'g', quantity: 300 },
+  oil: { unit: 'ml', quantity: 500 },
+  'olive oil': { unit: 'ml', quantity: 500 },
+  water: { unit: 'L', quantity: 1 },
+  cucumber: { unit: 'pcs', quantity: 2 },
+  lettuce: { unit: 'pcs', quantity: 1 },
+  mushroom: { unit: 'g', quantity: 250 },
+  mushrooms: { unit: 'g', quantity: 250 },
+  lemon: { unit: 'pcs', quantity: 2 },
+  lime: { unit: 'pcs', quantity: 2 },
+  ginger: { unit: 'g', quantity: 50 },
+};
 
 // ---------------------------------------------------------------------------
 // Zod schema for LLM response
 // ---------------------------------------------------------------------------
-
-import { z } from 'zod';
 
 const capturedItemSchema = z.object({
   name: z.string().min(1).max(120),
@@ -169,12 +179,54 @@ const captureResponseSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// AI prompt for text parsing (DeepSeek via OpenRouter)
+// ---------------------------------------------------------------------------
+
+const CAPTURE_TEXT_PROMPT = `You are a kitchen text parser. Convert this natural-language description of food items into structured data.
+
+Input examples:
+- "4 eggs, some leftover rice and half an onion"
+- "2 eggs + cucumber + leftover biryani"
+- "I have some cooked rice, tomato and yogurt"
+- "bought milk, bread, and chicken breast"
+- "leftover chicken curry from lunch"
+
+For each item, provide:
+- name: canonical food name (lowercase, singular preferred: "egg" not "eggs")
+- confidence: 0.0-1.0
+- state: "raw", "cooked", "processed", "mixed"
+- estimatedQuantity: number if specified (handle "some" → null, "half" → 0.5, "a" → 1), null if unknown
+- unit: infer sensible unit — "pcs" for countable items (eggs, tomatoes, onion), "g" for meat/cheese/veg by weight, "L" or "ml" for liquids, "g" for rice/pasta/grains. null if unsure
+- itemType: "INGREDIENT" for raw foods, "LEFTOVER" for "leftover X" or "cooked X", "PREPARED_MEAL" for named dishes (biryani, curry, pasta), "PACKAGED_FOOD" for store items
+
+RULES:
+- Normalize quantities: "some" → null, "half an onion" → 0.5, "a cup of" → estimate in grams
+- "leftover X" → itemType: "LEFTOVER", state: "cooked"
+- "cooked X" → state: "cooked"
+- Be specific: "biryani" stays "biryani", not "rice dish"
+- Infer the most likely unit based on how people buy/store the item
+- If input is too vague, return empty items array
+
+Respond ONLY with JSON:
+{
+  "items": [
+    {
+      "name": "string",
+      "confidence": 0.0-1.0,
+      "state": "raw|cooked|processed|mixed",
+      "estimatedQuantity": number|null,
+      "unit": "string|null",
+      "itemType": "INGREDIENT|PREPARED_MEAL|LEFTOVER|PACKAGED_FOOD"
+    }
+  ]
+}`;
+
+// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
 export class KitchenCaptureService {
   private readonly vision: VisionService;
-  private readonly textExtraction: TextExtractionService;
   private readonly pantry: PantryService;
   private readonly models: Db['models'];
 
@@ -182,22 +234,22 @@ export class KitchenCaptureService {
     llm: LlmClient,
     models: Db['models'],
     redis?: import('ioredis').Redis | null,
+    visionLlm: LlmClient = llm,
   ) {
-    this.vision = new VisionService(llm, redis);
-    this.textExtraction = new TextExtractionService(llm);
+    this.vision = new VisionService(visionLlm, redis ?? null);
     this.pantry = new PantryService(models);
     this.models = models;
   }
 
-  /**
-   * Process a camera/photo capture or natural-language text input
-   * into structured kitchen items with confidence tiers.
-   */
   async capture(
     userId: UUID,
     input:
       | { source: 'CAMERA' | 'PHOTO'; imageBase64: string; mimeType?: string }
       | { source: 'MANUAL'; text: string },
+    options?: {
+      cuisines?: string[];
+      context?: KitchenVisionContext;
+    },
   ): Promise<CaptureResult> {
     let rawItems: Array<{
       name: string;
@@ -206,22 +258,20 @@ export class KitchenCaptureService {
       estimatedQuantity: number | null;
       unit: string | null;
       itemType: string;
+      servings: number | null;
     }>;
 
     if (input.source === 'CAMERA' || input.source === 'PHOTO') {
-      rawItems = await this.processImage(input.imageBase64, input.mimeType ?? 'image/jpeg');
+      rawItems = await this.processImage(input.imageBase64, options);
     } else {
-      rawItems = await this.processText(input.text);
+      rawItems = await this.processText((input as { source: 'MANUAL'; text: string }).text);
     }
 
-    // Normalize and classify
     const items: CapturedItem[] = [];
     for (const raw of rawItems) {
-      const normalized = this.normalizeItem(raw, input.source);
-      items.push(normalized);
+      items.push(this.normalizeItem(raw, input.source));
     }
 
-    // Check for duplicates against existing pantry
     const existingPantry = await this.pantry.getPantry(userId);
     const existingNames = new Set(
       existingPantry.ingredients.map((i) => i.ingredientName.toLowerCase()),
@@ -251,60 +301,63 @@ export class KitchenCaptureService {
       duplicates: items.filter((i) => i.duplicateOf).length,
     };
 
-    return {
-      items,
-      summary,
-      imageBase64: input.source !== 'MANUAL' ? input.imageBase64 : undefined,
-    };
+    return { items, summary, imageBase64: input.source !== 'MANUAL' ? input.imageBase64 : undefined };
   }
 
-  /**
-   * Save confirmed items to the pantry.
-   */
   async confirm(userId: UUID, request: CaptureConfirmRequest): Promise<CaptureConfirmResult> {
     let added = 0;
     let updated = 0;
     let skipped = 0;
 
-    for (const item of request.items) {
-      if (!item.accepted) {
-        skipped++;
-        continue;
-      }
+    const existingPantry = await this.pantry.getPantry(userId);
+    const existingByName = new Map(
+      existingPantry.ingredients.map((i) => [i.ingredientName.toLowerCase(), i]),
+    );
 
-      if (item.duplicateAction === 'SKIP') {
-        skipped++;
-        continue;
-      }
+    for (const item of request.items) {
+      if (!item.accepted) { skipped++; continue; }
+      if (item.duplicateAction === 'SKIP') { skipped++; continue; }
 
       const name = item.displayName ?? 'Unknown item';
       const kind = this.itemTypeToKind(item.itemType ?? 'INGREDIENT');
+      const isFood = item.itemType === 'PREPARED_MEAL' || item.itemType === 'LEFTOVER';
+      const canonical = canonicalizeIngredientName(name);
+      const existing = existingByName.get(canonical.toLowerCase());
 
-      if (item.duplicateOf && item.duplicateAction === 'UPDATE') {
+      const expiryDays = item.estimatedExpiryDays;
+      const expiresAt = expiryDays != null
+        ? new Date(Date.now() + expiryDays * 86400000).toISOString()
+        : undefined;
+
+      const upsertBase = {
+        ingredientName: name,
+        quantity: item.quantity ?? undefined,
+        unit: item.unit ?? undefined,
+        kind,
+        expiresAt,
+        ...(isFood
+          ? {
+              dishName: name,
+              servings: item.servings ?? 2,
+              madeAt: new Date().toISOString(),
+            }
+          : {}),
+      };
+
+      if (existing && item.duplicateAction === 'UPDATE') {
         await this.pantry.upsertItem(userId, {
-          ingredientName: name,
-          quantity: item.quantity ?? undefined,
-          unit: item.unit ?? undefined,
-          kind,
+          ...upsertBase,
           mergeQuantity: false,
         });
         updated++;
-      } else if (item.duplicateOf && item.duplicateAction === 'ADD_MORE') {
+      } else if (existing && item.duplicateAction === 'ADD_MORE') {
         await this.pantry.upsertItem(userId, {
-          ingredientName: name,
-          quantity: item.quantity ?? undefined,
-          unit: item.unit ?? undefined,
-          kind,
+          ...upsertBase,
           mergeQuantity: true,
         });
         updated++;
       } else {
-        await this.pantry.upsertItem(userId, {
-          ingredientName: name,
-          quantity: item.quantity ?? undefined,
-          unit: item.unit ?? undefined,
-          kind,
-        });
+        await this.pantry.upsertItem(userId, upsertBase);
         added++;
       }
     }
@@ -316,7 +369,7 @@ export class KitchenCaptureService {
 
   private async processImage(
     imageBase64: string,
-    mimeType: string,
+    options?: { cuisines?: string[]; context?: KitchenVisionContext },
   ): Promise<Array<{
     name: string;
     confidence: number;
@@ -324,11 +377,17 @@ export class KitchenCaptureService {
     estimatedQuantity: number | null;
     unit: string | null;
     itemType: string;
+    servings: number | null;
   }>> {
     const buffer = Buffer.from(imageBase64, 'base64');
-    const result = await this.vision.analyzeImage(buffer);
+    const result = await this.vision.analyzeKitchenImage(buffer, {
+      cuisines: options?.cuisines,
+      context: options?.context,
+    });
 
-    // Map vision result to capture items
+    // Kitchen analyzer JSON style: two destinations. leftovers[] map to
+    // pantry leftovers; kitchen[] map to pantry ingredients/packaged items.
+    // No recipe decomposition - a dish is one entry, never its ingredients.
     const items: Array<{
       name: string;
       confidence: number;
@@ -336,33 +395,31 @@ export class KitchenCaptureService {
       estimatedQuantity: number | null;
       unit: string | null;
       itemType: string;
+      servings: number | null;
     }> = [];
 
-    // Use ingredients as primary (they have state + quantity)
-    for (const ing of result.ingredients) {
+    for (const leftover of result.leftovers) {
       items.push({
-        name: ing.name,
-        confidence: ing.confidence,
-        state: ing.state,
-        estimatedQuantity: this.parseQuantity(ing.estimatedQuantity),
-        unit: this.parseUnit(ing.estimatedQuantity),
-        itemType: this.inferItemType(ing.name, ing.state),
+        name: leftover.name,
+        confidence: leftover.confidence,
+        state: leftover.state === 'packaged' ? 'processed' : leftover.state === 'unknown' ? 'unknown' : leftover.state,
+        estimatedQuantity: null,
+        unit: this.inferUnit(leftover.name),
+        itemType: 'LEFTOVER',
+        servings: 2,
       });
     }
 
-    // Add any foods not already covered by ingredients
-    const ingredientNames = new Set(items.map((i) => i.name.toLowerCase()));
-    for (const food of result.foods) {
-      if (!ingredientNames.has(food.name.toLowerCase())) {
-        items.push({
-          name: food.name,
-          confidence: food.confidence,
-          state: 'unknown',
-          estimatedQuantity: null,
-          unit: null,
-          itemType: this.inferItemType(food.name, 'unknown'),
-        });
-      }
+    for (const item of result.kitchen) {
+      items.push({
+        name: item.name,
+        confidence: item.confidence,
+        state: item.state === 'packaged' ? 'processed' : item.state === 'unknown' ? 'unknown' : item.state,
+        estimatedQuantity: null,
+        unit: this.inferUnit(item.name),
+        itemType: item.itemType === 'PACKAGED_FOOD' ? 'PACKAGED_FOOD' : 'INGREDIENT',
+        servings: null,
+      });
     }
 
     return items;
@@ -377,47 +434,53 @@ export class KitchenCaptureService {
     estimatedQuantity: number | null;
     unit: string | null;
     itemType: string;
+    servings: number | null;
   }>> {
-    // Use the LLM directly for text parsing since TextExtractionService
-    // returns a different shape than what we need
-    if (!env.OPENAI_API_KEY) {
-      return this.parseTextFallback(text);
-    }
-
-    try {
-      const response = await fetch(
-        `${env.OPENAI_BASE_URL ?? 'https://openrouter.ai/api/v1'}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-            ...(env.OPENAI_TEXT_MODEL?.startsWith('z-ai/') ? {} : {}),
+    if (env.OPENROUTER_API_KEY) {
+      try {
+        const response = await fetch(
+          'https://openrouter.ai/api/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'deepseek/deepseek-chat-v3-0324:free',
+              messages: [
+                { role: 'system', content: CAPTURE_TEXT_PROMPT },
+                { role: 'user', content: text },
+              ],
+              temperature: 0.2,
+              max_tokens: 1000,
+            }),
           },
-          body: JSON.stringify({
-            model: env.OPENAI_TEXT_MODEL ?? 'openrouter/free',
-            messages: [
-              { role: 'system', content: CAPTURE_TEXT_PROMPT },
-              { role: 'user', content: text },
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.2,
-            max_tokens: 1000,
-            ...(env.OPENAI_TEXT_MODEL?.startsWith('z-ai/') ? { reasoning: { enabled: false } } : {}),
-          }),
-        },
-      );
+        );
 
-      if (!response.ok) throw new Error(`LLM error: ${response.status}`);
-      const data = (await response.json()) as {
-        choices: Array<{ message: { content: string } }>;
-      };
-      const content = data.choices?.[0]?.message?.content ?? '{}';
-      const parsed = captureResponseSchema.parse(JSON.parse(content));
-      return parsed.items;
-    } catch {
-      return this.parseTextFallback(text);
+        if (response.ok) {
+          const data = (await response.json()) as {
+            choices: Array<{ message: { content: string } }>;
+          };
+          const content = data.choices?.[0]?.message?.content ?? '{}';
+          const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const parsed = captureResponseSchema.parse(JSON.parse(cleaned));
+          return parsed.items.map((item) => ({
+            name: item.name,
+            confidence: item.confidence,
+            state: item.state,
+            estimatedQuantity: item.estimatedQuantity ?? null,
+            unit: item.unit ?? this.inferUnit(item.name),
+            itemType: item.itemType,
+            servings: null,
+          }));
+        }
+      } catch {
+        // Fall through to heuristic
+      }
     }
+
+    return this.parseTextFallback(text);
   }
 
   private parseTextFallback(text: string): Array<{
@@ -427,8 +490,8 @@ export class KitchenCaptureService {
     estimatedQuantity: number | null;
     unit: string | null;
     itemType: string;
+    servings: number | null;
   }> {
-    // Simple regex-based fallback for common patterns
     const items: Array<{
       name: string;
       confidence: number;
@@ -436,9 +499,9 @@ export class KitchenCaptureService {
       estimatedQuantity: number | null;
       unit: string | null;
       itemType: string;
+      servings: number | null;
     }> = [];
 
-    // Split on commas, +, and
     const parts = text.split(/[,+]|\band\b/i).map((s) => s.trim()).filter(Boolean);
 
     for (const part of parts) {
@@ -448,14 +511,12 @@ export class KitchenCaptureService {
       let state = 'unknown';
       let itemType = 'INGREDIENT';
 
-      // Parse quantity prefixes
       const qtyMatch = lower.match(/^(\d+(?:\.\d+)?)\s+/);
       if (qtyMatch) {
-        quantity = parseFloat(qtyMatch[1]);
+        quantity = parseFloat(qtyMatch[1]!);
         name = lower.slice(qtyMatch[0].length);
       }
 
-      // Handle "half", "quarter", etc.
       if (name.startsWith('half ')) {
         quantity = 0.5;
         name = name.slice(5);
@@ -464,7 +525,6 @@ export class KitchenCaptureService {
         name = name.replace(/^(a|an)\s+/, '');
       }
 
-      // Detect state
       if (lower.includes('leftover')) {
         state = 'cooked';
         itemType = 'LEFTOVER';
@@ -477,7 +537,6 @@ export class KitchenCaptureService {
         name = name.replace('raw', '').trim();
       }
 
-      // Detect "some", "a little"
       if (name.startsWith('some ') || name.startsWith('a little ')) {
         quantity = null;
         name = name.replace(/^(some|a little)\s+/, '');
@@ -489,8 +548,9 @@ export class KitchenCaptureService {
           confidence: 0.7,
           state,
           estimatedQuantity: quantity,
-          unit: null,
+          unit: this.inferUnit(name),
           itemType,
+          servings: null,
         });
       }
     }
@@ -506,22 +566,45 @@ export class KitchenCaptureService {
       estimatedQuantity: number | null;
       unit: string | null;
       itemType: string;
+      servings: number | null;
     },
     source: CaptureSource,
   ): CapturedItem {
+    const canonical = canonicalizeIngredientName(raw.name);
+    const lookupName = canonical.toLowerCase();
     const confidenceTier: ConfidenceTier =
       raw.confidence >= 0.8 ? 'HIGH' : raw.confidence >= 0.5 ? 'MEDIUM' : 'LOW';
+
+    // Infer expiry from lookup table
+    const estimatedExpiryDays = this.inferExpiry(lookupName, raw.itemType);
+
+    // Apply default quantity/unit if not specified
+    let quantity = raw.estimatedQuantity;
+    let unit = raw.unit;
+    if (quantity == null && unit == null) {
+      const defaults = DEFAULT_UNITS[lookupName];
+      if (defaults) {
+        quantity = defaults.quantity;
+        unit = defaults.unit;
+      }
+    } else if (unit == null) {
+      unit = this.inferUnit(lookupName);
+    }
+
+    const isFood = raw.itemType === 'PREPARED_MEAL' || raw.itemType === 'LEFTOVER';
 
     return {
       id: randomUUID(),
       displayName: this.titleCase(raw.name),
       itemType: raw.itemType as ItemType,
       state: this.mapState(raw.state),
-      quantity: raw.estimatedQuantity,
-      unit: raw.unit,
+      quantity,
+      unit,
+      servings: isFood ? raw.servings ?? 2 : null,
       confidence: raw.confidence,
       confidenceTier,
       source,
+      estimatedExpiryDays,
       clarification:
         confidenceTier === 'LOW'
           ? {
@@ -532,74 +615,58 @@ export class KitchenCaptureService {
     };
   }
 
-  private mapState(raw: string): ItemState {
-    switch (raw.toLowerCase()) {
-      case 'raw':
-        return 'RAW';
-      case 'cooked':
-        return 'COOKED';
-      case 'processed':
-        return 'READY_TO_EAT';
-      case 'mixed':
-        return 'UNKNOWN';
-      default:
-        return 'UNKNOWN';
+  private inferExpiry(name: string, itemType: string): number | null {
+    // Leftovers always short
+    if (itemType === 'LEFTOVER') return EXPIRY_DAYS.leftover ?? 3;
+
+    // Direct lookup
+    if (EXPIRY_DAYS[name] != null) return EXPIRY_DAYS[name];
+
+    // Partial match — check if any key is contained in the name
+    for (const [key, days] of Object.entries(EXPIRY_DAYS)) {
+      if (name.includes(key) || key.includes(name)) return days;
     }
+
+    // Default by type
+    if (itemType === 'PACKAGED_FOOD') return 30;
+    if (itemType === 'PREPARED_MEAL') return 3;
+    return 7; // generic produce/ingredient
   }
 
-  private inferItemType(name: string, state: string): string {
-    const lower = name.toLowerCase();
+  private inferUnit(name: string): string {
+    const lookup = name.toLowerCase();
+    if (DEFAULT_UNITS[lookup]?.unit) return DEFAULT_UNITS[lookup]!.unit;
 
-    // Leftover indicators
-    if (lower.includes('leftover') || lower.includes('from lunch') || lower.includes('from dinner')) {
-      return 'LEFTOVER';
-    }
+    // Liquid keywords
+    if (/\b(milk|water|juice|oil|vinegar|sauce|broth|cream)\b/.test(lookup)) return 'ml';
 
-    // Prepared meal indicators
-    if (
-      lower.includes('curry') ||
-      lower.includes('stir fry') ||
-      lower.includes('pasta') ||
-      lower.includes('biryani') ||
-      lower.includes('soup') ||
-      lower.includes('stew') ||
-      lower.includes('casserole')
-    ) {
-      return state === 'cooked' ? 'PREPARED_MEAL' : 'INGREDIENT';
-    }
+    // Grain/weight keywords
+    if (/\b(rice|pasta|flour|sugar|oats|cereal|cheese|meat|chicken|beef|fish|tofu)\b/.test(lookup)) return 'g';
 
-    // Packaged indicators
-    if (
-      lower.includes('package') ||
-      lower.includes('box') ||
-      lower.includes('can of') ||
-      lower.includes('bottle')
-    ) {
-      return 'PACKAGED_FOOD';
-    }
+    // Countable keywords
+    if (/\b(egg|tomato|onion|potato|carrot|apple|banana|lemon|lime|cucumber|pepper|clove)\b/.test(lookup)) return 'pcs';
 
-    return 'INGREDIENT';
+    return 'g';
   }
 
   private itemTypeToKind(itemType: ItemType): 'pantry' | 'leftover' {
-    return itemType === 'LEFTOVER' ? 'leftover' : 'pantry';
+    return itemType === 'LEFTOVER' || itemType === 'PREPARED_MEAL' ? 'leftover' : 'pantry';
+  }
+
+  private mapState(raw: string): ItemState {
+    switch (raw.toLowerCase()) {
+      case 'raw': return 'RAW';
+      case 'cooked': return 'COOKED';
+      case 'processed': return 'READY_TO_EAT';
+      case 'mixed': return 'UNKNOWN';
+      default: return 'UNKNOWN';
+    }
   }
 
   private parseQuantity(raw: string | null | undefined): number | null {
     if (!raw) return null;
     const match = raw.match(/(\d+(?:\.\d+)?)/);
-    return match ? parseFloat(match[1]) : null;
-  }
-
-  private parseUnit(raw: string | null | undefined): string | null {
-    if (!raw) return null;
-    const lower = raw.toLowerCase();
-    if (lower.includes('cup')) return 'cups';
-    if (lower.includes('gram')) return 'grams';
-    if (lower.includes('ml')) return 'ml';
-    if (lower.includes('piece') || lower.includes('pcs')) return 'pieces';
-    if (lower.includes('kg')) return 'kg';
-    return null;
+    return match ? parseFloat(match[1]!) : null;
   }
 
   private titleCase(s: string): string {
