@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { PlanningResult, SubscriptionTier, UUID } from '@meal-rescue/shared-types';
 
+import { User } from '../database/models/user.model';
 import { AppError, ErrorCategory } from '../lib/errors';
 
 /**
@@ -96,14 +97,20 @@ export class PlanPreviewService {
    * Check the plan limit for a user
    */
   async checkPlanLimit(userId: UUID): Promise<PlanLimitInfo> {
-    // In a real implementation, this would fetch from the database
-    // For now, we'll return placeholder values based on the user's tier
-    // The actual database lookup would be done by the calling service
-    return {
-      tier: 'free' as SubscriptionTier,
-      daysUsed: 0,
-      daysRemaining: PlanPreviewService.FREE_PLAN_DAY_LIMIT,
-    };
+    const user = await User.findByPk(userId, {
+      attributes: ['subscriptionTier', 'planDaysUsed'],
+    });
+
+    if (!user) {
+      throw AppError.notFound('User');
+    }
+
+    const tier = user.subscriptionTier;
+    const daysUsed = user.planDaysUsed ?? 0;
+    const daysRemaining =
+      tier === 'pro' ? Number.POSITIVE_INFINITY : Math.max(0, PlanPreviewService.FREE_PLAN_DAY_LIMIT - daysUsed);
+
+    return { tier, daysUsed, daysRemaining };
   }
 
   /**
@@ -117,8 +124,9 @@ export class PlanPreviewService {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + PlanPreviewService.PREVIEW_TTL_MS);
 
-    // Convert PlanningResult to PlannedDay format
-    const days: PlannedDay[] = this.convertPlanningResultToDays(planningResult);
+    // Days are provided by the caller after converting the PlanningResult
+    // This service only stores and manages previews; conversion happens in the routes layer.
+    const days: PlannedDay[] = [];
 
     const preview: PlanPreview = {
       id: previewId,
@@ -145,21 +153,6 @@ export class PlanPreviewService {
   }
 
   /**
-   * Convert PlanningResult to PlannedDay format
-   */
-  private convertPlanningResultToDays(result: PlanningResult): PlannedDay[] {
-    if (!result.plan) {
-      return [];
-    }
-
-    // This is a simplified conversion - in reality, the PlanningResult structure
-    // would need to be properly mapped to PlannedDay format
-    // For now, return an empty array as the actual mapping depends on the
-    // specific PlanningResult structure from the AI planning service
-    return [];
-  }
-
-  /**
    * Get a preview by ID
    */
   getPreview(previewId: UUID): PlanPreview | undefined {
@@ -183,7 +176,7 @@ export class PlanPreviewService {
    */
   async confirmPreview(
     previewId: UUID,
-    edits?: Partial<PlanPreview>
+    edits?: { days?: PlannedDay[] }
   ): Promise<{ success: boolean; preview: PlanPreview }> {
     const preview = this.getPreview(previewId);
 
@@ -206,8 +199,8 @@ export class PlanPreviewService {
     }
 
     // Apply edits if provided
-    if (edits) {
-      Object.assign(preview, edits);
+    if (edits?.days) {
+      preview.days = edits.days;
     }
 
     // Mark as confirmed
