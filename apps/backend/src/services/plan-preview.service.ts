@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { PlanningResult, SubscriptionTier, UUID } from '@meal-rescue/shared-types';
+import type { SubscriptionTier, UUID } from '@meal-rescue/shared-types';
 
 import { User } from '../database/models/user.model';
 import { AppError, ErrorCategory } from '../lib/errors';
@@ -118,15 +118,13 @@ export class PlanPreviewService {
    */
   async generatePreview(
     userId: UUID,
-    planningResult: PlanningResult
+    planningResult: { days: PlannedDay[]; daysPlanned: number }
   ): Promise<PlanPreviewResponse> {
     const previewId = randomUUID() as UUID;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + PlanPreviewService.PREVIEW_TTL_MS);
 
-    // Days are provided by the caller after converting the PlanningResult
-    // This service only stores and manages previews; conversion happens in the routes layer.
-    const days: PlannedDay[] = [];
+    const days = planningResult.days;
 
     const preview: PlanPreview = {
       id: previewId,
@@ -208,6 +206,12 @@ export class PlanPreviewService {
 
     // Update the store
     this.store.set(previewId, preview);
+
+    // Increment user's planDaysUsed
+    await User.update(
+      { planDaysUsed: User.sequelize!.literal('planDaysUsed + 1') },
+      { where: { id: preview.userId } }
+    );
 
     return {
       success: true,
