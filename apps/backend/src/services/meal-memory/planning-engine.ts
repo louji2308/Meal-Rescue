@@ -41,6 +41,8 @@ export interface PlanParams {
   ownerUserId: UUID;
   /** Restrict whose coverage the plan fills. Defaults to every household member. */
   memberIds?: UUID[];
+  /** When true, skip database persistence (for plan preview). */
+  previewMode?: boolean;
 }
 
 export interface Candidate {
@@ -209,7 +211,7 @@ export class PlanningEngine {
       reasons.push({ kind: 'open_slot', message: 'No compatible slots to fill this week.' });
     }
 
-    const plan = await this.persistPlan(world, params, events);
+    const plan = params.previewMode ? null : await this.persistPlan(world, params, events);
 
     return {
       plan,
