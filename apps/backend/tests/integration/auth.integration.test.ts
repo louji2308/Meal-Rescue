@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { buildApp } from '../../src/app';
 import { closeDatabase, initializeDatabase, sequelize } from '../../src/database';
@@ -14,6 +14,14 @@ import { closeDatabase, initializeDatabase, sequelize } from '../../src/database
  */
 const hasDb = Boolean(process.env.TEST_DATABASE_URL);
 const maybeDescribe = hasDb ? describe : describe.skip;
+
+async function createVerifyToken(redis: any, email: string): Promise<string> {
+  const token = `test-verify-${randomBytes(16).toString('hex')}`;
+  if (redis) {
+    await redis.set(`verify-token:${token}`, email.toLowerCase(), 'EX', 300);
+  }
+  return token;
+}
 
 maybeDescribe('auth flow (integration)', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -32,10 +40,11 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('registers a new user and returns tokens', async () => {
+    const verificationToken = await createVerifyToken(app.redis, email);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/register',
-      payload: { email, password },
+      payload: { email, password, verificationToken },
     });
 
     expect(res.statusCode).toBe(201);
@@ -46,10 +55,11 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('rejects duplicate registration with 409', async () => {
+    const verificationToken = await createVerifyToken(app.redis, email);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/register',
-      payload: { email, password },
+      payload: { email, password, verificationToken },
     });
 
     expect(res.statusCode).toBe(409);
@@ -58,10 +68,11 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('logs in with valid credentials', async () => {
+    const verificationToken = await createVerifyToken(app.redis, email);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
-      payload: { email, password },
+      payload: { email, password, verificationToken },
     });
 
     expect(res.statusCode).toBe(200);
@@ -70,15 +81,24 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('returns identical error for wrong password and unknown email', async () => {
+    const wrongPasswordToken = await createVerifyToken(app.redis, email);
     const wrongPassword = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
-      payload: { email, password: 'WrongPassword1' },
+      payload: { email, password: 'WrongPassword1!', verificationToken: wrongPasswordToken },
     });
+    const unknownEmailToken = await createVerifyToken(
+      app.redis,
+      `nope-${randomUUID()}@mealrescue.test`,
+    );
     const unknownEmail = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
-      payload: { email: `nope-${randomUUID()}@mealrescue.test`, password },
+      payload: {
+        email: `nope-${randomUUID()}@mealrescue.test`,
+        password,
+        verificationToken: unknownEmailToken,
+      },
     });
 
     expect(wrongPassword.statusCode).toBe(401);
@@ -89,10 +109,11 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('serves /api/v1/user/me with the issued token', async () => {
+    const verificationToken = await createVerifyToken(app.redis, email);
     const login = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
-      payload: { email, password },
+      payload: { email, password, verificationToken },
     });
     const { accessToken } = JSON.parse(login.body);
 
