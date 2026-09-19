@@ -155,6 +155,7 @@ export class AuthService {
         email: user.email,
         subscriptionTier: user.subscriptionTier as SubscriptionTier,
         onboardingCompleted: user.onboardingCompleted as boolean,
+        planDaysUsed: user.planDaysUsed as number,
       },
     };
   }

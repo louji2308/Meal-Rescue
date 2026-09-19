@@ -574,8 +574,10 @@ export type SubscriptionTier = 'free' | 'pro';
 export interface AuthUser {
   id: UUID;
   email: string;
+  displayName?: string;
   subscriptionTier: SubscriptionTier;
   onboardingCompleted: boolean;
+  planDaysUsed: number;
 }
 
 export interface AuthTokens {

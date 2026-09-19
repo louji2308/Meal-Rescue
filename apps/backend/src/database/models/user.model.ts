@@ -41,6 +41,8 @@ export class User extends Model<
   declare feedbackEnabled: CreationOptional<boolean>;
   /** Client-reported UTC offset in minutes; anchors "local day" math. */
   declare tzOffsetMinutes: CreationOptional<number>;
+  /** Lifetime days a free user has planned; free tier limit is 3. */
+  declare planDaysUsed: CreationOptional<number>;
   declare readonly createdAt: CreationOptional<Date>;
 }
 
@@ -121,6 +123,12 @@ export function defineUserModel(sequelize: Sequelize): typeof User {
         allowNull: false,
         defaultValue: 0,
         validate: { min: -840, max: 840 },
+      },
+      planDaysUsed: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        validate: { min: 0 },
       },
     },
     {
