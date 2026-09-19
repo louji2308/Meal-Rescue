@@ -7,7 +7,7 @@
  * request is classified into a structured intent, validated server-side,
  * and only HIGH-confident, low-risk mutations act without confirmation.
  */
-import type { DietaryRestriction, EffortLevel, ISO8601, UUID } from './index';
+import type { DietaryRestriction, EffortLevel, ISO8601, UUID, SubscriptionTier } from './index';
 
 // ---------------------------------------------------------------------------
 // Calendar primitives
@@ -562,6 +562,46 @@ export interface MealMemoryRecentsResponse {
 
 export interface MealMemoryDeactivateRuleResponse {
   rule: MealRule;
+}
+
+// ---------------------------------------------------------------------------
+// Plan Preview / Confirm
+// ---------------------------------------------------------------------------
+
+export interface PlannedMeal {
+  id: UUID;
+  name: string;
+  recipeName: string;
+  ingredients: string[];
+  servings: number;
+  prepTimeMinutes: number;
+  cookTimeMinutes: number;
+  mealSlot: MealSlot;
+}
+
+export interface PlannedDay {
+  dateKey: string;
+  meals: PlannedMeal[];
+}
+
+export interface PlanPreviewResponse {
+  previewId: UUID;
+  days: PlannedDay[];
+  expiresAt: ISO8601;
+  daysUsed: number;
+  daysRemaining: number;
+  tier: SubscriptionTier;
+  requiresPayment: boolean;
+  message: string;
+}
+
+export interface PlanConfirmRequest {
+  previewId: UUID;
+  edits?: string;
+}
+
+export interface PlanConfirmResponse {
+  success: boolean;
 }
 
 // ---------------------------------------------------------------------------

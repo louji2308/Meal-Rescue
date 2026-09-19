@@ -21,6 +21,9 @@ import type {
   MealMemoryWeekResponse,
   MealEvent,
   MealRule,
+  PlanPreviewResponse,
+  PlanConfirmRequest,
+  PlanConfirmResponse,
   PlanWeekRequest,
   PlanWeekResponse,
 } from '@meal-rescue/shared-types';
@@ -150,5 +153,15 @@ export async function getMealInstructions(
     `/api/v1/meal-memory/meals/${eventId}/instructions`,
     { concept, ingredients, mealSlot },
   );
+  return res.data;
+}
+
+export async function postPlanPreview(text: string): Promise<PlanPreviewResponse> {
+  const res = await api.post<PlanPreviewResponse>('/api/v1/meal-memory/plan-preview', { text });
+  return res.data;
+}
+
+export async function postPlanConfirm(input: PlanConfirmRequest): Promise<PlanConfirmResponse> {
+  const res = await api.post<PlanConfirmResponse>('/api/v1/meal-memory/plan-confirm', input);
   return res.data;
 }
