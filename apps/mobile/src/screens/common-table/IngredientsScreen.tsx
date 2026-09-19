@@ -13,15 +13,9 @@ import type { CommonTableStackParamList } from '../../navigation/CommonTableNavi
 import { toApiError } from '../../services/api';
 import { convergeMeal } from '../../services/common-table.api';
 import { useCommonTableStore } from '../../stores/common-table.store';
+import { useSettingsStore } from '../../stores/settings.store';
 import { colors, spacing } from '../../theme';
 import { FadeInView } from '../../components/motion/FadeInView';
-
-type Effort = 'quick' | 'normal';
-
-const EFFORT_OPTIONS: { key: Effort; label: string; icon: string }[] = [
-  { key: 'quick', label: 'Quick', icon: 'flash-outline' },
-  { key: 'normal', label: 'Normal', icon: 'restaurant-outline' },
-];
 
 const TIME_OPTIONS = [
   { minutes: 15, label: '~15 min' },
@@ -30,10 +24,6 @@ const TIME_OPTIONS = [
   { minutes: 60, label: '~60 min' },
 ];
 
-/**
- * Ingredients — what's in the house right now. We converge around these
- * (optionally pulling pantry from the Kitchen automatically).
- */
 export function IngredientsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
   const route = useRoute<RouteProp<CommonTableStackParamList, 'Ingredients'>>();
@@ -41,16 +31,19 @@ export function IngredientsScreen() {
   const members = useCommonTableStore((s) => s.members);
   const setResult = useCommonTableStore((s) => s.setResult);
   const setActiveSheet = useCommonTableStore((s) => s.setActiveSheet);
+  const kitchenImportEnabled = useSettingsStore((s) => s.kitchenImportEnabled);
 
   const [ingredients, setIngredients] = useState('');
-  const [usePantry, setUsePantry] = useState(true);
-  const [effort, setEffort] = useState<Effort>('normal');
   const [timeMinutes, setTimeMinutes] = useState(30);
+  const [customTime, setCustomTime] = useState('');
+  const [showCustomTime, setShowCustomTime] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
 
-  const selectedNames = (memberIds: string[]) =>
-    members.filter((m) => memberIds.includes(m.id)).map((m) => m.displayName);
+  const selectedNames = (ids: string[]) =>
+    members.filter((m) => ids.includes(m.id)).map((m) => m.displayName);
+
+  const effectiveTime = showCustomTime ? parseInt(customTime, 10) || 30 : timeMinutes;
 
   async function handleConverge() {
     if (memberIds.length === 0) return;
@@ -63,10 +56,9 @@ export function IngredientsScreen() {
         .filter(Boolean);
       const result = await convergeMeal({
         memberIds,
-        ingredients: listed.length > 0 || !usePantry ? listed : undefined,
-        ingredientSource: usePantry ? 'kitchen' : 'text',
-        effort,
-        timeMinutes,
+        ingredients: listed.length > 0 || !kitchenImportEnabled ? listed : undefined,
+        ingredientSource: kitchenImportEnabled ? 'kitchen' : 'text',
+        timeMinutes: effectiveTime,
       });
       setResult(result);
       setActiveSheet(result.sharedMealId, result.status);
@@ -81,83 +73,93 @@ export function IngredientsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <FadeInView>
-      <ErrorBanner error={error} />
+        <ErrorBanner error={error} />
 
-      <Text style={styles.intro}>
-        What do we have to work with? List what's in the house, or let us pull your Kitchen pantry.
-      </Text>
-
-      {memberIds.length > 0 && (
-        <Text style={styles.membersTag}>
-          Cooking for {selectedNames(memberIds).join(', ')}
+        <Text style={styles.intro}>
+          {kitchenImportEnabled
+            ? "What's on hand? Type ingredients or we'll pull from your Kitchen pantry."
+            : "What do we have to work with? List what's in the house."}
         </Text>
-      )}
 
-      <TextInput
-        style={styles.ingredientInput}
-        placeholder="eggs, rice, bell pepper, chicken, peanut-free sauce"
-        placeholderTextColor={colors.textSecondary}
-        value={ingredients}
-        onChangeText={setIngredients}
-        multiline
-        autoCapitalize="none"
-      />
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Include my Kitchen pantry?</Text>
-        <Pressable
-          style={styles.toggleRow}
-          onPress={() => setUsePantry((v) => !v)}
-        >
-          <Text style={styles.toggleText}>
-            {usePantry ? 'Yes — use what I have' : 'Only what I typed'}
+        {memberIds.length > 0 && (
+          <Text style={styles.membersTag}>
+            Cooking for {selectedNames(memberIds).join(', ')}
           </Text>
-        </Pressable>
-      </View>
+        )}
 
-      <View style={styles.section}>
-        <Text style={styles.label}>Effort</Text>
-        <View style={styles.optionRow}>
-          {EFFORT_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.key}
-              style={[styles.option, effort === opt.key && styles.optionActive]}
-              onPress={() => setEffort(opt.key)}
-            >
-              <Text style={[styles.optionText, effort === opt.key && styles.optionTextActive]}>
-                {opt.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
+        <TextInput
+          style={styles.ingredientInput}
+          placeholder="List what you have, we'll plan the rest"
+          placeholderTextColor={colors.textSecondary}
+          value={ingredients}
+          onChangeText={setIngredients}
+          multiline
+          autoCapitalize="none"
+        />
 
-      <View style={styles.section}>
-        <Text style={styles.label}>Time available</Text>
-        <View style={styles.optionRow}>
-          {TIME_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.minutes}
-              style={[styles.option, timeMinutes === opt.minutes && styles.optionActive]}
-              onPress={() => setTimeMinutes(opt.minutes)}
-            >
-              <Text
-                style={[styles.optionText, timeMinutes === opt.minutes && styles.optionTextActive]}
+        {kitchenImportEnabled && (
+          <View style={styles.pantryBadge}>
+            <Text style={styles.pantryBadgeText}>Kitchen pantry connected</Text>
+          </View>
+        )}
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Time available</Text>
+          <View style={styles.optionRow}>
+            {TIME_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.minutes}
+                style={[
+                  styles.option,
+                  !showCustomTime && timeMinutes === opt.minutes && styles.optionActive,
+                ]}
+                onPress={() => {
+                  setTimeMinutes(opt.minutes);
+                  setShowCustomTime(false);
+                }}
               >
-                {opt.label}
+                <Text
+                  style={[
+                    styles.optionText,
+                    !showCustomTime && timeMinutes === opt.minutes && styles.optionTextActive,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              style={[styles.option, showCustomTime && styles.optionActive]}
+              onPress={() => setShowCustomTime(true)}
+            >
+              <Text style={[styles.optionText, showCustomTime && styles.optionTextActive]}>
+                + Custom
               </Text>
             </Pressable>
-          ))}
+          </View>
+          {showCustomTime && (
+            <View style={styles.customTimeRow}>
+              <TextInput
+                style={styles.customTimeInput}
+                placeholder="min"
+                placeholderTextColor={colors.textSecondary}
+                value={customTime}
+                onChangeText={setCustomTime}
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+              <Text style={styles.customTimeUnit}>min</Text>
+            </View>
+          )}
         </View>
-      </View>
 
-      <PrimaryButton
-        label="Find our meal"
-        onPress={() => void handleConverge()}
-        busy={busy}
-        disabled={memberIds.length === 0}
-        style={styles.convergeButton}
-      />
+        <PrimaryButton
+          label="Find our meal"
+          onPress={() => void handleConverge()}
+          busy={busy}
+          disabled={memberIds.length === 0}
+          style={styles.convergeButton}
+        />
       </FadeInView>
     </ScrollView>
   );
@@ -193,6 +195,19 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: spacing.lg,
   },
+  pantryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.success + '15',
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    marginBottom: spacing.lg,
+  },
+  pantryBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.success,
+  },
   section: {
     marginBottom: spacing.lg,
   },
@@ -202,20 +217,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  toggleText: {
-    fontSize: 14,
-    color: colors.text,
   },
   optionRow: {
     flexDirection: 'row',
@@ -241,6 +242,30 @@ const styles = StyleSheet.create({
   },
   optionTextActive: {
     color: colors.text,
+  },
+  customTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  customTimeInput: {
+    width: 64,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  customTimeUnit: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   convergeButton: {
     marginTop: spacing.md,

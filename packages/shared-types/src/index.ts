@@ -37,6 +37,26 @@ export interface DetectedIngredient {
   estimatedQuantity?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Recognized items (unified vision capture output)
+// ---------------------------------------------------------------------------
+
+export type RecognizedItemType = 'INGREDIENT' | 'PREPARED_MEAL' | 'LEFTOVER' | 'PACKAGED_FOOD';
+
+export type RecognizedUnit = 'pcs' | 'g' | 'kg' | 'ml' | 'l';
+
+export interface RecognizedItem {
+  name: string;
+  itemType: RecognizedItemType;
+  confidence: Confidence;
+  /** Number value; null when unknown/not specified. */
+  quantity: number | null;
+  /** Unit token; null when unknown/not specified. */
+  unit: RecognizedUnit | null;
+  /** Approx. how many people this prepared meal / leftover feeds. Null for ingredients / packaged food. */
+  servings: number | null;
+}
+
 export interface ComponentAnalysis {
   protein: boolean;
   fiber_sources: boolean;
@@ -154,6 +174,11 @@ export interface MealAnalysisResponse {
   confidenceScores: Record<string, Confidence>;
   uncertaintyFlags: UncertaintyFlag[];
   requiresConfirmation: boolean;
+  /**
+   * Unified editable item list (name/type/qty/unit/servings). Present for
+   * photo captures; derived from foods+ingredients for text captures.
+   */
+  items: RecognizedItem[];
 }
 
 export interface RescueGenerateRequest {

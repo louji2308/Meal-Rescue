@@ -425,9 +425,7 @@ export function MealPlanScreen() {
                 showsHorizontalScrollIndicator={false}
                 snapToInterval={cellW}
                 decelerationRate="fast"
-                onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-                  useNativeDriver: true,
-                })}
+                onScroll={(e) => scrollX.setValue(e.nativeEvent.contentOffset.x)}
                 scrollEventThrottle={16}
                 onMomentumScrollEnd={handleDayMomentumScrollEnd}
                 contentContainerStyle={{

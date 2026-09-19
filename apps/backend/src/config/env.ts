@@ -65,6 +65,11 @@ const envSchema = z.object({
   LLM_MODEL_VERSION: z.string().optional(),
   OPENAI_VISION_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_TEXT_MODEL: z.string().default('gpt-4o-mini'),
+  // Dedicated vision-only OpenRouter key + model. When set, ALL photo
+  // analysis (meal capture, kitchen capture, kitchen identify) uses this
+  // key/model; text tasks keep OPENAI_API_KEY + OPENAI_TEXT_MODEL.
+  OPENROUTER_VISION_API_KEY: z.string().optional(),
+  OPENROUTER_VISION_MODEL: z.string().default('qwen/qwen3-vl-32b-instruct'),
   // OpenRouter for Kitchen intelligence (DeepSeek V4 Flash + free vision)
   OPENROUTER_API_KEY: z.string().optional(),
   // Explicit output cap: keeps cost predictable and satisfies providers that

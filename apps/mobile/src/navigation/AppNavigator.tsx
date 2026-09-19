@@ -27,6 +27,7 @@ import { CalendarIcon, FoodIcon, HouseIcon, UserIcon } from '../components/icons
 import { PawStamp } from '../components/mascot/PawStamp';
 import { CommonTableNavigator } from './CommonTableNavigator';
 import { CaptureScreen } from '../screens/CaptureScreen';
+import { MealReviewScreen } from '../screens/MealReviewScreen';
 import { AiRescueScreen } from '../screens/AiRescueScreen';
 import { CravingScreen } from '../screens/CravingScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
@@ -233,6 +234,7 @@ export type HomeStackParamList = {
     tips?: string[];
   };
   AiRescue: { foods: string[]; ingredients?: string[]; mealId?: string };
+  MealReview: { analysis: MealAnalysisResponse };
   Review: { analysis: MealAnalysisResponse };
   Intent: { analysis: MealAnalysisResponse; editedMealText?: string };
   Reality: { intentLabel: string; mealId: string; foods: string[] };
@@ -280,6 +282,7 @@ function HomeStack() {
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} />
       <Stack.Screen name="Capture" component={CaptureScreen} />
+      <Stack.Screen name="MealReview" component={MealReviewScreen} />
       <Stack.Screen name="DishDetail" component={DishDetailScreen} />
       <Stack.Screen name="AiRescue" component={AiRescueScreen} />
       <Stack.Screen name="Review" component={ReviewScreen} />

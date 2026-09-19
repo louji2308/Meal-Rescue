@@ -461,18 +461,22 @@ describe('ai-safety - raw LLM output schemas reject malformed structured data', 
     expect(detectedFoodSchema.safeParse({ name: 'apple', confidence: -0.1 }).success).toBe(false);
   });
 
-  it('rejects an unknown ingredient state (LLM trying a new enum value)', () => {
-    expect(
-      detectedIngredientSchema.safeParse({ name: 'apple', confidence: 0.9, state: 'rotten' }).success,
-    ).toBe(false);
+  it('coerces an unknown ingredient state to mixed (LLM drifting off the enum)', () => {
+    const parsed = detectedIngredientSchema.safeParse({
+      name: 'apple',
+      confidence: 0.9,
+      state: 'chopped raw',
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.state).toBe('mixed');
   });
 
   it('rejects a vision result whose foods entries are malformed', () => {
     const result = visionResultSchema.safeParse({
       foods: [{ name: 'mystery' }],
-      ingredients: [],
       components: { protein: true, fiber_sources: false, healthy_fat_sources: false, carbohydrates: true },
       uncertainties: [],
+      imageQuality: { lighting: 'good', clarity: 'clear' },
     });
     expect(result.success).toBe(false);
   });
@@ -480,9 +484,9 @@ describe('ai-safety - raw LLM output schemas reject malformed structured data', 
   it('accepts an empty but well-formed vision result (downstream must treat as "detected nothing")', () => {
     const result = visionResultSchema.safeParse({
       foods: [],
-      ingredients: [],
       components: { protein: false, fiber_sources: false, healthy_fat_sources: false, carbohydrates: false },
       uncertainties: [],
+      imageQuality: { lighting: 'good', clarity: 'clear' },
     });
     expect(result.success).toBe(true);
   });

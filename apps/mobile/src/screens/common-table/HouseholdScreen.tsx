@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Pressable } from '../../components/motion/Pressable';
 
@@ -18,7 +18,7 @@ import { colors, spacing } from '../../theme';
 import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
- * Household — the people you cook for, shown as a roster.
+ * Household â€” the people you cook for, shown as a roster.
  * Adding and editing happen on the dedicated Add People page.
  */
 export function HouseholdScreen() {
@@ -31,14 +31,26 @@ export function HouseholdScreen() {
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [photos, setPhotos] = useState<Record<string, string>>({});
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadPeoplePhotos()
+        .then((loaded) => {
+          if (!active) return;
+          setPhotos(loaded);
+          prefetchImages(Object.values(loaded));
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
   useEffect(() => {
-loadHousehold()
+    loadHousehold()
       .catch((err) => setError(toApiError(err)))
       .finally(() => setBusy(false));
-    void loadPeoplePhotos().then((loaded) => {
-      setPhotos(loaded);
-      prefetchImages(Object.values(loaded));
-    });
   }, [loadHousehold]);
 
   function handleDelete(memberId: string, name: string) {
@@ -60,108 +72,101 @@ loadHousehold()
 
   const sorted = [...members].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
 
-return (
+  return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <FadeInView>
-      <ErrorBanner error={error} />
+        <ErrorBanner error={error} />
 
-      <Text style={styles.intro}>
-        The people you cook for. Anything to avoid is a hard rule the planner never breaks.
-      </Text>
+        <Text style={styles.intro}>
+          Everyone you cook for, in one place â€” every allergy and no-go shapes the meal we plan.
+        </Text>
 
-      {busy ? (
-        <Text style={styles.loading}>Loading your table…</Text>
-      ) : sorted.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="people-outline" size={36} color={colors.softAlert} />
-          <Text style={styles.emptyText}>No one at the table yet.</Text>
-          <Text style={styles.emptySub}>
-            Add the people you cook for — allergies and avoid lists become hard rules the
-            planner never breaks.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.memberList}>
-          {sorted.map((member) => {
-            const photo = photos[member.id];
-            const hasConstraints =
-              member.constraints.allergies.length > 0 ||
-              member.constraints.avoidIngredients.length > 0 ||
-              member.constraints.dietaryRestrictions.length > 0;
-            return (
-              <View key={member.id} style={styles.memberCard}>
-                <View style={styles.memberRow}>
-                  <View style={[styles.avatar, photo && styles.avatarPhoto]}>
-{photo ? (
-                      <AppImage source={{ uri: photo }} style={styles.photo} />
-                    ) : (
-                      <Text style={styles.avatarText}>{member.initials}</Text>
-                    )}
-                  </View>
-                  <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>
-                      {member.displayName}
-                      {member.isOwner ? ' (you)' : ''}
-                    </Text>
-<Text style={styles.memberMeta}>
-                      {[member.relationship, member.ageGroup ?? 'adult']
-                        .filter(Boolean)
-                        .join(' · ')}
-                      {member.preferences.note ? ' · ' + member.preferences.note : ''}
-                    </Text>
-                  </View>
-                  <View style={styles.memberActions}>
-                    <Pressable
-                      style={styles.iconButton}
-                      onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit ${member.displayName}`}
-                    >
-                      <Ionicons name="create-outline" size={18} color={colors.softAlert} />
-                    </Pressable>
-                    {!member.isOwner && (
+        {busy ? (
+          <Text style={styles.loading}>Loading your tableâ€¦</Text>
+        ) : sorted.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="people-outline" size={36} color={colors.softAlert} />
+            <Text style={styles.emptyText}>No one at the table yet.</Text>
+            <Text style={styles.emptySub}>
+              Add the people you cook for, and every taste gets a say in the meal.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.memberList}>
+            {sorted.map((member) => {
+              const photo = photos[member.id];
+              const hasConstraints =
+                member.constraints.allergies.length > 0 ||
+                member.constraints.avoidIngredients.length > 0 ||
+                member.constraints.dietaryRestrictions.length > 0;
+              return (
+                <View key={member.id} style={styles.memberCard}>
+                  <View style={styles.memberRow}>
+                    <View style={[styles.avatar, photo && styles.avatarPhoto]}>
+                      {photo ? (
+                        <AppImage source={{ uri: photo }} style={styles.photo} />
+                      ) : (
+                        <Text style={styles.avatarText}>{member.initials}</Text>
+                      )}
+                    </View>
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>
+                        {member.displayName}
+                        {member.isOwner ? ' (you)' : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.memberActions}>
                       <Pressable
                         style={styles.iconButton}
-                        onPress={() => handleDelete(member.id, member.displayName)}
+                        onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
                         accessibilityRole="button"
-                        accessibilityLabel={`Remove ${member.displayName}`}
+                        accessibilityLabel={`Edit ${member.displayName}`}
                       >
-                        <Ionicons name="trash-outline" size={18} color={colors.softAlert} />
+                        <Ionicons name="create-outline" size={20} color={colors.softAlert} />
                       </Pressable>
-                    )}
+                      {!member.isOwner && (
+                        <Pressable
+                          style={styles.iconButton}
+                          onPress={() => handleDelete(member.id, member.displayName)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${member.displayName}`}
+                        >
+                          <Ionicons name="trash-outline" size={20} color={colors.softAlert} />
+                        </Pressable>
+                      )}
+                    </View>
                   </View>
+                  {hasConstraints && (
+                    <View style={styles.constraintChips}>
+                      {member.constraints.allergies.map((a) => (
+                        <View key={`a-${a}`} style={[styles.chip, styles.chipDanger]}>
+                          <Text style={styles.chipDangerText}>allergy: {a}</Text>
+                        </View>
+                      ))}
+                      {member.constraints.avoidIngredients.map((a) => (
+                        <View key={`v-${a}`} style={styles.chip}>
+                          <Text style={styles.chipText}>avoids {a}</Text>
+                        </View>
+                      ))}
+                      {member.constraints.dietaryRestrictions.map((d) => (
+                        <View key={`d-${d}`} style={styles.chip}>
+                          <Text style={styles.chipText}>{d}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
-                {hasConstraints && (
-                  <View style={styles.constraintChips}>
-                    {member.constraints.allergies.map((a) => (
-                      <View key={`a-${a}`} style={[styles.chip, styles.chipDanger]}>
-                        <Text style={styles.chipDangerText}>allergy: {a}</Text>
-                      </View>
-                    ))}
-                    {member.constraints.avoidIngredients.map((a) => (
-                      <View key={`v-${a}`} style={styles.chip}>
-                        <Text style={styles.chipText}>avoids {a}</Text>
-                      </View>
-                    ))}
-                    {member.constraints.dietaryRestrictions.map((d) => (
-                      <View key={`d-${d}`} style={styles.chip}>
-                        <Text style={styles.chipText}>{d}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
+              );
+            })}
+          </View>
+        )}
 
-<PrimaryButton
-        label="Add someone"
-        onPress={() => navigation.navigate('AddPeople')}
-        style={styles.addButton}
-        busy={busy}
-      />
+        <PrimaryButton
+          label="Add someone"
+          onPress={() => navigation.navigate('AddPeople')}
+          style={styles.addButton}
+          busy={busy}
+        />
       </FadeInView>
     </ScrollView>
   );
@@ -216,7 +221,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-avatar: {
+  avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -235,7 +240,7 @@ avatar: {
     height: 44,
     borderRadius: 22,
   },
-avatarText: {
+  avatarText: {
     color: colors.text,
     fontSize: 16,
     fontWeight: '700',
@@ -249,20 +254,14 @@ avatarText: {
     color: colors.text,
     textTransform: 'capitalize',
   },
-  memberMeta: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-    textTransform: 'capitalize',
-  },
   memberActions: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',

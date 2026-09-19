@@ -12,8 +12,10 @@ import type { Redis } from 'ioredis';
 import type {
   Confidence,
   DetectedIngredient,
+  IngredientState,
   InputType,
   MealAnalysisResponse,
+  RecognizedItem,
 } from '@meal-rescue/shared-types';
 
 import { Meal } from '../database/models/meal.model';
@@ -30,13 +32,24 @@ export class MealAnalyzerService {
   private readonly vision: VisionService;
   private readonly textExtractor: TextExtractionService;
 
-  constructor(llm: LlmClient, redis: Redis | null) {
-    this.vision = new VisionService(llm, redis);
+  constructor(
+    llm: LlmClient,
+    redis: Redis | null,
+    visionLlm: LlmClient = llm,
+  ) {
+    this.vision = new VisionService(visionLlm, redis);
     this.textExtractor = new TextExtractionService(llm);
   }
 
-  async analyzeFromImage(imageBuffer: Buffer, userId: string): Promise<MealAnalysisResponse> {
-    const visionResult = await this.vision.analyzeImage(imageBuffer);
+  async analyzeFromImage(
+    imageBuffer: Buffer,
+    userId: string,
+    cuisines?: string[],
+  ): Promise<MealAnalysisResponse> {
+    const visionResult = await this.vision.analyzeImage(
+      imageBuffer,
+      cuisines ? { cuisines } : undefined,
+    );
     return this.finalize(visionResult, `image:${visionResult.imageHash}`, 'image', userId);
   }
 
@@ -46,19 +59,23 @@ export class MealAnalyzerService {
   }
 
   private async finalize(
-    raw: Pick<VisionResult, 'foods' | 'ingredients' | 'components' | 'uncertainties'>,
+    raw: Pick<VisionResult, 'foods' | 'components' | 'uncertainties'> & {
+      ingredients?: Array<{ name: string; confidence: number; state?: string; estimatedQuantity?: string | null }>;
+    },
     originalInput: string,
     inputType: InputType,
     userId: string,
   ): Promise<MealAnalysisResponse> {
     // Normalize to canonical ingredient names so constraint filtering and
     // candidate generation work off the knowledge base, not free text.
-    const normalizedIngredients: DetectedIngredient[] = raw.ingredients.map((ingredient) => {
+    // Photo captures have no ingredient list (food recognizer output) -
+    // `ingredients` is absent and stays empty; text captures keep theirs.
+    const normalizedIngredients: DetectedIngredient[] = (raw.ingredients ?? []).map((ingredient) => {
       const match = findBestMatch(ingredient.name);
       return {
         name: match?.name ?? ingredient.name.toLowerCase(),
         confidence: ingredient.confidence,
-        state: ingredient.state,
+        state: normalizeIngredientState(ingredient.state),
         estimatedQuantity: ingredient.estimatedQuantity ?? undefined,
       };
     });
@@ -88,8 +105,38 @@ export class MealAnalyzerService {
       confidenceScores: { overall: overallConfidence },
       uncertaintyFlags: raw.uncertainties,
       requiresConfirmation,
+      items: deriveItemsFromExtraction(raw),
     };
   }
+}
+
+/** Fallback derivation for captures (no unified items from the model). */
+function deriveItemsFromExtraction(raw: {
+  foods?: Array<{ name: string; confidence: number }>;
+  ingredients?: Array<{ name: string; confidence: number }>;
+}): RecognizedItem[] {
+  const items: RecognizedItem[] = [];
+  for (const ing of raw.ingredients ?? []) {
+    items.push({
+      name: ing.name,
+      itemType: 'INGREDIENT',
+      confidence: ing.confidence,
+      quantity: null,
+      unit: null,
+      servings: null,
+    });
+  }
+  for (const food of raw.foods ?? []) {
+    items.push({
+      name: food.name,
+      itemType: 'PREPARED_MEAL',
+      confidence: food.confidence,
+      quantity: null,
+      unit: null,
+      servings: null,
+    });
+  }
+  return items;
 }
 
 function computeOverallConfidence(confidences: Confidence[]): Confidence {
@@ -97,4 +144,10 @@ function computeOverallConfidence(confidences: Confidence[]): Confidence {
   return Number(
     (confidences.reduce((sum, value) => sum + value, 0) / confidences.length).toFixed(3),
   );
+}
+
+const INGREDIENT_STATES: ReadonlySet<string> = new Set(['raw', 'cooked', 'processed', 'mixed']);
+
+function normalizeIngredientState(state?: string): IngredientState {
+  return state !== undefined && INGREDIENT_STATES.has(state) ? (state as IngredientState) : 'cooked';
 }

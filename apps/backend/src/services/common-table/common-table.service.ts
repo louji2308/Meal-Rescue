@@ -51,7 +51,12 @@ export class CommonTableService {
   private readonly events: TableEventService;
   private readonly vision: VisionService;
 
-  constructor(models: Db['models'], llm: LlmClient, redis: Redis | null = null) {
+  constructor(
+    models: Db['models'],
+    llm: LlmClient,
+    redis: Redis | null = null,
+    visionLlm: LlmClient = llm,
+  ) {
     this.models = models;
     this.households = new HouseholdService(models);
     this.members = new HouseholdMemberService(models);
@@ -61,7 +66,7 @@ export class CommonTableService {
     this.ai = new CommonTableAiService(llm);
     this.outcomes = new TableOutcomeService(models);
     this.events = new TableEventService(models);
-    this.vision = new VisionService(llm, redis);
+    this.vision = new VisionService(visionLlm, redis);
   }
 
   /**
@@ -251,7 +256,7 @@ export class CommonTableService {
     if (request.imageBase64) {
       const buffer = Buffer.from(request.imageBase64, 'base64');
       const analysis = await this.vision.analyzeImage(buffer);
-      return (analysis.ingredients ?? []).map((i) => i.name);
+      return analysis.foods.map((f) => f.name);
     }
 
     if (request.ingredientSource === 'kitchen') {

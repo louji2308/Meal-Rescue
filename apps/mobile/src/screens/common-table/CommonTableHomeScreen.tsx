@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, {
   interpolateColor,
@@ -26,7 +26,7 @@ import {
 } from '../../services/common-table.api';
 import { loadPeoplePhotos } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
-import { colors, fonts, spacing, typography } from '../../theme';
+import { colors, fonts, spacing } from '../../theme';
 import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
@@ -122,9 +122,6 @@ export function CommonTableHomeScreen() {
     try {
       await hydrate();
       await loadHousehold();
-      const loaded = await loadPeoplePhotos();
-      setPhotos(loaded);
-      prefetchImages(Object.values(loaded));
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -136,11 +133,34 @@ export function CommonTableHomeScreen() {
     void load();
   }, [load]);
 
-  // Preselect the whole table by default the first time members load.
+  // Refresh photos whenever the screen regains focus (the roster can stay
+  // mounted while a photo is added/edited on the Add People page).
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadPeoplePhotos()
+        .then((loaded) => {
+          if (!active) return;
+          setPhotos(loaded);
+          prefetchImages(Object.values(loaded));
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  // Preselect the whole table on the first time members appear (e.g. app
+  // start or first load). Needs exactly one transition from "no members" to
+  // "some members" — once the user deselects everyone this must NOT re-run.
+  const prevHadMembers = useRef(false);
   useEffect(() => {
-    if (members.length > 0 && selected.length === 0) {
+    const hasMembers = members.length > 0;
+    if (hasMembers && !prevHadMembers.current && selected.length === 0) {
       setSelected(members.filter((m) => m.active).map((m) => m.id));
     }
+    prevHadMembers.current = hasMembers;
   }, [members, selected.length, setSelected]);
 
   async function handleResume() {
@@ -164,7 +184,6 @@ export function CommonTableHomeScreen() {
 
   const activeMembers = members.filter((m) => m.active);
   const activeSorted = [...activeMembers].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
-  const hasOneself = activeSorted.some((m) => m.isOwner);
   const hasTable = activeMembers.length > 0;
 
   return (
@@ -241,6 +260,12 @@ export function CommonTableHomeScreen() {
                 <Text style={styles.sectionTitle}>Who's eating tonight?</Text>
               </View>
 
+              {selected.length === 0 ? (
+                <Text style={styles.pickHint}>
+                  Pick at least one person to cook for tonight.
+                </Text>
+              ) : null}
+
               <View style={styles.memberList}>
                 {activeSorted.map((member) => (
                   <MemberRow
@@ -252,6 +277,15 @@ export function CommonTableHomeScreen() {
                   />
                 ))}
               </View>
+
+              <PrimaryButton
+                label="Find a meal for tonight"
+                onPress={() =>
+                  navigation.navigate('Ingredients', { memberIds: selected })
+                }
+                disabled={selected.length === 0}
+                style={styles.findMealCta}
+              />
 
               <Pressable
                 onPress={() => navigation.navigate('AddPeople')}
@@ -407,6 +441,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     color: colors.text,
   },
+  pickHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
 
   // ── Member cards ────────────────────────────────────────
   memberList: {
@@ -453,6 +493,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textTransform: 'capitalize',
+  },
+
+  // ── Find a meal ────────────────────────────────────────
+  findMealCta: {
+    marginTop: spacing.lg,
   },
 
   // ── Add someone ─────────────────────────────────────────

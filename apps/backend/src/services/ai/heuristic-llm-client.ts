@@ -94,7 +94,6 @@ export class HeuristicLlmClient implements LlmClient {
   private visionFallback(): VisionResult {
     return {
       foods: [],
-      ingredients: [],
       components: {
         protein: false,
         fiber_sources: false,
@@ -104,11 +103,15 @@ export class HeuristicLlmClient implements LlmClient {
       },
       uncertainties: [
         {
-          field: 'foods',
+          field: 'food_detection',
           reason: 'Image analysis unavailable - describe your meal in a few words instead',
           confidence: 0.0,
         },
       ],
+      imageQuality: {
+        lighting: 'good',
+        clarity: 'clear',
+      },
     };
   }
 

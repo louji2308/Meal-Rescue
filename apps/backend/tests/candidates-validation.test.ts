@@ -180,15 +180,9 @@ describe('validation service', () => {
 // Shared fixture helper used by pipeline integration tests.
 export function visionFixtureFor(
   foods: string[],
-): Pick<VisionResult, 'foods' | 'ingredients' | 'components' | 'uncertainties'> {
+): Pick<VisionResult, 'foods' | 'components' | 'uncertainties'> {
   return {
     foods: foods.map((name) => ({ name, confidence: 0.95 })),
-    ingredients: foods.map((name) => ({
-      name,
-      confidence: 0.9,
-      state: 'cooked' as const,
-      estimatedQuantity: null,
-    })),
     components: {
       protein: false,
       fiber_sources: false,

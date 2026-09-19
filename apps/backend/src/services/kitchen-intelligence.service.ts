@@ -135,7 +135,8 @@ export class KitchenIntelligenceService {
     imageBase64: string,
     mimeType: string,
   ): Promise<IdentifyResponse> {
-    if (!env.OPENROUTER_API_KEY) {
+    const visionKey = env.OPENROUTER_VISION_API_KEY ?? env.OPENROUTER_API_KEY;
+    if (!visionKey) {
       return this.identifyFoodFallback();
     }
 
@@ -145,11 +146,11 @@ export class KitchenIntelligenceService {
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+            Authorization: `Bearer ${visionKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemma-3-27b-it:free',
+            model: env.OPENROUTER_VISION_MODEL,
             messages: [
               {
                 role: 'user',

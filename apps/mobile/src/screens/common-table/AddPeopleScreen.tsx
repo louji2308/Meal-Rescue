@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,19 +9,16 @@ import { AppImage } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 import { TextInput } from '../../components/AppTextInput';
 
-import type {
-  DietaryRestriction,
-  HouseholdAgeGroup,
-  HouseholdRelationship,
-} from '@meal-rescue/shared-types';
+import type { DietaryRestriction, HouseholdAgeGroup } from '@meal-rescue/shared-types';
 
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { ErrorBanner } from '../../components/ErrorBanner';
+import { CameraIcon } from '../../components/icons';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { loadPeoplePhotos, savePeoplePhoto } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
-import { colors, spacing } from '../../theme';
+import { colors, fonts, spacing } from '../../theme';
 import { FadeInView } from '../../components/motion/FadeInView';
 
 const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
@@ -31,20 +27,10 @@ const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
   { key: 'adult', label: 'Adult', emoji: '•' },
 ];
 
-/** 'self' is never offered — the owner member is created automatically. */
-const RELATIONSHIP_OPTIONS: HouseholdRelationship[] = [
-  'partner',
-  'child',
-  'family',
-  'roommate',
-  'friend',
-  'other',
-];
-
 /** Add People — a friendly, human form for the people you cook for.
  * Allergies are HARD rules captured separately so they keep their fail-closed
- * classification; the avoid list is soft-but-still-ratified. Relationship and
- * age group guide portions + who gets which finish. Photo stays on-device.
+ * classification; the avoid list is soft-but-still-ratified. Age group guides
+ * portion sizes. Photo stays on-device.
  */
 export function AddPeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
@@ -59,7 +45,6 @@ export function AddPeopleScreen() {
   const [displayName, setDisplayName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [ageGroup, setAgeGroup] = useState<HouseholdAgeGroup>('adult');
-  const [relationship, setRelationship] = useState<HouseholdRelationship>('partner');
   const [allergies, setAllergies] = useState('');
   const [everythingElse, setEverythingElse] = useState('');
   const [saving, setSaving] = useState(false);
@@ -70,7 +55,6 @@ export function AddPeopleScreen() {
     if (target) {
       setDisplayName(target.displayName);
       setAgeGroup(target.ageGroup ?? 'adult');
-      setRelationship(target.isOwner ? 'self' : (target.relationship ?? 'partner'));
       setAllergies(target.constraints.allergies.join(', '));
       // Reconstruct the merged "everything else" field from stored parts.
       const dietLabels = target.constraints.dietaryRestrictions.join(', ');
@@ -127,7 +111,6 @@ export function AddPeopleScreen() {
     const { diets: parsedDiets, avoid: parsedAvoid } = parseEverythingElse(everythingElse);
     const payload = {
       displayName: name,
-      relationship,
       ageGroup,
       constraints: {
         allergies: allergies
@@ -189,7 +172,7 @@ export function AddPeopleScreen() {
               <Text style={styles.avatarText}>{initials}</Text>
             )}
             <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={16} color={colors.surface} />
+              <CameraIcon size={14} color={colors.surface} />
             </View>
           </Pressable>
           <Text style={styles.photoHint}>Tap to add a photo</Text>
@@ -203,30 +186,6 @@ export function AddPeopleScreen() {
           onChangeText={setDisplayName}
           autoFocus={!target}
         />
-
-        {!target?.isOwner && (
-          <>
-            <Text style={styles.label}>Their role at the table</Text>
-            <View style={styles.chipRow}>
-              {RELATIONSHIP_OPTIONS.map((opt) => {
-                const active = relationship === opt;
-                return (
-                  <Pressable
-                    key={opt}
-                    style={[styles.choiceChip, active && styles.choiceChipActive]}
-                    onPress={() => setRelationship(opt)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
-                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </>
-        )}
 
         <Text style={styles.label}>Age group</Text>
         <View style={styles.chipRow}>
@@ -316,8 +275,9 @@ const styles = StyleSheet.create({
     borderRadius: 50,
   },
   avatarText: {
-    fontSize: 36,
-    fontWeight: '800',
+    fontFamily: fonts.display,
+    fontSize: 32,
+    fontWeight: '400',
     color: colors.textSecondary,
   },
   cameraBadge: {
@@ -327,14 +287,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.text,
+    backgroundColor: colors.homeInk,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.background,
   },
   photoHint: {
-    fontSize: 12,
+    fontFamily: fonts.regular,
+    fontSize: 11,
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
@@ -345,7 +306,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    fontSize: 16,
+    fontFamily: fonts.regular,
+    fontSize: 15,
     color: colors.text,
   },
   multilineInput: {
@@ -353,10 +315,12 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontFamily: fonts.display,
+    fontSize: 11,
+    fontWeight: '400',
     color: colors.textSecondary,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -377,17 +341,19 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
   },
   choiceText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontFamily: fonts.medium,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   choiceTextActive: {
-    color: colors.text,
+    color: colors.homeInk,
   },
   safetyNote: {
-    fontSize: 12,
+    fontFamily: fonts.regular,
+    fontSize: 11,
     color: colors.textSecondary,
     marginTop: spacing.lg,
+    lineHeight: 16,
   },
   saveButton: {
     marginTop: spacing.xl,

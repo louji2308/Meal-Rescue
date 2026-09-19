@@ -13,6 +13,10 @@ import {
   FoodIcon,
   UsersIcon,
   LeafIcon,
+  SparkIcon,
+  ClockIcon,
+  UtensilsIcon,
+  ServingIcon,
 } from '../components/icons';
 import { PressableScale } from '../components/motion/PressableScale';
 import type {
@@ -23,6 +27,45 @@ import type {
 import { useSettingsStore } from '../stores/settings.store';
 import { useNotificationsStore, selectUnreadCount } from '../stores/notifications.store';
 import { colors, fonts, radius, spacing } from '../theme';
+
+type MealTime = 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'late';
+
+function getMealTime(): MealTime {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 11) return 'breakfast';
+  if (hour >= 11 && hour < 14) return 'lunch';
+  if (hour >= 14 && hour < 17) return 'snack';
+  if (hour >= 17 && hour < 21) return 'dinner';
+  return 'late';
+}
+
+const MEAL_OPTIONS: Record<MealTime, { prompt: string; sub: string; icon: React.ReactNode }> = {
+  breakfast: {
+    prompt: "What's for breakfast?",
+    sub: 'Start the day right',
+    icon: <SparkIcon size={20} color={colors.homeSurface} />,
+  },
+  lunch: {
+    prompt: "What's for lunch?",
+    sub: 'Fuel your afternoon',
+    icon: <UtensilsIcon size={20} color={colors.homeSurface} />,
+  },
+  snack: {
+    prompt: 'Snack time?',
+    sub: 'Something quick and easy',
+    icon: <ServingIcon size={20} color={colors.homeSurface} />,
+  },
+  dinner: {
+    prompt: "What's for dinner?",
+    sub: 'Make it count tonight',
+    icon: <FoodIcon size={20} color={colors.homeSurface} />,
+  },
+  late: {
+    prompt: 'Late night craving?',
+    sub: 'We got you',
+    icon: <ClockIcon size={20} color={colors.homeSurface} />,
+  },
+};
 
 /**
  * Home — a single static landing page. Big cat, one question, and exactly
@@ -44,6 +87,9 @@ export function HomeScreen() {
   const goToCapture = () => navigation.navigate('Capture');
   const goToFamily = () => navigation.navigate('CommonTableStack');
   const goToNotifications = () => navigation.navigate('Notifications');
+
+  const mealTime = getMealTime();
+  const meal = MEAL_OPTIONS[mealTime];
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -73,7 +119,7 @@ export function HomeScreen() {
 
         {/* ── Actions ── */}
         <View style={styles.actions}>
-          {/* Primary pill — Tell us what's here */}
+          {/* Primary pill — Time-aware meal prompt */}
           <PressableScale
             style={styles.pill}
             scaleTo={0.97}
@@ -81,10 +127,13 @@ export function HomeScreen() {
             pressedTintColor={colors.homeButtonPressed}
             onPress={goToCapture}
             accessibilityRole="button"
-            accessibilityLabel="Tell us what's here"
+            accessibilityLabel={meal.prompt}
           >
-            <FoodIcon size={20} color={colors.homeSurface} />
-            <Text style={styles.pillText}>Tell us what's here</Text>
+            {meal.icon}
+            <View style={styles.pillTextGroup}>
+              <Text style={styles.pillText}>{meal.prompt}</Text>
+              <Text style={styles.pillSubtext}>{meal.sub}</Text>
+            </View>
           </PressableScale>
 
           {/* Pill row — Cook for the family */}
@@ -224,15 +273,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    height: 54,
-    borderRadius: 27,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.homeButton,
+    paddingHorizontal: 20,
+  },
+  pillTextGroup: {
+    alignItems: 'flex-start',
   },
   pillText: {
     fontFamily: fonts.medium,
     fontSize: 15,
     lineHeight: 20,
     color: colors.homeSurface,
+  },
+  pillSubtext: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255,255,255,0.65)',
+    marginTop: 1,
   },
 
   /* Pill row — Cook for the family */

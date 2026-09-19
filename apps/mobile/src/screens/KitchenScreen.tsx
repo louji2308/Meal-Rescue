@@ -1,6 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
@@ -24,14 +22,16 @@ import { toApiError } from '../services/api';
 import {
   type KitchenDashboard,
   type KitchenItem,
+  type CaptureResult,
   getKitchenDashboard,
-  identifyKitchenFood,
   upsertKitchenItem,
   deleteKitchenItem,
   markKitchenItemUsed,
 } from '../services/kitchen.api';
 import { colors, spacing, typography } from '../theme';
 import EMPTY_KITCHEN from '../../assets/empty-kitchen.png';
+import KitchenCaptureBottomSheet from './KitchenCaptureBottomSheet';
+import KitchenCaptureReviewScreen from './KitchenCaptureReviewScreen';
 
 type AddKind = 'pantry' | 'leftover';
 
@@ -72,8 +72,9 @@ export function KitchenScreen() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
 
-  // Camera
-  const [identifyBusy, setIdentifyBusy] = useState(false);
+  // Kitchen Capture
+  const [showCaptureSheet, setShowCaptureSheet] = useState(false);
+  const [captureResult, setCaptureResult] = useState<CaptureResult | null>(null);
 
   // Add form (bottom sheet)
   const [showAdd, setShowAdd] = useState(false);
@@ -160,59 +161,6 @@ export function KitchenScreen() {
   function openAddForm() {
     resetAddForm();
     setShowAdd(true);
-  }
-
-  // --- Camera food identification ---
-  async function handleCameraPick(source: 'camera' | 'library') {
-    setError(null);
-    const permResult =
-      source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permResult.granted) {
-      setError(toApiError(new Error('Permission needed to identify food')));
-      return;
-    }
-
-    const result =
-      source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            quality: 0.7,
-          });
-
-    if (result.canceled || result.assets.length === 0) return;
-    const asset = result.assets[0]!;
-
-    setIdentifyBusy(true);
-    try {
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const response = await identifyKitchenFood(
-        base64,
-        asset.mimeType ?? 'image/jpeg',
-      );
-      // Auto-add identified foods
-      for (const food of response.foods) {
-        if (food.confidence > 0.5) {
-          await upsertKitchenItem({
-            ingredientName: food.name,
-            expiresAt: food.estimatedExpiryDays
-              ? new Date(
-                  Date.now() + food.estimatedExpiryDays * 86400000,
-                ).toISOString()
-              : undefined,
-          });
-        }
-      }
-      loadDashboard();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setIdentifyBusy(false);
-    }
   }
 
   // --- Add item / leftover manually ---
@@ -574,42 +522,49 @@ export function KitchenScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={[typography.heading, styles.title]}>Kitchen</Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={styles.cameraButton}
-            onPress={() => void handleCameraPick('camera')}
-            disabled={identifyBusy}
-          >
-            {identifyBusy ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Ionicons name="camera" size={20} color={colors.softPeach} />
-            )}
-          </Pressable>
-          <Pressable
-            style={styles.cameraButton}
-            onPress={() => void handleCameraPick('library')}
-            disabled={identifyBusy}
-          >
-            <Ionicons name="images" size={20} color={colors.softPurple} />
-          </Pressable>
-        </View>
       </View>
 
       {/* Manage view (only view) */}
       {renderManage()}
 
-      {/* Floating add button */}
-      <Pressable
-        style={styles.fab}
-        onPress={openAddForm}
-        accessibilityRole="button"
-        accessibilityLabel="Add to kitchen"
-      >
-        <Ionicons name="add" size={30} color="#FFFFFF" />
-      </Pressable>
+      {/* Floating add button — opens Kitchen Capture */}
+      <View style={styles.fabContainer}>
+        <Pressable
+          style={styles.fab}
+          onPress={() => setShowCaptureSheet(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Add to kitchen"
+        >
+          <Ionicons name="add" size={28} color="#FFFFFF" />
+          <Text style={styles.fabLabel}>Add to Kitchen</Text>
+        </Pressable>
+      </View>
 
-      {/* Add bottom sheet */}
+      {/* Kitchen Capture bottom sheet */}
+      <KitchenCaptureBottomSheet
+        visible={showCaptureSheet}
+        onClose={() => setShowCaptureSheet(false)}
+        onCapture={(result) => {
+          setShowCaptureSheet(false);
+          setCaptureResult(result);
+        }}
+      />
+
+      {/* Kitchen Capture review screen */}
+      {captureResult && (
+        <Modal visible animationType="slide">
+          <KitchenCaptureReviewScreen
+            result={captureResult}
+            onDone={(summary) => {
+              setCaptureResult(null);
+              loadDashboard();
+            }}
+            onBack={() => setCaptureResult(null)}
+          />
+        </Modal>
+      )}
+
+      {/* Legacy add bottom sheet */}
       {renderAddSheet()}
     </SafeAreaView>
   );
@@ -690,21 +645,32 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   // Floating action button
-  fab: {
+  fabContainer: {
     position: 'absolute',
     bottom: 96,
-    right: spacing.xl,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.homeInk,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  fab: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.homeInk,
+    borderRadius: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
+  },
+  fabLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   // Stats
   statsBar: {

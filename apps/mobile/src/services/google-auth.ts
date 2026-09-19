@@ -4,8 +4,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { api } from './api';
 import type { AuthTokens } from '@meal-rescue/shared-types';
 
-WebBrowser.maybeCompleteAuthSession();
-
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
 
 // Google rejects custom schemes (`mealrescue://`) for Web clients, so the auth

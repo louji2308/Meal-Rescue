@@ -177,10 +177,18 @@ export function CaptureScreen() {
     setBusy(true);
     try {
       let analysis: MealAnalysisResponse;
+      let viaPhoto = false;
       if (image) {
         analysis = await analyzeMeal({ image });
+        viaPhoto = true;
       } else {
         analysis = await analyzeMeal({ text: text.trim() });
+      }
+      // Photo captures get an editable review step (names, amounts, servings);
+      // text captures skip straight to the rescue loop as before.
+      if (viaPhoto) {
+        navigation.navigate('MealReview', { analysis });
+        return;
       }
       // Extract foods and ingredients from the analysis
       const foods = analysis.detectedFoods.map((f) => f.name);

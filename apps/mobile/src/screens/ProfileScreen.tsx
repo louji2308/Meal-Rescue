@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -23,6 +22,24 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
 import { PawStamp } from '../components/mascot/PawStamp';
+import {
+  UsersIcon,
+  UtensilsIcon,
+  SettingsIcon,
+  BellIcon,
+  MailIcon,
+  InfoIcon,
+  BookIcon,
+  SparkIcon,
+  StatsIcon,
+  HeartIcon,
+  BanIcon,
+  FlashIcon,
+  ClockIcon,
+  SyncIcon,
+  BulbIcon,
+  ChevronRightIcon,
+} from '../components/icons';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { getLearnedPreferences, getPersonalizationInsights } from '../services/preference.api';
@@ -30,7 +47,7 @@ import { getTasteBundle } from '../services/taste.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useCommonTableStore } from '../stores/common-table.store';
 import { useMonetization } from '../stores/monetization.store';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing, typography } from '../theme';
 
 const APK_VERSION = Constants.expoConfig?.version ?? Constants.nativeApplicationVersion ?? '0.1.0';
 const NOTIFICATIONS_KEY = 'meal-rescue/notifications-enabled';
@@ -115,20 +132,21 @@ export function ProfileScreen() {
     return colors.textSecondary;
   };
 
-  const typeIcon = (type: string): keyof typeof Ionicons.glyphMap => {
+  const typeIcon = (type: string): React.ReactNode => {
+    const iconProps = { size: 18, color: colors.homeInk };
     switch (type) {
       case 'favorite_ingredient':
-        return 'heart-outline';
+        return <HeartIcon {...iconProps} />;
       case 'avoided_ingredient':
-        return 'ban-outline';
+        return <BanIcon {...iconProps} />;
       case 'prep_tolerance':
-        return 'flash-outline';
+        return <FlashIcon {...iconProps} />;
       case 'time_pattern':
-        return 'time-outline';
+        return <ClockIcon {...iconProps} />;
       case 'rescue_pattern':
-        return 'sync-outline';
+        return <SyncIcon {...iconProps} />;
       default:
-        return 'bulb-outline';
+        return <BulbIcon {...iconProps} />;
     }
   };
 
@@ -156,7 +174,7 @@ return (
             <Text style={typography.caption}>
               {isEffectivePro
                 ? 'Pro plan'
-                : `Free plan · 3 rescues/day${rescueCredits > 0 ? ` · +${rescueCredits} bonus` : ''}`}
+                : `Free plan ï¿½ 3 rescues/day${rescueCredits > 0 ? ` ï¿½ +${rescueCredits} bonus` : ''}`}
             </Text>
           </View>
         </View>
@@ -179,43 +197,43 @@ return (
                 </Text>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.homeInk} />
+            <ChevronRightIcon size={18} color={colors.homeTextQuiet} />
           </Pressable>
         )}
 
         <View style={styles.section}>
           <View style={styles.sectionTitle}>
-            <Ionicons name="people-outline" size={20} color={colors.homeInk} />
+            <UsersIcon size={18} color={colors.homeInk} />
             <Text style={styles.sectionTitleText}>Common Table</Text>
           </View>
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Common Table — add the people you cook for"
+            accessibilityLabel="Common Table ï¿½ add the people you cook for"
             onPress={() => navigation.navigate('CommonTableStack')}
             style={styles.settingRow}
             >
-            <Ionicons name="restaurant-outline" size={22} color={colors.homeInk} />
+            <UtensilsIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Add your partner</Text>
               <Text style={styles.settingSub}>
                 {household
-                  ? `One meal for everyone · ${members.length} at the table`
+                  ? `One meal for everyone ï¿½ ${members.length} at the table`
                   : 'Add the people you cook for to plan one meal together'}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.homeInk} />
+            <ChevronRightIcon size={16} color={colors.homeTextQuiet} />
           </Pressable>
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionTitle}>
-            <Ionicons name="settings-outline" size={20} color={colors.homeInk} />
+            <SettingsIcon size={18} color={colors.homeInk} />
             <Text style={styles.sectionTitleText}>Settings</Text>
           </View>
 
           <View style={styles.settingRow}>
-            <Ionicons name="notifications-outline" size={22} color={colors.homeInk} />
+            <BellIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Reminders</Text>
               <Text style={styles.settingSub}>Rescue reminders and smart nudges</Text>
@@ -235,16 +253,16 @@ return (
             onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
             style={styles.settingRow}
             >
-            <Ionicons name="mail-outline" size={22} color={colors.homeInk} />
+            <MailIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Support</Text>
               <Text style={styles.settingSub}>{SUPPORT_EMAIL}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.homeInk} />
+            <ChevronRightIcon size={16} color={colors.homeTextQuiet} />
           </Pressable>
 
           <View style={styles.settingRow}>
-            <Ionicons name="information-circle-outline" size={22} color={colors.homeInk} />
+            <InfoIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>About Meal Rescue</Text>
               <Text style={styles.settingSub}>Version {APK_VERSION}</Text>
@@ -257,12 +275,12 @@ return (
             onPress={() => navigation.navigate('TasteJournal')}
             style={styles.settingRow}
             >
-            <Ionicons name="book-outline" size={22} color={colors.homeInk} />
+            <BookIcon size={18} color={colors.homeInk} />
             <View style={styles.settingLabel}>
               <Text style={styles.settingTitle}>Taste Journal</Text>
               <Text style={styles.settingSub}>What Meal Rescue remembers about you</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.homeInk} />
+            <ChevronRightIcon size={16} color={colors.homeTextQuiet} />
           </Pressable>
         </View>
 
@@ -271,17 +289,14 @@ return (
         {insights.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitle}>
-              <Ionicons name="sparkles-outline" size={20} color={colors.homeInk} />
+              <SparkIcon size={18} color={colors.homeInk} />
               <Text style={styles.sectionTitleText}>What Meal Rescue has learned</Text>
             </View>
             {insights.map((insight, i) => (
               <View key={i} style={styles.insightCard}>
-                <Ionicons
-                  name={typeIcon(insight.type)}
-                  size={24}
-                  style={styles.insightIcon}
-                  color={colors.homeInk}
-                />
+                <View style={styles.insightIcon}>
+                  {typeIcon(insight.type)}
+                </View>
                 <View style={styles.insightContent}>
                   <Text style={styles.insightDesc}>{insight.description}</Text>
                   <View style={styles.insightMeta}>
@@ -303,7 +318,7 @@ return (
         {preferences.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitle}>
-              <Ionicons name="stats-chart-outline" size={20} color={colors.homeInk} />
+              <StatsIcon size={18} color={colors.homeInk} />
               <Text style={styles.sectionTitleText}>Learned preferences</Text>
             </View>
             {preferences.map((pref, i) => (
@@ -313,7 +328,7 @@ return (
                 <Text
                   style={[styles.prefConfidence, { color: confidenceColor(pref.confidenceScore) }]}
                 >
-                  {Math.round(pref.confidenceScore * 100)}% confidence · {pref.observationCount}{' '}
+                  {Math.round(pref.confidenceScore * 100)}% confidence ï¿½ {pref.observationCount}{' '}
                   observations
                 </Text>
               </View>
@@ -323,12 +338,9 @@ return (
 
         {insights.length === 0 && preferences.length === 0 && tasteCount === 0 && (
           <View style={styles.empty}>
-            <Ionicons
-              name="sparkles-outline"
-              size={48}
-              color={colors.homeInk}
-              style={styles.emptyIcon}
-            />
+            <View style={styles.emptyIcon}>
+              <SparkIcon size={40} color={colors.homeTextTertiary} />
+            </View>
             <Text style={styles.emptyText}>No learnings yet</Text>
             <Text style={styles.emptySub}>
               Rescue meals and give feedback to build your profile
@@ -379,17 +391,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   proTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontFamily: fonts.display,
+    fontSize: 15,
+    fontWeight: '400',
     color: colors.text,
   },
   proSub: {
-    fontSize: 13,
+    fontSize: 12,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     marginTop: 2,
   },
   email: {
     marginBottom: spacing.xs,
+    fontFamily: fonts.display,
+    fontWeight: '400',
   },
   tier: {
     marginBottom: spacing.xl,
@@ -414,12 +430,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    fontWeight: '400',
     color: colors.text,
   },
   settingSub: {
-    fontSize: 13,
+    fontSize: 12,
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
     marginTop: 2,
   },
@@ -433,9 +451,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   sectionTitleText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 14,
+    fontWeight: '400',
+    color: colors.homeTextSecondary,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   insightCard: {
     backgroundColor: colors.surface,
@@ -447,14 +468,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
   },
-  insightIcon: {},
+  insightIcon: {
+    marginTop: 2,
+  },
   insightContent: {
     flex: 1,
   },
   insightDesc: {
-    fontSize: 14,
+    fontFamily: fonts.regular,
+    fontSize: 13,
     color: colors.text,
     marginBottom: spacing.xs,
+    lineHeight: 18,
   },
   insightMeta: {
     flexDirection: 'row',
@@ -462,7 +487,7 @@ const styles = StyleSheet.create({
   },
   insightConfidence: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: fonts.medium,
   },
   prefCard: {
     backgroundColor: colors.surface,
@@ -473,21 +498,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   prefType: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
     textTransform: 'uppercase',
     marginBottom: spacing.xs,
+    letterSpacing: 0.5,
   },
   prefKey: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    fontWeight: '400',
     color: colors.text,
     marginBottom: spacing.xs,
   },
   prefConfidence: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: fonts.medium,
   },
   empty: {
     alignItems: 'center',
@@ -498,14 +525,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: fonts.display,
+    fontSize: 15,
+    fontWeight: '400',
     color: colors.text,
     marginBottom: spacing.xs,
   },
   emptySub: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 18,
   },
   signOut: {
     alignSelf: 'stretch',

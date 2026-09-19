@@ -20,3 +20,20 @@ export function createLlmClient(): LlmClient {
   }
   return new HeuristicLlmClient();
 }
+
+/**
+ * Dedicated vision client.
+ *
+ * Photo analysis (meal capture, kitchen capture, kitchen identify) uses
+ * OPENROUTER_VISION_API_KEY + OPENROUTER_VISION_MODEL. Falls back to the
+ * main text key so dev/test environments without the vision-only key still
+ * boot and degrade to the heuristic engine like every other stage.
+ */
+export function createVisionLlmClient(): LlmClient {
+  const visionKey = env.OPENROUTER_VISION_API_KEY ?? env.OPENAI_API_KEY;
+  if (visionKey) {
+    const primary = new OpenAiLlmClient(visionKey, env.OPENAI_BASE_URL);
+    return new ResilientLlmClient(primary, new HeuristicLlmClient());
+  }
+  return new HeuristicLlmClient();
+}

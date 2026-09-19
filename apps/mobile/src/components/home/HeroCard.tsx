@@ -8,6 +8,25 @@ import { PressableScale } from '../motion/PressableScale';
 import HOME_CAT from '../../../assets/home-cat.png';
 import { colors, fonts } from '../../theme';
 
+type MealTime = 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'late';
+
+function getMealTime(): MealTime {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 11) return 'breakfast';
+  if (hour >= 11 && hour < 14) return 'lunch';
+  if (hour >= 14 && hour < 17) return 'snack';
+  if (hour >= 17 && hour < 21) return 'dinner';
+  return 'late';
+}
+
+const MEAL_PROMPTS: Record<MealTime, string> = {
+  breakfast: "What's for breakfast?",
+  lunch: "What's for lunch?",
+  snack: 'Snack time?',
+  dinner: "What's for dinner?",
+  late: 'Late night craving?',
+};
+
 interface HeroCardProps {
   onCapture: () => void;
   onAddManual: () => void;
@@ -22,6 +41,8 @@ interface HeroCardProps {
  * secondary actions. Hierarchical: capture > add manually > cook for family.
  */
 export function HeroCard({ onCapture, onAddManual, onFamily, disabled = false }: HeroCardProps) {
+  const mealPrompt = MEAL_PROMPTS[getMealTime()];
+
   return (
     <View style={styles.card}>
       <View style={styles.titleZone}>
@@ -43,11 +64,11 @@ export function HeroCard({ onCapture, onAddManual, onFamily, disabled = false }:
         onPress={onCapture}
         disabled={disabled}
         accessibilityRole="button"
-        accessibilityLabel="Tell us what's here"
+        accessibilityLabel={mealPrompt}
         accessibilityState={{ disabled }}
       >
         <CameraIcon size={17} color={colors.homeSurface} />
-        <Text style={styles.ctaText}>Tell us what's here</Text>
+        <Text style={styles.ctaText}>{mealPrompt}</Text>
       </PressableScale>
 
       <PressableScale

@@ -34,6 +34,16 @@ module.exports = {
         backgroundImage: './assets/android-icon-background.png',
         monochromeImage: './assets/mascot.png',
       },
+      intentFilters: [
+        {
+          action: 'android.intent.action.VIEW',
+          category: ['android.intent.category.DEFAULT', 'android.intent.category.BROWSABLE'],
+          data: {
+            scheme: 'mealrescue',
+            pathPrefix: '/expo-auth-session',
+          },
+        },
+      ],
       predictiveBackGestureEnabled: false,
       permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
     },

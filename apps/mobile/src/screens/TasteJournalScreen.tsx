@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
@@ -20,6 +19,19 @@ import type {
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
+import {
+  ChevronLeftIcon,
+  BookIcon,
+  SparkIcon,
+  GitCompareIcon,
+  TrendingIcon,
+  FlaskIcon,
+  CompassIcon,
+  HelpCircleIcon,
+  XIcon,
+  HeartIcon,
+  LeafIcon,
+} from '../components/icons';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import {
@@ -29,7 +41,7 @@ import {
   getJournal,
   getJournalEvidence,
 } from '../services/taste-journal.api';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing, typography } from '../theme';
 
 const SOURCE_LABELS: Record<TasteSignalSource, string> = {
   ONBOARDING: 'your setup',
@@ -47,29 +59,29 @@ const POLARITY_LABELS: Record<TasteSignalPolarity, string> = {
 
 const SECTION_META: Record<
   string,
-  { title: string; name: keyof typeof Ionicons.glyphMap; accent: string; hint: string }
+  { title: string; icon: React.ReactNode; accent: string; hint: string }
 > = {
   patterns: {
     title: 'Your patterns',
-    name: 'sparkles',
+    icon: <SparkIcon size={14} color="#FFFFFF" />,
     accent: colors.softFresh,
     hint: 'What you reliably love - and avoid',
   },
   depends: {
     title: 'It depends',
-    name: 'git-compare',
+    icon: <GitCompareIcon size={14} color="#FFFFFF" />,
     accent: colors.softWarm,
     hint: 'When the context decides the outcome',
   },
   discoveries: {
     title: 'Recently discovered',
-    name: 'trending-up',
+    icon: <TrendingIcon size={14} color="#FFFFFF" />,
     accent: colors.softCool,
     hint: 'Freshly spotted, still settling',
   },
   stillLearning: {
     title: 'Still learning',
-    name: 'flask',
+    icon: <FlaskIcon size={14} color="#FFFFFF" />,
     accent: colors.softAccent,
     hint: 'Thin or conflicting - we are watching',
   },
@@ -251,15 +263,15 @@ export function TasteJournalScreen() {
           onPress={() => navigation.goBack()}
           style={styles.backRow}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.softAlert} />
+          <ChevronLeftIcon size={18} color={colors.homeTextQuiet} />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
 
         <View style={styles.hero}>
           <View style={styles.heroEmblem}>
-            <Ionicons name="book" size={22} color="#FFFFFF" />
+            <BookIcon size={20} color="#FFFFFF" />
           </View>
-          <Text style={[typography.title, styles.heroTitle]}>Your Taste Journal</Text>
+          <Text style={[styles.heroTitle]}>Your Taste Journal</Text>
           <Text style={[typography.body, styles.heroSub]}>
             What Meal Rescue says about how you eat - every line grounded in something you have
             told us or shown us.
@@ -296,7 +308,7 @@ export function TasteJournalScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.hero}>
             <View style={styles.heroEmblem}>
-              <Ionicons name="book" size={22} color="#FFFFFF" />
+              <BookIcon size={20} color="#FFFFFF" />
             </View>
             <Skeleton.Block width={210} height={28} />
             <Skeleton.Block width={280} height={14} />
@@ -319,7 +331,7 @@ export function TasteJournalScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {header}
           <View style={styles.empty}>
-            <Ionicons name="book-outline" size={44} color={colors.softAlert} />
+            <BookIcon size={36} color={colors.homeTextTertiary} />
             <Text style={styles.emptyText}>Nothing here yet</Text>
             <Text style={styles.emptySub}>
               Rescue a meal, rate how it went, or finish a pairing and we will start keeping a
@@ -369,7 +381,7 @@ function renderInsightSection(
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <View style={[styles.sectionIcon, { backgroundColor: meta.accent }]}>
-            <Ionicons name={meta.name} size={16} color="#FFFFFF" />
+            {meta.icon}
           </View>
           <View style={styles.sectionHeaderText}>
             <Text style={styles.sectionTitle}>{meta.title}</Text>
@@ -395,7 +407,7 @@ function renderBoundaries(
     <View style={styles.section}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.sectionIcon, { backgroundColor: colors.text }]}>
-          <Ionicons name="compass" size={16} color="#FFFFFF" />
+          <CompassIcon size={14} color="#FFFFFF" />
         </View>
         <View style={styles.sectionHeaderText}>
           <Text style={styles.sectionTitle}>Your boundaries</Text>
@@ -457,22 +469,22 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
       <View style={styles.insightActions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Why do you think this?"
+          accessibilityLabel="Show me why"
           onPress={() => void openEvidence()}
           style={styles.insightAction}
         >
-          <Ionicons name="help-circle-outline" size={15} color={colors.primary} />
-          <Text style={styles.insightActionText}>Why do you think this?</Text>
+          <HelpCircleIcon size={14} color={colors.primary} />
+          <Text style={styles.insightActionText}>Show me why</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="That is not me"
+          accessibilityLabel="Not quite right"
           disabled={busy}
           onPress={() => setCorrectOpen(true)}
           style={styles.insightAction}
         >
-          <Ionicons name="close-circle-outline" size={15} color={colors.softAlert} />
-          <Text style={styles.insightActionText}>That&apos;s not me</Text>
+          <XIcon size={14} color={colors.homeTextQuiet} />
+          <Text style={[styles.insightActionText, { color: colors.homeTextQuiet }]}>Not quite right</Text>
         </Pressable>
       </View>
 
@@ -490,9 +502,9 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
               onPress={() => setEvidenceOpen(false)}
               style={styles.modalClose}
             >
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
+              <XIcon size={20} color={colors.textSecondary} />
             </Pressable>
-            <Text style={styles.modalTitle}>Why do you think this?</Text>
+            <Text style={styles.modalTitle}>Show me why</Text>
             <Text style={styles.modalSubtitle}>{insight.title}</Text>
             {evidenceLoading ? (
               <View style={styles.evidenceLoading}>
@@ -532,7 +544,7 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
                 }}
                 style={styles.modalActionButton}
               >
-                <Text style={styles.modalActionText}>That&apos;s not me</Text>
+                <Text style={styles.modalActionText}>Not quite right</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -557,7 +569,7 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
       >
         <View style={styles.modalOverlay}>
           <View style={styles.correctCard}>
-            <Text style={styles.modalTitle}>That&apos;s not me</Text>
+            <Text style={styles.modalTitle}>Not quite right</Text>
             <Text style={styles.modalSubtitle}>How would you put it?</Text>
             <Pressable
               accessibilityRole="button"
@@ -567,7 +579,7 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
               }}
               style={styles.correctOption}
             >
-              <Ionicons name="heart" size={20} color={colors.softAlert} />
+              <HeartIcon size={18} color={colors.primary} />
               <Text style={styles.correctOptionText}>Actually, I like this</Text>
             </Pressable>
             <Pressable
@@ -578,7 +590,7 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
               }}
               style={[styles.correctOption, styles.correctOptionAvoid]}
             >
-              <Ionicons name="leaf" size={20} color={colors.softCool} />
+              <LeafIcon size={18} color={colors.softCool} />
               <Text style={styles.correctOptionText}>Actually, I avoid this</Text>
             </Pressable>
             <Pressable
@@ -607,7 +619,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.md,
   },
-  backText: { color: colors.primary, fontSize: 15 },
+  backText: { color: colors.homeTextQuiet, fontFamily: fonts.medium, fontSize: 14 },
   hero: {
     backgroundColor: colors.surface,
     borderRadius: 20,
@@ -617,46 +629,75 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   heroEmblem: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.text,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.homeInk,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  heroTitle: { marginBottom: spacing.xs },
+  heroTitle: {
+    fontFamily: fonts.display,
+    fontSize: 22,
+    fontWeight: '400',
+    color: colors.homeInk,
+    marginBottom: spacing.xs,
+    letterSpacing: -0.3,
+  },
   heroSub: {
+    fontFamily: fonts.regular,
     color: colors.textSecondary,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     marginBottom: spacing.lg,
   },
   heroStatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   heroStat: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs, flexShrink: 1 },
-  heroStatNum: { fontSize: 26, fontWeight: '800', color: colors.text },
-  heroStatLabel: { fontSize: 12, color: colors.textSecondary },
+  heroStatNum: {
+    fontFamily: fonts.display,
+    fontSize: 24,
+    fontWeight: '400',
+    color: colors.homeInk,
+  },
+  heroStatLabel: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
   heroDivider: { width: 1, height: 28, backgroundColor: colors.border },
   heroFreshness: {
     marginTop: spacing.md,
-    fontSize: 12,
+    fontFamily: fonts.regular,
+    fontSize: 11,
     color: colors.textSecondary,
     fontStyle: 'italic',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   section: { marginBottom: spacing.xl },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   sectionIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
   },
   sectionHeaderText: { flex: 1 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  sectionHint: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  sectionTitle: {
+    fontFamily: fonts.display,
+    fontSize: 14,
+    fontWeight: '400',
+    color: colors.homeInk,
+    letterSpacing: 0.2,
+  },
+  sectionHint: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   sectionBody: { marginTop: spacing.sm },
   insightCard: {
     backgroundColor: colors.surface,
@@ -666,11 +707,23 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  insightTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
-  insightBody: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
+  insightTitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    fontWeight: '400',
+    color: colors.homeInk,
+    marginBottom: spacing.xs,
+  },
+  insightBody: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
   insightFooter: {
     marginTop: spacing.sm,
-    fontSize: 12,
+    fontFamily: fonts.regular,
+    fontSize: 11,
     color: colors.textSecondary,
   },
   insightActions: {
@@ -680,14 +733,40 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   insightAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  insightActionText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  insightActionText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.primary,
+  },
   boundaryGroup: { marginBottom: spacing.lg },
-  boundaryTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-  boundarySubtitle: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm },
+  boundaryTitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    fontWeight: '400',
+    color: colors.homeInk,
+  },
+  boundarySubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
   boundaryItems: { gap: spacing.sm },
   empty: { alignItems: 'center', padding: spacing.xl },
-  emptyText: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
-  emptySub: { color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  emptyText: {
+    fontFamily: fonts.display,
+    fontSize: 15,
+    fontWeight: '400',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  emptySub: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -706,15 +785,21 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     marginBottom: spacing.xs,
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  modalTitle: {
+    fontFamily: fonts.display,
+    fontSize: 17,
+    fontWeight: '400',
+    color: colors.homeInk,
+  },
   modalSubtitle: {
-    fontSize: 14,
+    fontFamily: fonts.regular,
+    fontSize: 13,
     color: colors.textSecondary,
     marginTop: spacing.xs,
     marginBottom: spacing.md,
   },
   evidenceLoading: { gap: spacing.sm, paddingVertical: spacing.md },
-  evidenceError: { color: colors.softAlert, fontSize: 14 },
+  evidenceError: { color: colors.softAlert, fontFamily: fonts.regular, fontSize: 13 },
   evidenceList: { maxHeight: 360 },
   evidenceItem: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -722,11 +807,36 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   evidenceItemHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  evidencePolarity: { fontSize: 14, fontWeight: '700', color: colors.text },
-  evidenceDate: { fontSize: 12, color: colors.textSecondary },
-  evidenceSource: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  evidenceContext: { fontSize: 13, color: colors.secondary, marginTop: 2, fontStyle: 'italic' },
-  evidenceNote: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.lg, fontStyle: 'italic' },
+  evidencePolarity: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.homeInk,
+  },
+  evidenceDate: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  evidenceSource: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  evidenceContext: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.secondary,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  evidenceNote: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    fontStyle: 'italic',
+  },
   modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   modalActionButton: {
     flex: 1,
@@ -736,9 +846,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  modalActionText: { fontSize: 14, fontWeight: '600', color: colors.text },
-  modalActionDanger: { borderColor: colors.softAlert },
-  modalActionDangerText: { fontSize: 14, fontWeight: '600', color: colors.softAlert },
+  modalActionText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.homeInk,
+  },
+  modalActionDanger: { borderColor: colors.homeTextQuiet },
+  modalActionDangerText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.homeTextQuiet,
+  },
   correctCard: {
     backgroundColor: colors.surface,
     borderRadius: 24,
@@ -757,7 +875,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   correctOptionAvoid: { backgroundColor: colors.primaryLight },
-  correctOptionText: { fontSize: 15, fontWeight: '600', color: colors.text },
+  correctOptionText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.homeInk,
+  },
   correctCancel: { alignItems: 'center', paddingVertical: spacing.sm },
-  correctCancelText: { fontSize: 14, color: colors.textSecondary },
+  correctCancelText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
 });

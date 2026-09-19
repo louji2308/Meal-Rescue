@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
+import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
+
+// Must run at root level so the auth-session callback is intercepted on cold start
+WebBrowser.maybeCompleteAuthSession();
 import { Animated, LogBox, StyleSheet, View } from 'react-native';
 import { Text } from './src/components/AppText';
 import { Image } from 'expo-image';

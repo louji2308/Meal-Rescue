@@ -142,3 +142,84 @@ export async function markKitchenItemUsed(itemId: string): Promise<MarkUsedResul
   const res = await api.post<MarkUsedResult>(`/api/v1/pantry/${itemId}/use`);
   return res.data;
 }
+
+// ---------------------------------------------------------------------------
+// Kitchen Capture
+// ---------------------------------------------------------------------------
+
+export type CaptureSource = 'CAMERA' | 'PHOTO' | 'MANUAL';
+export type CaptureItemType = 'INGREDIENT' | 'PREPARED_MEAL' | 'LEFTOVER' | 'PACKAGED_FOOD';
+export type CaptureItemState = 'RAW' | 'COOKED' | 'READY_TO_EAT' | 'UNKNOWN';
+export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface CapturedItem {
+  id: string;
+  displayName: string;
+  itemType: CaptureItemType;
+  state: CaptureItemState;
+  quantity: number | null;
+  unit: string | null;
+  servings: number | null;
+  confidence: number;
+  confidenceTier: ConfidenceTier;
+  source: CaptureSource;
+  estimatedExpiryDays: number | null;
+  duplicateOf?: {
+    id: string;
+    currentQuantity: number | null;
+    currentUnit: string | null;
+  };
+  clarification?: {
+    question: string;
+    options: string[];
+  };
+}
+
+export interface CaptureResult {
+  items: CapturedItem[];
+  summary: {
+    total: number;
+    highConfidence: number;
+    mediumConfidence: number;
+    lowConfidence: number;
+    duplicates: number;
+  };
+  imageBase64?: string;
+}
+
+export interface CaptureConfirmItem {
+  id: string;
+  accepted: boolean;
+  displayName?: string;
+  itemType?: CaptureItemType;
+  state?: CaptureItemState;
+  quantity?: number | null;
+  unit?: string | null;
+  servings?: number | null;
+  estimatedExpiryDays?: number | null;
+  duplicateAction?: 'UPDATE' | 'ADD_MORE' | 'SKIP';
+}
+
+export interface CaptureConfirmResult {
+  added: number;
+  updated: number;
+  skipped: number;
+}
+
+export async function captureKitchen(
+  input:
+    | { source: 'CAMERA' | 'PHOTO'; imageBase64: string; mimeType?: string }
+    | { source: 'MANUAL'; text: string },
+): Promise<CaptureResult> {
+  const res = await api.post<CaptureResult>('/api/v1/kitchen/capture', input);
+  return res.data;
+}
+
+export async function confirmCapture(
+  items: CaptureConfirmItem[],
+): Promise<CaptureConfirmResult> {
+  const res = await api.post<CaptureConfirmResult>('/api/v1/kitchen/capture/confirm', {
+    items,
+  });
+  return res.data;
+}

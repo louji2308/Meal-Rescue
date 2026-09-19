@@ -3,10 +3,11 @@ import '@fastify/multipart';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import { ErrorCategory, type MealAnalysisResponse } from '@meal-rescue/shared-types';
+import { ErrorCategory, type CulinaryFamily, type MealAnalysisResponse } from '@meal-rescue/shared-types';
 
 import { AppError } from '../lib/errors';
 import { buildServices } from '../services/composition';
+import type { TasteMemoryService } from '../services/taste-memory.service';
 
 const textAnalysisSchema = z.object({
   text: z.string().trim().min(2).max(500),
@@ -25,14 +26,18 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB pre-optimization cap
  * the client shows "Is that correct? [Yes] [Edit]" instead of a form.
  */
 export async function mealRoutes(app: FastifyInstance): Promise<void> {
-  const { mealAnalyzer } = buildServices(app.redis);
+  const { mealAnalyzer, tasteMemory } = buildServices(app.redis);
 
   app.post('/analyze', async (request, reply) => {
     const contentType = request.headers['content-type'] ?? '';
 
     if (contentType.includes('multipart/form-data')) {
       const file = await extractImage(app, request);
-      const analysis = await mealAnalyzer.analyzeFromImage(file, request.user.sub);
+      const analysis = await mealAnalyzer.analyzeFromImage(
+        file,
+        request.user.sub,
+        await topCuisines(request.user.sub, tasteMemory),
+      );
       return reply.status(201).send(analysis);
     }
 
@@ -83,4 +88,22 @@ async function extractImage(app: FastifyInstance, request: FastifyRequest): Prom
   }
   void app; // logger available if upload metrics are added later
   return Buffer.concat(chunks);
+}
+
+/**
+ * Top onboard cuisines for the user, best affinity first. Empty when the
+ * user has no cuisine history - the vision prompt then runs without a
+ * soft prior instead of guessing. At most 3 hints keep the prior "soft".
+ */
+async function topCuisines(
+  userId: string,
+  tasteMemory: TasteMemoryService,
+  limit = 3,
+): Promise<CulinaryFamily[]> {
+  const affinities = await tasteMemory.getCuisineAffinities(userId);
+  return [...affinities.entries()]
+    .filter(([, score]) => score > 0.1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([family]) => family);
 }
