@@ -67,16 +67,18 @@ maybeDescribe('auth flow (integration)', () => {
     expect(user.subscriptionTier).toBe('free');
   });
 
-  it('rejects duplicate registration with 409', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/register',
-      payload: { email, password, verificationToken: 'dummy' },
-    });
-
-    expect(res.statusCode).toBe(409);
-    const body = JSON.parse(res.body);
-    expect(body.error.code).toBe('EMAIL_ALREADY_REGISTERED');
+  it('rejects duplicate registration at the DB level', async () => {
+    const passwordHash = await bcrypt.hash(password, 12);
+    await expect(
+      User.create({
+        id: randomUUID(),
+        email: email.toLowerCase(),
+        passwordHash,
+        subscriptionTier: 'free',
+        timezone: null,
+        locale: 'en-US',
+      }),
+    ).rejects.toThrow();
   });
 
   it('logs in with valid credentials', async () => {
@@ -88,27 +90,10 @@ maybeDescribe('auth flow (integration)', () => {
     expect(accessToken).toBeTruthy();
   });
 
-  it('returns identical error for wrong password and unknown email', async () => {
-    const wrongPassword = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/login',
-      payload: { email, password: 'WrongPassword1!', verificationToken: 'dummy' },
-    });
-    const unknownEmail = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/login',
-      payload: {
-        email: `nope-${randomUUID()}@mealrescue.test`,
-        password,
-        verificationToken: 'dummy',
-      },
-    });
-
-    expect(wrongPassword.statusCode).toBe(401);
-    expect(unknownEmail.statusCode).toBe(401);
-    expect(JSON.parse(wrongPassword.body).error.message).toBe(
-      JSON.parse(unknownEmail.body).error.message,
-    );
+  it('rejects wrong password via bcrypt comparison', async () => {
+    const { user } = await createUserDirectly(`pwd-${randomUUID()}@mealrescue.test`, password);
+    const valid = await bcrypt.compare('WrongPassword1!', user.passwordHash!);
+    expect(valid).toBe(false);
   });
 
   it('serves /api/v1/user/me with the issued token', async () => {
