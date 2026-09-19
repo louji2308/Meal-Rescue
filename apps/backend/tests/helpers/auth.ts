@@ -1,39 +1,38 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
+import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
 
+import { User } from '../../src/database/models/user.model';
+import { signAccessToken } from '../../src/lib/jwt';
+
 /**
- * Registers a throwaway user against the running test app and returns
- * their bearer token. Keeps per-suite email uniqueness via UUID.
+ * Registers a throwaway user directly in the database and returns a JWT.
  *
- * The register endpoint requires a valid email verification token.
- * In tests, we bypass the email-code flow by injecting a token directly
- * into Redis so the register handler accepts it.
+ * This bypasses the HTTP /auth/register endpoint (which requires email
+ * verification via Redis) because in the test environment Redis is disabled
+ * (app.redis is null) so verification tokens can't be stored or validated.
  */
 export async function registerTestUser(
-  app: FastifyInstance,
+  _app: FastifyInstance,
 ): Promise<{ token: string; userId: string; email: string }> {
   const email = `test-${randomUUID()}@mealrescue.test`;
+  const passwordHash = await bcrypt.hash('Sup3rSecret!', 12);
 
-  // Create a verification token in Redis so the register endpoint accepts it.
-  const verificationToken = `test-verify-${randomBytes(16).toString('hex')}`;
-  if (app.redis) {
-    await app.redis.set(`verify-token:${verificationToken}`, email.toLowerCase(), 'EX', 300);
-  }
-
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/register',
-    payload: {
-      email,
-      password: 'Sup3rSecret!',
-      displayName: 'Pipeline Test',
-      verificationToken,
-    },
+  const user = await User.create({
+    id: randomUUID(),
+    email: email.toLowerCase(),
+    passwordHash,
+    subscriptionTier: 'free',
+    timezone: null,
+    locale: 'en-US',
   });
-  if (res.statusCode !== 201) {
-    throw new Error(`Test user registration failed (${res.statusCode}): ${res.body}`);
-  }
-  const body = res.json();
-  return { token: body.accessToken as string, userId: body.user.id as string, email };
+
+  const token = signAccessToken({
+    sub: user.id,
+    email: user.email,
+    subscriptionTier: 'free',
+  });
+
+  return { token, userId: user.id, email };
 }

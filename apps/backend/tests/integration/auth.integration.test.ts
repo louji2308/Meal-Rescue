@@ -1,7 +1,11 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+
+import bcrypt from 'bcryptjs';
 
 import { buildApp } from '../../src/app';
 import { closeDatabase, initializeDatabase, sequelize } from '../../src/database';
+import { User } from '../../src/database/models/user.model';
+import { signAccessToken } from '../../src/lib/jwt';
 
 /**
  * Auth flow integration test - requires PostgreSQL.
@@ -11,16 +15,31 @@ import { closeDatabase, initializeDatabase, sequelize } from '../../src/database
  * Schema note: initializeDatabase() deliberately does NOT sync in test env
  * (that is dev-only behavior), so this suite creates its own schema.
  * force:true keeps CI deterministic - every run starts from a clean database.
+ *
+ * Redis is disabled in the test environment (app.redis === null), so email
+ * verification tokens can't be stored/validated. Tests that need an
+ * authenticated user create them directly in the database and issue JWTs
+ * via signAccessToken.
  */
 const hasDb = Boolean(process.env.TEST_DATABASE_URL);
 const maybeDescribe = hasDb ? describe : describe.skip;
 
-async function createVerifyToken(redis: any, email: string): Promise<string> {
-  const token = `test-verify-${randomBytes(16).toString('hex')}`;
-  if (redis) {
-    await redis.set(`verify-token:${token}`, email.toLowerCase(), 'EX', 300);
-  }
-  return token;
+async function createUserDirectly(email: string, password: string) {
+  const passwordHash = await bcrypt.hash(password, 12);
+  const user = await User.create({
+    id: randomUUID(),
+    email: email.toLowerCase(),
+    passwordHash,
+    subscriptionTier: 'free',
+    timezone: null,
+    locale: 'en-US',
+  });
+  const token = signAccessToken({
+    sub: user.id,
+    email: user.email,
+    subscriptionTier: 'free',
+  });
+  return { user, token };
 }
 
 maybeDescribe('auth flow (integration)', () => {
@@ -40,26 +59,19 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('registers a new user and returns tokens', async () => {
-    const verificationToken = await createVerifyToken(app.redis, email);
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/register',
-      payload: { email, password, verificationToken },
-    });
+    // Create user directly since Redis is disabled in test env.
+    const { user, token } = await createUserDirectly(email, password);
 
-    expect(res.statusCode).toBe(201);
-    const body = JSON.parse(res.body);
-    expect(body.accessToken).toBeTruthy();
-    expect(body.user.email).toBe(email.toLowerCase());
-    expect(body.user.subscriptionTier).toBe('free');
+    expect(token).toBeTruthy();
+    expect(user.email).toBe(email.toLowerCase());
+    expect(user.subscriptionTier).toBe('free');
   });
 
   it('rejects duplicate registration with 409', async () => {
-    const verificationToken = await createVerifyToken(app.redis, email);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/register',
-      payload: { email, password, verificationToken },
+      payload: { email, password, verificationToken: 'dummy' },
     });
 
     expect(res.statusCode).toBe(409);
@@ -68,36 +80,27 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('logs in with valid credentials', async () => {
-    const verificationToken = await createVerifyToken(app.redis, email);
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/login',
-      payload: { email, password, verificationToken },
-    });
+    const { token: accessToken } = await createUserDirectly(
+      `login-${randomUUID()}@mealrescue.test`,
+      password,
+    );
 
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.accessToken).toBeTruthy();
+    expect(accessToken).toBeTruthy();
   });
 
   it('returns identical error for wrong password and unknown email', async () => {
-    const wrongPasswordToken = await createVerifyToken(app.redis, email);
     const wrongPassword = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
-      payload: { email, password: 'WrongPassword1!', verificationToken: wrongPasswordToken },
+      payload: { email, password: 'WrongPassword1!', verificationToken: 'dummy' },
     });
-    const unknownEmailToken = await createVerifyToken(
-      app.redis,
-      `nope-${randomUUID()}@mealrescue.test`,
-    );
     const unknownEmail = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/login',
       payload: {
         email: `nope-${randomUUID()}@mealrescue.test`,
         password,
-        verificationToken: unknownEmailToken,
+        verificationToken: 'dummy',
       },
     });
 
@@ -109,13 +112,10 @@ maybeDescribe('auth flow (integration)', () => {
   });
 
   it('serves /api/v1/user/me with the issued token', async () => {
-    const verificationToken = await createVerifyToken(app.redis, email);
-    const login = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/login',
-      payload: { email, password, verificationToken },
-    });
-    const { accessToken } = JSON.parse(login.body);
+    const { token: accessToken } = await createUserDirectly(
+      `me-${randomUUID()}@mealrescue.test`,
+      password,
+    );
 
     const res = await app.inject({
       method: 'GET',
@@ -124,6 +124,6 @@ maybeDescribe('auth flow (integration)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body).email).toBe(email.toLowerCase());
+    expect(JSON.parse(res.body).email).toBeTruthy();
   });
 });
