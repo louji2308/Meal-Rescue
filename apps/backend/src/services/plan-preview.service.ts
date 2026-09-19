@@ -207,9 +207,10 @@ export class PlanPreviewService {
     // Update the store
     this.store.set(previewId, preview);
 
-    // Increment user's planDaysUsed
+    // Increment user's planDaysUsed by the number of days in the plan
+    const daysCount = preview.days.length;
     await User.update(
-      { planDaysUsed: User.sequelize!.literal('planDaysUsed + 1') },
+      { planDaysUsed: User.sequelize!.literal(`planDaysUsed + ${daysCount}`) },
       { where: { id: preview.userId } }
     );
 
