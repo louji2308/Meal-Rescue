@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -21,12 +22,11 @@ import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { MealPlanLoading } from '../components/meal-plan';
-import { FadeInView } from '../components/motion/FadeInView';
 import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { useCommonTableStore } from '../stores/common-table.store';
 import { useMealMemoryStore } from '../stores/meal-memory.store';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing, typography } from '../theme';
 
 const SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -35,7 +35,7 @@ const SLOT_LABELS: Record<MealSlot, string> = {
   snack: 'Snack',
 };
 
-const SLOT_ORDER: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const SLOT_ORDER: MealSlot[] = ['breakfast', 'snack', 'lunch', 'dinner'];
 
 /** Bounds for the month header: no wrap-around — stop at -24/+12 months. */
 const MIN_MONTH_DELTA = -24;
@@ -73,6 +73,15 @@ function addMonthsYM(ym: string, delta: number): string {
   const [y, m] = ym.split('-').map(Number);
   const d = new Date(Date.UTC(y ?? 2000, (m ?? 1) - 1 + delta, 1));
   return d.toISOString().slice(0, 7);
+}
+
+function daysInMonth(ym: string): string[] {
+  const [y, m] = ym.split('-').map(Number);
+  const daysCount = new Date(Date.UTC(y ?? 2000, (m ?? 1), 0)).getUTCDate();
+  return Array.from({ length: daysCount }, (_, i) => {
+    const day = String(i + 1).padStart(2, '0');
+    return `${ym}-${day}`;
+  });
 }
 
 function monthDeltaBetween(fromYM: string, toYM: string): number {
@@ -139,6 +148,83 @@ function SlotConceptEditor({ meal }: { meal: MealEvent }) {
   );
 }
 
+/**
+ * A single day cell in the month strip. Memoized so busy/save-status/typing
+ * re-renders don't rebuild all ~31 cells; each cell only re-renders when its
+ * own props change, while the shared scrollX Animated value keeps the
+ * distance-based scale/opacity running on the UI thread.
+ */
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<string>);
+
+/**
+ * A single day cell in the month strip. Memoized so busy/save-status/typing
+ * re-renders don't rebuild all ~31 cells; each cell only re-renders when its
+ * own props change, while the shared scrollX Animated value keeps the
+ * distance-based scale/opacity running on the UI thread.
+ */
+const DayCell = React.memo(function DayCell({
+  dateKey,
+  index,
+  weekday,
+  dayNum,
+  isToday,
+  isSelected,
+  hasMeals,
+  cellW,
+  scrollX,
+  onPress,
+}: {
+  dateKey: string;
+  index: number;
+  weekday: string;
+  dayNum: number;
+  isToday: boolean;
+  isSelected: boolean;
+  hasMeals: boolean;
+  cellW: number;
+  scrollX: Animated.Value;
+  onPress: (index: number, key: string) => void;
+}) {
+  const offsetFromCenter = Animated.subtract(scrollX, index * cellW);
+  const scale = offsetFromCenter.interpolate({
+    inputRange: [-2.5 * cellW, -cellW, -cellW / 2, 0, cellW / 2, cellW, 2.5 * cellW],
+    outputRange: [0.55, 0.72, 0.9, 1, 0.9, 0.72, 0.55],
+    extrapolate: 'clamp',
+  });
+  const opacity = offsetFromCenter.interpolate({
+    inputRange: [-2.5 * cellW, -cellW, -cellW / 2, 0, cellW / 2, cellW, 2.5 * cellW],
+    outputRange: [0.25, 0.42, 0.72, 1, 0.72, 0.42, 0.25],
+    extrapolate: 'clamp',
+  });
+  return (
+    <Pressable
+      style={styles.dayItem}
+      scaleTo={0.94}
+      onPress={() => onPress(index, dateKey)}
+      accessibilityLabel={`${weekday} ${dayNum}`}
+    >
+      <Animated.View style={{ width: cellW, opacity, transform: [{ scale }] }}>
+        <Text style={[styles.dayWeekday, isToday && styles.dayWeekdayToday]}>
+          {weekday}
+        </Text>
+        <Text style={[styles.dayNumber, isToday && styles.dayNumberToday]}>
+          {dayNum}
+        </Text>
+        <View style={styles.dayDotRow}>
+          <View
+            style={[
+              styles.dayDot,
+              isToday && styles.dotToday,
+              hasMeals && !isToday && styles.dotPlanned,
+              !isToday && !hasMeals && styles.dotEmpty,
+            ]}
+          />
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+});
+
 export function MealPlanScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 14);
@@ -160,7 +246,6 @@ export function MealPlanScreen() {
 
   const loadWeek = useMealMemoryStore((s) => s.loadWeek);
   const loadRules = useMealMemoryStore((s) => s.loadRules);
-  const shiftWeek = useMealMemoryStore((s) => s.shiftWeek);
   const sendIntent = useMealMemoryStore((s) => s.sendIntent);
   const answerIntent = useMealMemoryStore((s) => s.answerIntent);
   const moveEvent = useMealMemoryStore((s) => s.moveEvent);
@@ -174,12 +259,14 @@ export function MealPlanScreen() {
   const ensureHousehold = useCommonTableStore((s) => s.ensureHousehold);
 
   const today = todayKey();
-  const dayScrollRef = useRef<ScrollView>(null);
+  const dayScrollRef = useRef<FlatList<string>>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [stripWidth, setStripWidth] = useState(0);
 
   const currentYM = ymKey(today);
-  const viewedYM = weekStart ? ymKey(weekStart) : currentYM;
+  const [viewedYM, setViewedYM] = useState<string>(() =>
+    weekStart ? ymKey(weekStart) : currentYM,
+  );
   const monthDelta = monthDeltaBetween(currentYM, viewedYM);
   const cellW = stripWidth > 0 ? Math.floor(stripWidth / 7) : 0;
 
@@ -205,6 +292,7 @@ export function MealPlanScreen() {
 
   const lastLoadedAt = useRef(0);
   const sawWeek = useRef(false);
+  const requestedYMRef = useRef<string | null>(null);
   useFocusEffect(
     useCallback(() => {
       if (sawWeek.current && Date.now() - lastLoadedAt.current > 30_000) {
@@ -226,16 +314,29 @@ export function MealPlanScreen() {
     }
   }, [weekStart]);
 
-  const weekDays = useMemo(() => {
-    if (!weekStart) return [];
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  useEffect(() => {
+    if (!weekStart) return;
+    const wkYM = ymKey(weekStart);
+    const requested = requestedYMRef.current;
+    if (requested && requested !== wkYM) return;
+    requestedYMRef.current = null;
+    setViewedYM(wkYM);
+  }, [weekStart]);
+
+  const monthDays = useMemo(() => {
+    return daysInMonth(viewedYM);
+  }, [viewedYM]);
+
+  const weekDaySet = useMemo(() => {
+    if (!weekStart) return new Set<string>();
+    return new Set(Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)));
   }, [weekStart]);
 
   const focusedDayIndex = useMemo(() => {
-    if (!focusedKey || !weekStart) return 0;
-    const idx = weekDays.indexOf(focusedKey);
+    if (!focusedKey) return 0;
+    const idx = monthDays.indexOf(focusedKey);
     return idx >= 0 ? idx : 0;
-  }, [focusedKey, weekDays, weekStart]);
+  }, [focusedKey, monthDays]);
 
   const selectedDay = useMemo(
     () => week?.days.find((day) => day.dateKey === focusedKey) ?? null,
@@ -243,10 +344,10 @@ export function MealPlanScreen() {
   );
 
   useEffect(() => {
-    if (cellW > 0 && dayScrollRef.current && weekDays.length > 0) {
-      dayScrollRef.current.scrollTo({ x: focusedDayIndex * cellW, animated: true });
+    if (cellW > 0 && dayScrollRef.current && monthDays.length > 0) {
+      dayScrollRef.current.scrollToOffset({ offset: focusedDayIndex * cellW, animated: true });
     }
-  }, [focusedDayIndex, cellW, weekDays]);
+  }, [focusedDayIndex, cellW, monthDays]);
 
   async function handleSend() {
     const text = input.trim();
@@ -281,12 +382,59 @@ export function MealPlanScreen() {
     pendingIntent &&
     (pendingIntent.status === 'awaiting_confirmation' || pendingIntent.status === 'clarification');
 
+  const handleDayMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const x = e.nativeEvent.contentOffset.x;
+      if (cellW <= 0) return;
+      const rawIndex = Math.round(x / cellW);
+      if (rawIndex < 0 || rawIndex >= monthDays.length) return;
+      const newKey = monthDays[rawIndex];
+      if (newKey && newKey !== focusedKey) {
+        setFocusedKey(newKey);
+        setExpanded(null);
+        if (!weekDaySet.has(newKey)) {
+          const dayDate = new Date(`${newKey}T00:00:00.000Z`);
+          const dow = dayDate.getUTCDay();
+          const mondayOffset = dow === 0 ? -6 : 1 - dow;
+          void loadWeek(addDays(newKey, mondayOffset));
+        }
+      }
+    },
+    [cellW, monthDays, focusedKey, weekDaySet, loadWeek],
+  );
+
+  const handleDayTap = useCallback(
+    (index: number, key: string) => {
+      setFocusedKey(key);
+      setExpanded(null);
+      dayScrollRef.current?.scrollToOffset({ offset: index * cellW, animated: true });
+      if (!weekDaySet.has(key)) {
+        const dayDate = new Date(`${key}T00:00:00.000Z`);
+        const dow = dayDate.getUTCDay();
+        const mondayOffset = dow === 0 ? -6 : 1 - dow;
+        void loadWeek(addDays(key, mondayOffset));
+      }
+    },
+    [cellW, weekDaySet, loadWeek],
+  );
+
+  function goToMonth(delta: number) {
+    const targetYM = addMonthsYM(currentYM, delta);
+    requestedYMRef.current = targetYM;
+    setViewedYM(targetYM);
+    setExpanded(null);
+    const days = daysInMonth(targetYM);
+    const focusTarget = days.includes(today) ? today : days[Math.floor(days.length / 2)];
+    if (focusTarget) setFocusedKey(focusTarget);
+    void loadWeek(firstMondayInMonth(targetYM));
+  }
+
   if (!weekStart) {
     if (error && !busy) {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.header}>
-            <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
+          <Text style={[typography.heading, styles.title, { fontFamily: fonts.display }]}>Meal Plan</Text>
           </View>
           <ErrorBanner error={error} />
           <Pressable
@@ -311,39 +459,9 @@ export function MealPlanScreen() {
     );
   }
 
-  const handleDayMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-    const x = e.nativeEvent.contentOffset.x;
-    if (cellW <= 0) return;
-    const rawIndex = Math.round(x / cellW);
-    if (rawIndex < 0) {
-      void shiftWeek(-1);
-      return;
-    }
-    if (rawIndex > weekDays.length - 1) {
-      void shiftWeek(1);
-      return;
-    }
-    const newKey = weekDays[rawIndex];
-    if (newKey && newKey !== focusedKey) {
-      setFocusedKey(newKey);
-      setExpanded(null);
-    }
-  };
-
-  function handleDayTap(index: number, key: string) {
-    setFocusedKey(key);
-    setExpanded(null);
-    dayScrollRef.current?.scrollTo({ x: index * cellW, animated: true });
-  }
-
-  function goToMonth(delta: number) {
-    const targetYM = addMonthsYM(currentYM, delta);
-    void loadWeek(firstMondayInMonth(targetYM));
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <FadeInView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
           <View style={styles.headerRight}>
@@ -380,8 +498,8 @@ export function MealPlanScreen() {
         >
           <ErrorBanner error={error} />
 
-          {/* Month header — simple < September >, no wrap-around */}
-          <View style={styles.monthHeader}>
+          {/* Month centered above the day strip */}
+          <View style={styles.monthAboveStrip}>
             <Pressable
               style={[
                 styles.monthArrow,
@@ -393,9 +511,7 @@ export function MealPlanScreen() {
             >
               <Ionicons name="chevron-back" size={22} color={colors.text} />
             </Pressable>
-            <View style={styles.monthTitleWrap}>
-              <Text style={styles.monthTitle}>{prettyMonth(viewedYM)}</Text>
-            </View>
+            <Text style={[styles.monthTitle, { fontFamily: fonts.display }]}>{prettyMonth(viewedYM)}</Text>
             <Pressable
               style={[
                 styles.monthArrow,
@@ -419,78 +535,49 @@ export function MealPlanScreen() {
               style={[styles.dayCenterMarker, { left: (stripWidth - cellW) / 2, width: cellW }]}
             />
             {cellW > 0 && (
-              <ScrollView
-                ref={dayScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={cellW}
-                decelerationRate="fast"
-                onScroll={(e) => scrollX.setValue(e.nativeEvent.contentOffset.x)}
-                scrollEventThrottle={16}
-                onMomentumScrollEnd={handleDayMomentumScrollEnd}
-                contentContainerStyle={{
-                  paddingHorizontal: (stripWidth - cellW) / 2,
-                }}
-              >
-                {weekDays.map((key, index) => {
-                  const isToday = key === today;
-                  const isSelected = key === focusedKey;
-                  const hasMeals = (plannedCountByDate[key] ?? 0) > 0;
-                  const offsetFromCenter = Animated.subtract(scrollX, index * cellW);
-                  const scale = offsetFromCenter.interpolate({
-                    inputRange: [
-                      -2.5 * cellW,
-                      -cellW,
-                      -cellW / 2,
-                      0,
-                      cellW / 2,
-                      cellW,
-                      2.5 * cellW,
-                    ],
-                    outputRange: [0.55, 0.72, 0.9, 1, 0.9, 0.72, 0.55],
-                  });
-                  const opacity = offsetFromCenter.interpolate({
-                    inputRange: [
-                      -2.5 * cellW,
-                      -cellW,
-                      -cellW / 2,
-                      0,
-                      cellW / 2,
-                      cellW,
-                      2.5 * cellW,
-                    ],
-                    outputRange: [0.25, 0.42, 0.72, 1, 0.72, 0.42, 0.25],
-                  });
-                  return (
-                    <Pressable
-                      key={key}
-                      style={styles.dayItem}
-                      scaleTo={0.94}
-                      onPress={() => handleDayTap(index, key)}
-                      accessibilityLabel={`${localeWeekday(key)} ${dayNumber(key)}`}
-                    >
-                      <Animated.View style={{ width: cellW, opacity, transform: [{ scale }] }}>
-                        <Text style={[styles.dayWeekday, isSelected && styles.dayWeekdaySelected]}>
-                          {localeWeekday(key)}
-                        </Text>
-                        <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
-                          {dayNumber(key)}
-                        </Text>
-                        <View style={styles.dayDotRow}>
-                          <View
-                            style={[
-                              styles.dayDot,
-                              isToday && styles.dotToday,
-                              hasMeals && !isToday && styles.dotPlanned,
-                              !isToday && !hasMeals && styles.dotEmpty,
-                            ]}
-                          />
-                        </View>
-                      </Animated.View>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              <View style={styles.dayStripFade}>
+                <AnimatedFlatList
+                  ref={dayScrollRef}
+                  horizontal
+                  data={monthDays}
+                  keyExtractor={(item) => item}
+                  showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  bounces={false}
+                  overScrollMode="never"
+                  removeClippedSubviews
+                  maxToRenderPerBatch={11}
+                  windowSize={11}
+                  getItemLayout={(_, index) => ({
+                    length: cellW,
+                    offset: cellW * index,
+                    index,
+                  })}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: true },
+                  )}
+                  scrollEventThrottle={16}
+                  onMomentumScrollEnd={handleDayMomentumScrollEnd}
+                  contentContainerStyle={{
+                    paddingHorizontal: (stripWidth - cellW) / 2,
+                  }}
+                  renderItem={({ item: key, index }) => (
+                    <DayCell
+                      dateKey={key}
+                      index={index}
+                      weekday={localeWeekday(key)}
+                      dayNum={dayNumber(key)}
+                      isToday={key === today}
+                      isSelected={key === focusedKey}
+                      hasMeals={(plannedCountByDate[key] ?? 0) > 0}
+                      cellW={cellW}
+                      scrollX={scrollX}
+                      onPress={handleDayTap}
+                    />
+                  )}
+                />
+              </View>
             )}
           </View>
 
@@ -516,9 +603,9 @@ export function MealPlanScreen() {
                 return (
                   <View key={slotKey}>
                     <Pressable
+                      tintBorderRadius={8}
                       style={[
                         styles.slotRow,
-                        isExpanded && styles.slotRowSelected,
                         !meal && styles.slotRowEmpty,
                       ]}
                       onPress={() => {
@@ -537,7 +624,13 @@ export function MealPlanScreen() {
                         );
                       }}
                     >
-                      <Text style={[styles.slotLabel, !meal && styles.slotLabelEmpty]}>
+                      <Text
+                        style={[
+                          styles.slotLabel,
+                          isExpanded && styles.slotLabelSelected,
+                          !meal && styles.slotLabelEmpty,
+                        ]}
+                      >
                         {SLOT_LABELS[slotKey]}
                       </Text>
                       {meal ? (
@@ -699,7 +792,7 @@ export function MealPlanScreen() {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
-      </FadeInView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -736,28 +829,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: 120,
   },
-  monthHeader: {
+  monthAboveStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginBottom: spacing.md,
+    gap: spacing.md,
   },
   monthArrow: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   monthArrowDisabled: {
     opacity: 0.3,
-  },
-  monthTitleWrap: {
-    flex: 1,
-    alignItems: 'center',
   },
   monthTitle: {
     fontSize: 20,
@@ -765,12 +851,17 @@ const styles = StyleSheet.create({
     color: colors.text,
     textTransform: 'capitalize',
     letterSpacing: 0.3,
+    textAlign: 'center',
+    minWidth: 160,
   },
   dayStripWrap: {
     height: 112,
     justifyContent: 'center',
     marginBottom: spacing.md,
     marginHorizontal: -spacing.lg,
+  },
+  dayStripFade: {
+    width: '100%',
   },
   dayCenterMarker: {
     position: 'absolute',
@@ -791,16 +882,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textSecondary,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   dayWeekdaySelected: {
     color: colors.primary,
   },
+  dayWeekdayToday: {
+    color: colors.primary,
+  },
   dayNumber: {
+    fontSize: 16,
     fontWeight: '800',
     color: colors.text,
     marginTop: 2,
+    textAlign: 'center',
   },
   dayNumberSelected: {
+    color: colors.primary,
+  },
+  dayNumberToday: {
     color: colors.primary,
   },
   dayDotRow: {
@@ -871,21 +971,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  slotRowSelected: {
-    backgroundColor: colors.background,
-    borderRadius: 8,
-  },
   slotRowEmpty: {
     opacity: 0.45,
   },
   slotLabel: {
-    width: 88,
-    fontSize: 14,
-    fontWeight: '600',
+    width: 100,
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textSecondary,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
+  slotLabelSelected: {
+    backgroundColor: colors.border,
+    color: colors.text,
   },
   slotLabelEmpty: {
     color: colors.border,
+    backgroundColor: colors.background,
   },
   slotMeal: {
     flex: 1,

@@ -10,9 +10,7 @@ import type {
   TasteBoundaryGroup,
   TasteBoundaryGroupKind,
   TasteJournal,
-  TasteJournalEvidenceDetail,
   TasteJournalInsight,
-  TasteSignalPolarity,
   TasteSignalSource,
 } from '@meal-rescue/shared-types';
 
@@ -27,7 +25,6 @@ import {
   TrendingIcon,
   FlaskIcon,
   CompassIcon,
-  HelpCircleIcon,
   XIcon,
   HeartIcon,
   LeafIcon,
@@ -39,7 +36,6 @@ import {
   dismissInsight,
   forgetInsight,
   getJournal,
-  getJournalEvidence,
 } from '../services/taste-journal.api';
 import { colors, fonts, spacing, typography } from '../theme';
 
@@ -50,38 +46,31 @@ const SOURCE_LABELS: Record<TasteSignalSource, string> = {
   SYSTEM_INFERENCE: 'our reading',
 };
 
-const POLARITY_LABELS: Record<TasteSignalPolarity, string> = {
-  positive: 'Liked',
-  negative: 'Steered clear',
-  mixed: 'Mixed',
-  neutral: 'Noted',
-};
-
 const SECTION_META: Record<
   string,
   { title: string; icon: React.ReactNode; accent: string; hint: string }
 > = {
   patterns: {
     title: 'Your patterns',
-    icon: <SparkIcon size={14} color="#FFFFFF" />,
+    icon: <SparkIcon size={12} color="#FFFFFF" />,
     accent: colors.softFresh,
     hint: 'What you reliably love - and avoid',
   },
   depends: {
     title: 'It depends',
-    icon: <GitCompareIcon size={14} color="#FFFFFF" />,
+    icon: <GitCompareIcon size={12} color="#FFFFFF" />,
     accent: colors.softWarm,
     hint: 'When the context decides the outcome',
   },
   discoveries: {
     title: 'Recently discovered',
-    icon: <TrendingIcon size={14} color="#FFFFFF" />,
+    icon: <TrendingIcon size={12} color="#FFFFFF" />,
     accent: colors.softCool,
     hint: 'Freshly spotted, still settling',
   },
   stillLearning: {
     title: 'Still learning',
-    icon: <FlaskIcon size={14} color="#FFFFFF" />,
+    icon: <FlaskIcon size={12} color="#FFFFFF" />,
     accent: colors.softAccent,
     hint: 'Thin or conflicting - we are watching',
   },
@@ -407,7 +396,7 @@ function renderBoundaries(
     <View style={styles.section}>
       <View style={styles.sectionHeaderRow}>
         <View style={[styles.sectionIcon, { backgroundColor: colors.text }]}>
-          <CompassIcon size={14} color="#FFFFFF" />
+          <CompassIcon size={12} color="#FFFFFF" />
         </View>
         <View style={styles.sectionHeaderText}>
           <Text style={styles.sectionTitle}>Your boundaries</Text>
@@ -436,26 +425,8 @@ function renderBoundaries(
 }
 
 function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; handlers: InsightHandlers }) {
-  const [evidence, setEvidence] = useState<TasteJournalEvidenceDetail | null>(null);
-  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [correctOpen, setCorrectOpen] = useState(false);
-  const [evidenceLoading, setEvidenceLoading] = useState(false);
-  const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const busy = handlers.busyId === insight.id;
-
-  const openEvidence = useCallback(async () => {
-    setEvidenceOpen(true);
-    setEvidenceLoading(true);
-    setEvidenceError(null);
-    try {
-      const detail = await getJournalEvidence(insight.id);
-      setEvidence(detail);
-    } catch (err) {
-      setEvidenceError(toApiError(err).message);
-    } finally {
-      setEvidenceLoading(false);
-    }
-  }, [insight.id]);
 
   return (
     <View style={styles.insightCard}>
@@ -466,100 +437,6 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
         {insight.lastObservedAt ? ` · ${formatDate(insight.lastObservedAt)}` : ''}
         {` · ${insight.evidenceCount} ${insight.evidenceCount === 1 ? 'observation' : 'observations'}`}
       </Text>
-      <View style={styles.insightActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Show me why"
-          onPress={() => void openEvidence()}
-          style={styles.insightAction}
-        >
-          <HelpCircleIcon size={14} color={colors.primary} />
-          <Text style={styles.insightActionText}>Show me why</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Not quite right"
-          disabled={busy}
-          onPress={() => setCorrectOpen(true)}
-          style={styles.insightAction}
-        >
-          <XIcon size={14} color={colors.homeTextQuiet} />
-          <Text style={[styles.insightActionText, { color: colors.homeTextQuiet }]}>Not quite right</Text>
-        </Pressable>
-      </View>
-
-      <Modal
-        visible={evidenceOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEvidenceOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              onPress={() => setEvidenceOpen(false)}
-              style={styles.modalClose}
-            >
-              <XIcon size={20} color={colors.textSecondary} />
-            </Pressable>
-            <Text style={styles.modalTitle}>Show me why</Text>
-            <Text style={styles.modalSubtitle}>{insight.title}</Text>
-            {evidenceLoading ? (
-              <View style={styles.evidenceLoading}>
-                <Skeleton.Block width="100%" height={14} />
-                <Skeleton.Block width="80%" height={14} />
-                <Skeleton.Block width="90%" height={14} />
-              </View>
-            ) : evidenceError ? (
-              <Text style={styles.evidenceError}>{evidenceError}</Text>
-            ) : evidence ? (
-              <ScrollView style={styles.evidenceList}>
-                {evidence.evidence.map((item, i) => (
-                  <View key={i} style={styles.evidenceItem}>
-                    <View style={styles.evidenceItemHeader}>
-                      <Text style={styles.evidencePolarity}>{POLARITY_LABELS[item.polarity]}</Text>
-                      <Text style={styles.evidenceDate}>{formatDate(item.occurredAt)}</Text>
-                    </View>
-                    <Text style={styles.evidenceSource}>{item.sourceLabel}</Text>
-                    {item.context && (
-                      <Text style={styles.evidenceContext}>
-                        in {item.context.contextValue.replace(/_/g, ' ')}
-                      </Text>
-                    )}
-                  </View>
-                ))}
-                <Text style={styles.evidenceNote}>
-                  Every entry is a real signal we recorded - nothing here is invented.
-                </Text>
-              </ScrollView>
-            ) : null}
-            <View style={styles.modalActions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setEvidenceOpen(false);
-                  setCorrectOpen(true);
-                }}
-                style={styles.modalActionButton}
-              >
-                <Text style={styles.modalActionText}>Not quite right</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setEvidenceOpen(false);
-                  handlers.onForget(insight);
-                }}
-                style={[styles.modalActionButton, styles.modalActionDanger]}
-              >
-                <Text style={styles.modalActionDangerText}>Forget this</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         visible={correctOpen}
@@ -677,9 +554,9 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.xl },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   sectionIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
@@ -701,11 +578,11 @@ const styles = StyleSheet.create({
   sectionBody: { marginTop: spacing.sm },
   insightCard: {
     backgroundColor: colors.surface,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm - 2,
   },
   insightTitle: {
     fontFamily: fonts.medium,
@@ -772,19 +649,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
-  modalCard: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-    minHeight: 320,
-  },
-  modalClose: {
-    alignSelf: 'flex-end',
-    padding: spacing.xs,
-    marginBottom: spacing.xs,
-  },
   modalTitle: {
     fontFamily: fonts.display,
     fontSize: 17,
@@ -797,65 +661,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     marginBottom: spacing.md,
-  },
-  evidenceLoading: { gap: spacing.sm, paddingVertical: spacing.md },
-  evidenceError: { color: colors.softAlert, fontFamily: fonts.regular, fontSize: 13 },
-  evidenceList: { maxHeight: 360 },
-  evidenceItem: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    paddingVertical: spacing.md,
-  },
-  evidenceItemHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  evidencePolarity: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.homeInk,
-  },
-  evidenceDate: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  evidenceSource: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  evidenceContext: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.secondary,
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  evidenceNote: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: spacing.lg,
-    fontStyle: 'italic',
-  },
-  modalActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-  modalActionButton: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  modalActionText: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.homeInk,
-  },
-  modalActionDanger: { borderColor: colors.homeTextQuiet },
-  modalActionDangerText: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.homeTextQuiet,
   },
   correctCard: {
     backgroundColor: colors.surface,
