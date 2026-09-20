@@ -29,8 +29,12 @@ maybeDescribe('meal-completion onboarding (integration)', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { pair: { id: string } | null; seeded: boolean };
-    expect(body.seeded).toBe(false);
+    const body = res.json() as {
+      completed: boolean;
+      pair: { id: string } | null;
+      kind: string | null;
+    };
+    expect(body.completed).toBe(false);
     expect(body.pair?.id).toBe('pair-01');
   });
 

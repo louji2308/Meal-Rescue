@@ -45,7 +45,12 @@ describeDb('data-integrity edge cases (integration)', () => {
   const auth = () => ({ authorization: `Bearer ${token}` });
 
   async function postPantry(payload: Record<string, unknown>): Promise<string> {
-    const res = await app.inject({ method: 'POST', url: '/api/v1/pantry', headers: auth(), payload });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/pantry',
+      headers: auth(),
+      payload,
+    });
     expect(res.statusCode).toBe(201);
     return (res.json() as { id: string }).id;
   }
@@ -56,9 +61,7 @@ describeDb('data-integrity edge cases (integration)', () => {
     return (res.json() as { ingredients: PantryItem[] }).ingredients ?? [];
   }
 
-  async function planEventsForWeek(
-    weekStart: string,
-  ): Promise<InstanceType<typeof MealEvent>[]> {
+  async function planEventsForWeek(weekStart: string): Promise<InstanceType<typeof MealEvent>[]> {
     const plans = await MealPlan.findAll({ where: { householdId, weekStart, status: 'proposed' } });
     if (plans.length === 0) return [];
     const events = await MealEvent.findAll({
@@ -75,10 +78,16 @@ describeDb('data-integrity edge cases (integration)', () => {
     token = registration.token;
     userId = registration.userId;
 
-    const hh = await app.inject({ method: 'POST', url: '/api/v1/households', headers: auth(), payload: {} });
+    const hh = await app.inject({
+      method: 'POST',
+      url: '/api/v1/households',
+      headers: auth(),
+      payload: {},
+    });
     expect(hh.statusCode).toBe(200);
     householdId = (hh.json() as { household: { id: string } }).household.id;
-    ownerMemberId = (hh.json() as { household: { members: { id: string }[] } }).household.members[0]?.id ?? '';
+    ownerMemberId =
+      (hh.json() as { household: { members: { id: string }[] } }).household.members[0]?.id ?? '';
     expect(ownerMemberId).not.toBe('');
   });
 
@@ -88,7 +97,12 @@ describeDb('data-integrity edge cases (integration)', () => {
   });
 
   it('re-seeding the household is idempotent; member double-create yields distinct ids', async () => {
-    const again = await app.inject({ method: 'POST', url: '/api/v1/households', headers: auth(), payload: {} });
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/v1/households',
+      headers: auth(),
+      payload: {},
+    });
     expect(again.statusCode).toBe(200);
     expect((again.json() as { household: { id: string } }).household.id).toBe(householdId);
 
@@ -287,21 +301,35 @@ describeDb('data-integrity edge cases (integration)', () => {
   it('pantry quantity 1 "use" destroys the row; reuse 404s; uncounted items never decrement', async () => {
     const milkId = await postPantry({ ingredientName: 'milk', quantity: 1 });
 
-    const use = await app.inject({ method: 'POST', url: `/api/v1/pantry/${milkId}/use`, headers: auth() });
+    const use = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pantry/${milkId}/use`,
+      headers: auth(),
+    });
     expect(use.statusCode).toBe(200);
     const body = use.json() as { removed: boolean; item: unknown };
     expect(body.removed).toBe(true);
     expect(body.item).toBeNull();
 
-    const reuse = await app.inject({ method: 'POST', url: `/api/v1/pantry/${milkId}/use`, headers: auth() });
+    const reuse = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pantry/${milkId}/use`,
+      headers: auth(),
+    });
     expect(reuse.statusCode).toBe(404);
-    expect((reuse.json() as { error?: { code?: string } }).error?.code).toBe('PANTRY_ITEM_NOT_FOUND');
+    expect((reuse.json() as { error?: { code?: string } }).error?.code).toBe(
+      'PANTRY_ITEM_NOT_FOUND',
+    );
 
     const items = await getPantry();
     expect(items.some((i) => i.ingredientName === 'milk')).toBe(false);
 
     const saltId = await postPantry({ ingredientName: 'salt' });
-    const saltUse = await app.inject({ method: 'POST', url: `/api/v1/pantry/${saltId}/use`, headers: auth() });
+    const saltUse = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pantry/${saltId}/use`,
+      headers: auth(),
+    });
     expect(saltUse.statusCode).toBe(200);
     expect((saltUse.json() as { removed: boolean }).removed).toBe(false);
 
@@ -326,7 +354,7 @@ describeDb('data-integrity edge cases (integration)', () => {
     expect(items.find((i) => i.ingredientName === 'oatmeal')?.isExpiringSoon).toBe(false);
   });
 
-  it('member removal leaves plan events\' memberIds untouched (pin) and replanning recovers', async () => {
+  it("member removal leaves plan events' memberIds untouched (pin) and replanning recovers", async () => {
     const pat = await app.inject({
       method: 'POST',
       url: '/api/v1/households/members',
@@ -357,8 +385,14 @@ describeDb('data-integrity edge cases (integration)', () => {
     });
     expect(del.statusCode).toBe(200);
 
-    const hh = await app.inject({ method: 'GET', url: '/api/v1/households/current', headers: auth() });
-    const memberIds = (hh.json() as { household: { members: { id: string }[] } }).household.members.map((m) => m.id);
+    const hh = await app.inject({
+      method: 'GET',
+      url: '/api/v1/households/current',
+      headers: auth(),
+    });
+    const memberIds = (
+      hh.json() as { household: { members: { id: string }[] } }
+    ).household.members.map((m) => m.id);
     expect(memberIds).not.toContain(patId);
 
     // Pinned current behavior: the DB plan events still reference the removed member.
@@ -401,11 +435,11 @@ describeDb('data-integrity edge cases (integration)', () => {
       payload: {},
     });
     expect(some.statusCode).toBe(200);
-    const ideas = (some.json() as { ideas: { recipeName?: string; reason?: string }[] }).ideas;
+    const ideas = (some.json() as { ideas: { name?: string; description?: string }[] }).ideas;
     expect(ideas.length).toBe(2);
     for (const idea of ideas) {
-      expect(typeof idea.recipeName).toBe('string');
-      expect(typeof idea.reason).toBe('string');
+      expect(typeof idea.name).toBe('string');
+      expect(typeof idea.description).toBe('string');
     }
 
     const identified = await app.inject({

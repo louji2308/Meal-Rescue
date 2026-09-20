@@ -26,9 +26,9 @@ import type {
   MealMemoryIntentResponse,
   MealMemoryMealDetailResponse,
   MealMemoryMoveMealRequest,
+  MealMemoryRecentsResponse,
   MealMemoryRecordActualRequest,
   MealMemoryRecordActualResponse,
-  MealMemoryRecentsResponse,
   MealMemoryRememberRequest,
   MealMemoryRememberResponse,
   MealMemoryReuseWeekRequest,
@@ -50,7 +50,13 @@ import type { Db } from '../../database/models';
 import { AppError, ErrorCategory } from '../../lib/errors';
 import { HouseholdService } from '../common-table/household.service';
 import { AccountingService } from './accounting.service';
-import { addDays, dateKeyFor, nextWeekStartFor, previousWeekStartFor, weekStartFor } from './date-utils';
+import {
+  addDays,
+  dateKeyFor,
+  nextWeekStartFor,
+  previousWeekStartFor,
+  weekStartFor,
+} from './date-utils';
 import {
   MUTATIONS_ALWAYS_CONFIRMED,
   bandFor,
@@ -64,7 +70,7 @@ import { toMealEvent } from './mappers';
 import { MealMemoryAiService } from './meal-memory-ai.service';
 import { MemoryLearningService } from './memory-learning.service';
 import { type PlanParams, type PlanStrategy, PlanningEngine } from './planning-engine';
-import { narrowCoverageForMember, WorldStateService } from './world-state.service';
+import { WorldStateService, narrowCoverageForMember } from './world-state.service';
 
 const DEFAULT_WEEK_MEAL_SLOTS: MealSlot[] = ['dinner', 'lunch'];
 const DEFAULT_INTENT_MEAL_SLOT: MealSlot = 'dinner';
@@ -223,7 +229,8 @@ export class MealMemoryService {
           intent: event.get('intent') as IntentResolution['intent'],
           confidence: Number(event.get('confidence') ?? 0),
           confidenceBand: bandFor(Number(event.get('confidence') ?? 0)),
-          entities: (event.get('entities') as unknown as IntentEntities | null) ?? ({} as IntentEntities),
+          entities:
+            (event.get('entities') as unknown as IntentEntities | null) ?? ({} as IntentEntities),
           rawText: (event.get('rawText') as string) ?? '',
           requiresClarification: Boolean(event.get('requiresClarification')),
           clarificationQuestion: (event.get('clarificationQuestion') as string | null) ?? null,
@@ -304,7 +311,11 @@ export class MealMemoryService {
     return { result };
   }
 
-  async getWeek(userId: UUID, weekStart?: string, memberId?: UUID): Promise<MealMemoryWeekResponse> {
+  async getWeek(
+    userId: UUID,
+    weekStart?: string,
+    memberId?: UUID,
+  ): Promise<MealMemoryWeekResponse> {
     const householdId = await this.requireHouseholdId(userId);
     const todayKey = dateKeyFor(new Date(), 0);
     const start = weekStart ?? weekStartFor(todayKey);
@@ -322,9 +333,7 @@ export class MealMemoryService {
     });
     const events = rows
       .map(toMealEvent)
-      .filter(
-        (e) => !scopeMember || e.memberIds == null || e.memberIds.includes(scopeMember),
-      );
+      .filter((e) => !scopeMember || e.memberIds == null || e.memberIds.includes(scopeMember));
 
     const days: MealMemoryDay[] = [];
     for (let i = 0; i < 7; i++) {
@@ -518,7 +527,7 @@ export class MealMemoryService {
       row = await this.models.MealEvent.create({
         id: randomUUID(),
         householdId,
-        planId: planRow ? (planRow.get('id') as string) : null,
+        planId: planRow ? (planRow.get('planId') as string) : null,
         userId,
         dateKey,
         mealSlot,
@@ -716,7 +725,9 @@ export class MealMemoryService {
         weekStart: toWeekStart,
         source: 'replan',
         meals: copied,
-        openSlots: world.openSlots.filter((slot) => !copiedKeys.has(`${slot.dateKey}:${slot.mealSlot}`)),
+        openSlots: world.openSlots.filter(
+          (slot) => !copiedKeys.has(`${slot.dateKey}:${slot.mealSlot}`),
+        ),
         createdAt: planRow.createdAt.toISOString(),
       },
       copied,
@@ -1340,10 +1351,14 @@ export class MealMemoryService {
     );
     if (byExactName) return byExactName.get('id') as string;
     return (
-      members.find((m) => String(m.get('displayName') ?? '').toLowerCase().includes(lower))?.get(
-        'id',
-      ) as string | undefined
-    ) ?? null;
+      (members
+        .find((m) =>
+          String(m.get('displayName') ?? '')
+            .toLowerCase()
+            .includes(lower),
+        )
+        ?.get('id') as string | undefined) ?? null
+    );
   }
 
   private async validateMemberIds(

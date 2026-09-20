@@ -76,12 +76,13 @@ maybeDescribe('spoiler alert scheduler (integration)', () => {
 
   it('ignores items that were used recently', async () => {
     const freshUser = await seedUser('fresh');
+    const now = new Date();
     await seedPantry(freshUser.id, {
       ingredientName: 'yogurt',
-      lastUsedAt: new Date(Date.now() - DAY_MS),
+      lastUsedAt: new Date(now.getTime() - 12 * 3_600_000),
     });
 
-    await runSpoilerAlertTick();
+    await runSpoilerAlertTick(undefined, now);
     const logs = await NotificationLog.findAll({ where: { userId: freshUser.id } });
     expect(logs).toHaveLength(0);
   }, 30_000);
