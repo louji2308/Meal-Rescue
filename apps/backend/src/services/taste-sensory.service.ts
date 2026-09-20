@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { UUID } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
@@ -104,10 +106,7 @@ export class TasteSensoryService {
     return map;
   }
 
-  private inferDimensions(
-    ingredient: string,
-    modifications?: string[],
-  ): string[] {
+  private inferDimensions(ingredient: string, modifications?: string[]): string[] {
     const text = [ingredient, ...(modifications ?? [])].join(' ').toLowerCase();
 
     const dims: string[] = ['flavor'];
@@ -148,7 +147,7 @@ export class TasteSensoryService {
       });
     } else {
       await this.models.TasteSensoryPreference.create({
-        id: `sensory_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        id: randomUUID(),
         userId,
         ingredient: normalized,
         dimension,

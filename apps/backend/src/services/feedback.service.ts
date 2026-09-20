@@ -145,7 +145,10 @@ export class FeedbackService {
 
     // --- V2 Taste Events ---
     const candidate = (selectedRecommendation.candidate as
-      | { additions?: Array<{ name: string }>; substitutions?: Array<{ replacement: { name: string } }> }
+      | {
+          additions?: Array<{ name: string }>;
+          substitutions?: Array<{ replacement: { name: string } }>;
+        }
       | undefined) ?? { additions: [], substitutions: [] };
 
     const ingredientNames = [
@@ -176,7 +179,12 @@ export class FeedbackService {
         userId,
         dimension: 'ingredient',
         value: name,
-        polarity: decisionEventType === 'RESCUE_ACCEPTED' ? 'positive' : decisionEventType === 'RESCUE_REJECTED' ? 'negative' : 'neutral',
+        polarity:
+          decisionEventType === 'RESCUE_ACCEPTED'
+            ? 'positive'
+            : decisionEventType === 'RESCUE_REJECTED'
+              ? 'negative'
+              : 'neutral',
         source: 'BEHAVIOR',
         sourceLabel:
           decisionEventType === 'RESCUE_REJECTED'
@@ -212,7 +220,12 @@ export class FeedbackService {
         userId,
         dimension: 'ingredient',
         value: name,
-        polarity: satisfaction === 'better' ? 'positive' : satisfaction === 'not_for_me' ? 'negative' : 'neutral',
+        polarity:
+          satisfaction === 'better'
+            ? 'positive'
+            : satisfaction === 'not_for_me'
+              ? 'negative'
+              : 'neutral',
         source: 'EXPLICIT_FEEDBACK',
         sourceLabel: 'How you rated a rescue',
         eventId: event.id,
@@ -223,9 +236,21 @@ export class FeedbackService {
     // --- V2 Sensory + Treatment Beliefs ---
     const modifications = outcome?.modifications ?? [];
     for (const name of ingredientNames) {
-      const eventId = `evt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      await this.tasteSensory.recordFromFeedback(userId, name, eventId, satisfaction, modifications);
-      await this.tasteTreatment.recordFromFeedback(userId, name, eventId, satisfaction, modifications);
+      const eventId = randomUUID();
+      await this.tasteSensory.recordFromFeedback(
+        userId,
+        name,
+        eventId,
+        satisfaction,
+        modifications,
+      );
+      await this.tasteTreatment.recordFromFeedback(
+        userId,
+        name,
+        eventId,
+        satisfaction,
+        modifications,
+      );
     }
 
     return {

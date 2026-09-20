@@ -35,6 +35,10 @@ export async function findSpoilerCandidates(
   const rows = await models.Pantry.findAll({
     where: {
       expiresAt: { [Op.ne]: null, [Op.between]: [now, new Date(now.getTime() + EXPIRY_WINDOW_MS)] },
+      [Op.or]: [
+        { lastUsedAt: null },
+        { lastUsedAt: { [Op.lt]: new Date(now.getTime() - 24 * 3_600_000) } },
+      ],
     },
     order: [['expiresAt', 'ASC']],
     attributes: ['id', 'userId', 'ingredientName'],

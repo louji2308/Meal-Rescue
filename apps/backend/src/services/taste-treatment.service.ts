@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { UUID } from '@meal-rescue/shared-types';
 
 import type { Db } from '../database/models';
@@ -160,7 +162,7 @@ export class TasteTreatmentService {
       });
     } else {
       await this.models.TasteTreatmentPreference.create({
-        id: `treatment_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        id: randomUUID(),
         userId,
         ingredient: normalized,
         treatment,

@@ -110,7 +110,7 @@ export class PantryService {
       return {
         id: plain.id,
         ingredientName: plain.ingredientName,
-        quantity: plain.quantity ?? null,
+        quantity: plain.quantity != null ? Number(plain.quantity) : null,
         unit: plain.unit ?? null,
         addedAt: plain.addedAt.toISOString(),
         expiresAt: plain.expiresAt?.toISOString() ?? null,
@@ -162,8 +162,7 @@ export class PantryService {
       if (payload.quantity !== undefined) {
         if (payload.mergeQuantity && payload.quantity !== null && !isLeftover) {
           const currentQty = (existing.get('quantity') as number | null) ?? null;
-          updates.quantity =
-            currentQty === null ? payload.quantity : currentQty + payload.quantity;
+          updates.quantity = currentQty === null ? payload.quantity : currentQty + payload.quantity;
         } else {
           updates.quantity = payload.quantity;
         }
@@ -311,7 +310,7 @@ export class PantryService {
     return {
       id: plain.id as UUID,
       ingredientName: plain.ingredientName as string,
-      quantity: (plain.quantity as number | null) ?? null,
+      quantity: plain.quantity != null ? Number(plain.quantity) : null,
       unit: (plain.unit as string | null) ?? null,
       addedAt: (plain.addedAt as Date).toISOString(),
       expiresAt: plain.expiresAt ? (plain.expiresAt as Date).toISOString() : null,

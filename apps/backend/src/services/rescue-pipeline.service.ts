@@ -54,7 +54,7 @@ import { resolveIntent } from './v2/intent-resolver';
 import { deriveReality } from './v2/reality-context';
 import { ValidationService } from './validation.service';
 
-const MAX_ALTERNATIVES = 4; // 1 recommendation + 4 alternatives = 5 choices total
+const MAX_ALTERNATIVES = 2; // 1 recommendation + 2 alternatives = 3 choices total (product rule)
 const RECENT_RESCUES_LIMIT = 10; // anti-fatigue window (spec §8, soft/decaying)
 const EXPIRY_WINDOW_MS = 48 * 3_600_000;
 
