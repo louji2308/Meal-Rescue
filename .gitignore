@@ -79,7 +79,7 @@ screen.png
 screen*.png
 verify.png
 verify2.png
-shot.png
+shot*.png
 wireless_test.png
 
 # ---------------------------------------------------------------------------
@@ -97,12 +97,27 @@ check-deploy.ps1
 railway-check.js
 
 # ---------------------------------------------------------------------------
-# Implementation plans (tracked docs live in docs/)
+# Implementation plans & stale docs (tracked docs live in docs/)
 # ---------------------------------------------------------------------------
 implementationplan.md
 implementation-v2.md
 implementation-audit-fixes.md
 REMAINING.md
+PROGRESS.md
+PLAN_MEALPLAN_REDESIGN.md
+rewrite-plan.md
+WIRELESS_ADB_SETUP.md
+App.js
+
+# ---------------------------------------------------------------------------
+# Debug / deploy scripts
+# ---------------------------------------------------------------------------
+check-deploy.js
+check-deploy.ps1
+railway-check.js
+apps/backend/find-user.js
+apps/backend/start-backend.ps1
+apps/backend/scripts/
 
 # ---------------------------------------------------------------------------
 # Local embedded PG data directory (never commit)
@@ -119,6 +134,19 @@ pgdata/
 # Legal docs (write in separate session, not committed)
 # ---------------------------------------------------------------------------
 docs/legal/
+
+# ---------------------------------------------------------------------------
+# Superpowers plans & specs (local agent work, not shipped)
+# ---------------------------------------------------------------------------
+docs/superpowers/
+docs/demo-script.md
+docs/pro-page-cat-concepts.md
+
+# ---------------------------------------------------------------------------
+# Mobile local config
+# ---------------------------------------------------------------------------
+apps/mobile/app-ads.txt
+apps/mobile/assets/app-icon-1024.png
 
 # ---------------------------------------------------------------------------
 # Railway IAC pull artifacts
