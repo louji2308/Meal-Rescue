@@ -31,11 +31,28 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
 
+# eas build
+eas.json
+
 # generated native folders
 /ios
 /android
+
+# Firebase config (secrets)
+google-services.json
+GoogleService-Info.plist
+
+# Screenshots
+screenshot*.png
+shot.png
+
+# Build logs
+build_output.txt
+release_build.txt
+metro.new.log.err
