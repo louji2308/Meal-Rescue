@@ -1,23 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  TextInput as RNTextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  TextInput as RNTextInput,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 
-import { colors, typography, spacing, radius } from '../theme';
 import { captureKitchen } from '../services/kitchen.api';
 import type { CaptureResult } from '../services/kitchen.api';
+import { colors, radius, spacing, typography } from '../theme';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -34,7 +34,7 @@ interface Props {
 // ---------------------------------------------------------------------------
 
 export default function KitchenCaptureBottomSheet({ visible, onClose, onCapture }: Props) {
-  const insets = useSafeAreaInsets();
+  const _insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [manualText, setManualText] = useState('');
   const [showManual, setShowManual] = useState(false);
@@ -116,10 +116,7 @@ export default function KitchenCaptureBottomSheet({ visible, onClose, onCapture 
       setManualText('');
       setShowManual(false);
     } catch (err: any) {
-      Alert.alert(
-        'Parse failed',
-        err?.message ?? 'Could not parse your items. Please try again.',
-      );
+      Alert.alert('Parse failed', err?.message ?? 'Could not parse your items. Please try again.');
     } finally {
       setLoading(false);
     }

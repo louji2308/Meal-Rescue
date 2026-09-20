@@ -4,15 +4,16 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
-import { TextInput } from '../components/AppTextInput';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { colors, spacing, typography } from '../theme';
-import { FadeInView } from '../components/motion/FadeInView';
 
 /**
  * REVIEW (plan §33): confirm what was detected before making decisions.
@@ -27,6 +28,7 @@ export function ReviewScreen() {
 
   const [editing, setEditing] = useState(false);
   const [editedText, setEditedText] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
   const foodNames = analysis.detectedFoods.map((food) => food.name);
   const needsConfirm = analysis.requiresConfirmation;
@@ -38,86 +40,96 @@ export function ReviewScreen() {
         : foodNames.slice(0, -1).join(', ') + ' and ' + foodNames[foodNames.length - 1]
       : analysis.detectedIngredients.map((i) => i.name).join(', ') || 'your meal';
 
-function handleSaveEdit() {
+  function handleSaveEdit() {
     // Apply the correction. The corrected text is passed to Intent as an override.
     // A full implementation would re-run meal analysis with the corrected text.
     setEditing(false);
   }
 
   function navigateToIntent() {
-    const params: { analysis: typeof analysis; editedMealText?: string } = { analysis };
-    if (editedText.trim() && editedText.trim() !== mealSummary) {
-      params.editedMealText = editedText.trim();
-    }
-    navigation.navigate('Intent', params);
+    setSubmitted(true);
+    setTimeout(() => {
+      const params: { analysis: typeof analysis; editedMealText?: string } = { analysis };
+      if (editedText.trim() && editedText.trim() !== mealSummary) {
+        params.editedMealText = editedText.trim();
+      }
+      navigation.navigate('Intent', params);
+    }, 800);
   }
 
-return (
+  return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <FadeInView>
-        <View style={styles.hero}>
-          <Ionicons name="restaurant-outline" size={32} color={colors.rescueAccent} />
-          <Text style={[typography.heading, styles.title]}>Here's what I see</Text>
-        </View>
-
-        {editing ? (
-          <View style={styles.editCard}>
-            <TextInput
-              style={styles.editInput}
-              value={editedText}
-              onChangeText={setEditedText}
-              autoFocus
-              multiline
-              placeholder="Type what you're actually eating..."
-              placeholderTextColor={colors.textSecondary}
-            />
-            <View style={styles.editActions}>
-              <Pressable style={styles.editCancel} onPress={() => setEditing(false)}>
-                <Text style={styles.editCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.editSave} onPress={handleSaveEdit}>
-                <Text style={styles.editSaveText}>Save</Text>
-              </Pressable>
-            </View>
+          <View style={styles.hero}>
+            <Ionicons name="restaurant-outline" size={32} color={colors.rescueAccent} />
+            <Text style={[typography.heading, styles.title]}>Here's what I see</Text>
           </View>
-        ) : (
-          <Pressable
-            style={styles.card}
-            onPress={() => {
-              setEditedText(mealSummary);
-              setEditing(true);
-            }}
-            >
-            <Text style={styles.mealText}>{mealSummary}</Text>
-            <View style={styles.editHint}>
-              <Ionicons name="pencil-outline" size={14} color={colors.rescueAccent} />
-              <Text style={styles.editHintText}>Tap to correct</Text>
-            </View>
-          </Pressable>
-        )}
 
-        {needsConfirm && !editing && (
-          <View style={styles.confirmBox}>
-            <PrimaryButton
-              label="Hmm, that's not quite right"
-              variant="ghost"
+          {editing ? (
+            <View style={styles.editCard}>
+              <TextInput
+                style={styles.editInput}
+                value={editedText}
+                onChangeText={setEditedText}
+                autoFocus
+                multiline
+                placeholder="Type what you're actually eating..."
+                placeholderTextColor={colors.textSecondary}
+              />
+              <View style={styles.editActions}>
+                <Pressable style={styles.editCancel} onPress={() => setEditing(false)}>
+                  <Text style={styles.editCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={styles.editSave} onPress={handleSaveEdit}>
+                  <Text style={styles.editSaveText}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.card}
               onPress={() => {
                 setEditedText(mealSummary);
                 setEditing(true);
               }}
-              style={styles.editButton}
-            />
-          </View>
-        )}
+            >
+              <Text style={styles.mealText}>{mealSummary}</Text>
+              <View style={styles.editHint}>
+                <Ionicons name="pencil-outline" size={14} color={colors.rescueAccent} />
+                <Text style={styles.editHintText}>Tap to correct</Text>
+              </View>
+            </Pressable>
+          )}
 
-<View style={styles.footer}>
-<PrimaryButton
-              label="Looks good — let's decide"
-              onPress={navigateToIntent}
-              style={styles.decideButton}
-            />
-        </View>
+          {needsConfirm && !editing && (
+            <View style={styles.confirmBox}>
+              <PrimaryButton
+                label="Hmm, that's not quite right"
+                variant="ghost"
+                onPress={() => {
+                  setEditedText(mealSummary);
+                  setEditing(true);
+                }}
+                style={styles.editButton}
+              />
+            </View>
+          )}
+
+          <View style={styles.footer}>
+            {submitted ? (
+              <Animated.View entering={FadeInDown.duration(300)} style={styles.successWrap}>
+                <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+                <Text style={styles.successText}>Thanks!</Text>
+              </Animated.View>
+            ) : (
+              <PrimaryButton
+                label="Looks good — let's decide"
+                onPress={navigateToIntent}
+                style={styles.decideButton}
+              />
+            )}
+          </View>
         </FadeInView>
       </ScrollView>
     </SafeAreaView>
@@ -166,7 +178,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-editCard: {
+  editCard: {
     backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 2,
@@ -195,7 +207,7 @@ editCard: {
     color: colors.textSecondary,
     fontSize: 14,
   },
-editSave: {
+  editSave: {
     backgroundColor: colors.text,
     borderRadius: 8,
     paddingHorizontal: spacing.md,
@@ -217,8 +229,17 @@ editSave: {
   footer: {
     marginTop: 'auto',
   },
+  successWrap: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+  },
+  successText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.success,
+  },
   decideButton: {
     marginBottom: spacing.sm,
   },
 });
-

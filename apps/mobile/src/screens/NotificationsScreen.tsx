@@ -2,20 +2,23 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '../components/AppText';
-import {
-  BellIcon,
-  ChevronLeftIcon,
-  LeafIcon,
-  SparkIcon,
-} from '../components/icons';
+import { BellIcon, ChevronLeftIcon, LeafIcon, SparkIcon } from '../components/icons';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
-import { parseDeepLink } from '../services/onesignal.service';
 import { requestNotificationSnooze } from '../services/notifications.api';
+import { parseDeepLink } from '../services/onesignal.service';
 import {
   InAppNotification,
   InAppNotificationKind,
@@ -26,6 +29,7 @@ import { colors, fonts } from '../theme';
 
 const KIND_META: Record<InAppNotificationKind, { label: string; hint: string }> = {
   spoiler_alert: { label: 'Spoiler alert', hint: 'Something in your kitchen is about to turn' },
+  rescue_window: { label: 'Rescue window', hint: 'A rescue opportunity is closing soon' },
   aftercare: { label: 'Check-in', hint: 'How did the rescue work out?' },
   promo: { label: 'Meal Rescue', hint: 'News and tips' },
   push: { label: 'Meal Rescue', hint: 'Update' },
@@ -76,9 +80,7 @@ function NotificationRow({ item }: { item: InAppNotification }) {
         <KindGlyph kind={item.kind} />
       </View>
       <View style={styles.rowBody}>
-        <Text style={[styles.rowTitle, item.read ? styles.rowTitleRead : null]}>
-          {item.title}
-        </Text>
+        <Text style={[styles.rowTitle, item.read ? styles.rowTitleRead : null]}>{item.title}</Text>
         <Text style={[styles.rowBodyText, item.read ? styles.rowBodyTextRead : null]}>
           {item.body}
         </Text>
@@ -101,6 +103,37 @@ function NotificationRow({ item }: { item: InAppNotification }) {
         <Text style={styles.time}>{relativeTime(item.createdAt)}</Text>
         {!item.read ? <View style={styles.unreadDot} /> : null}
       </View>
+    </View>
+  );
+}
+
+function PulsingBell() {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    scale.value = withRepeat(
+      withTiming(1.12, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+    opacity.value = withRepeat(
+      withTiming(0.6, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, [scale, opacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <View style={styles.emptyIcon}>
+      <Animated.View style={animatedStyle}>
+        <BellIcon size={26} color={colors.homeButton} />
+      </Animated.View>
     </View>
   );
 }
@@ -148,7 +181,10 @@ export function NotificationsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Mark all notifications as read"
-          onPress={markAllRead}
+          onPress={() => {
+            haptics.light();
+            markAllRead();
+          }}
           disabled={unread === 0}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={styles.markAllWrap}
@@ -160,30 +196,30 @@ export function NotificationsScreen() {
       </View>
 
       {items.length === 0 ? (
-        <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <BellIcon size={26} color={colors.homeButton} />
-          </View>
+        <FadeInView style={styles.empty}>
+          <PulsingBell />
           <Text style={styles.emptyTitle}>You're all caught up</Text>
           <Text style={styles.emptyBody}>
-            When Meal Rescue sends reminders about expiring food or a good time to
-            cook, they'll show up here.
+            When Meal Rescue sends reminders about expiring food or a good time to cook, they'll
+            show up here.
           </Text>
-        </View>
+        </FadeInView>
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${KIND_META[item.kind].label}: ${item.title}`}
-              onPress={() => handlePressItem(item)}
-            >
-              <NotificationRow item={item} />
-            </Pressable>
+          renderItem={({ item, index }) => (
+            <FadeInView delay={index * 60} rise={4}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${KIND_META[item.kind].label}: ${item.title}`}
+                onPress={() => handlePressItem(item)}
+              >
+                <NotificationRow item={item} />
+              </Pressable>
+            </FadeInView>
           )}
         />
       )}

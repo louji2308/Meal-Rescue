@@ -1,7 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
-import { Text } from './AppText';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  type SharedValue,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+
 import { colors, spacing } from '../theme';
+import { Text } from './AppText';
 
 const ANALYSIS_MESSAGES = [
   'Analyzing textures…',
@@ -14,46 +25,42 @@ const ANALYSIS_MESSAGES = [
   'Decoding the dish…',
 ];
 
-const DOT_COUNT = 5;
+const _DOT_COUNT = 5;
 const DOT_SIZE = 8;
 const DOT_GAP = 6;
 const CYCLE_MS = 1400;
+const STAGGER_DELAY = 180;
 
 export function WaveLoading({ style }: { style?: object }) {
-  const dots = useRef(
-    Array.from({ length: DOT_COUNT }, () => new Animated.Value(0)),
-  ).current;
+  const sv0 = useSharedValue(0);
+  const sv1 = useSharedValue(0);
+  const sv2 = useSharedValue(0);
+  const sv3 = useSharedValue(0);
+  const sv4 = useSharedValue(0);
+  const progressValues = [sv0, sv1, sv2, sv3, sv4];
+
   const [msgIdx, setMsgIdx] = useState(0);
-  const msgRef = useRef(0);
 
   useEffect(() => {
-    const animations = dots.map(function (dot, i) {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 180),
-          Animated.timing(dot, {
-            toValue: 1,
-            duration: CYCLE_MS / 2,
-            useNativeDriver: true,
-          }),
-          Animated.timing(dot, {
-            toValue: 0,
-            duration: CYCLE_MS / 2,
-            useNativeDriver: true,
-          }),
-        ]),
+    progressValues.forEach((progress, i) => {
+      progress.value = withDelay(
+        i * STAGGER_DELAY,
+        withRepeat(
+          withSequence(
+            withTiming(1, { duration: CYCLE_MS / 2 }),
+            withTiming(0, { duration: CYCLE_MS / 2 }),
+          ),
+          -1,
+        ),
       );
     });
-    const composite = Animated.parallel(animations);
-    composite.start();
 
-    const msgTimer = setInterval(function () {
-      msgRef.current = (msgRef.current + 1) % ANALYSIS_MESSAGES.length;
-      setMsgIdx(msgRef.current);
+    const msgTimer = setInterval(() => {
+      setMsgIdx((prev) => (prev + 1) % ANALYSIS_MESSAGES.length);
     }, 2200);
 
-    return function cleanup() {
-      composite.stop();
+    return () => {
+      progressValues.forEach((progress) => cancelAnimation(progress));
       clearInterval(msgTimer);
     };
   }, []);
@@ -61,32 +68,56 @@ export function WaveLoading({ style }: { style?: object }) {
   return (
     <View style={[styles.wrap, style]}>
       <View style={styles.dotsRow}>
-        {dots.map(function (dot, i) {
-          const scale = dot.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.5, 1.3],
-          });
-          const opacity = dot.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0.35, 1],
-          });
-          return (
-            <Animated.View
-              key={i}
-              style={[
-                styles.dot,
-                {
-                  transform: [{ scale }],
-                  opacity: opacity,
-                },
-              ]}
-            />
-          );
-        })}
+        {progressValues.map((progress, i) => (
+          <AnimatedDot key={i} progress={progress} />
+        ))}
       </View>
-      <Text style={styles.message}>{ANALYSIS_MESSAGES[msgIdx]}</Text>
+      <MessageCrossFade messages={ANALYSIS_MESSAGES} index={msgIdx} />
     </View>
   );
+}
+
+function MessageCrossFade({ messages, index }: { messages: string[]; index: number }) {
+  const outgoingOpacity = useSharedValue(0);
+  const incomingOpacity = useSharedValue(1);
+  const prevIndex = useRef(index);
+
+  useEffect(() => {
+    if (index === prevIndex.current) return;
+    outgoingOpacity.value = withTiming(0, { duration: 200 });
+    incomingOpacity.value = 0;
+    incomingOpacity.value = withTiming(1, { duration: 200 });
+    prevIndex.current = index;
+  }, [index]);
+
+  const outgoingStyle = useAnimatedStyle(() => ({ opacity: outgoingOpacity.value }));
+  const incomingStyle = useAnimatedStyle(() => ({ opacity: incomingOpacity.value }));
+
+  return (
+    <View style={{ minHeight: 20, justifyContent: 'center' }}>
+      <Animated.View style={[styles.messageWrap, outgoingStyle]} pointerEvents="none">
+        <Text style={styles.message}>{messages[prevIndex.current]}</Text>
+      </Animated.View>
+      <Animated.View style={[styles.messageWrap, incomingStyle]}>
+        <Text style={styles.message}>{messages[index]}</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+function AnimatedDot({ progress }: { progress: SharedValue<number> }) {
+  const animatedStyle = useAnimatedStyle(() => {
+    'worklet';
+    const scale = 0.5 + progress.value * 0.8;
+    const opacity = 0.35 + progress.value * 0.65;
+    const translateY = -progress.value * 10;
+    return {
+      transform: [{ scale }, { translateY }],
+      opacity,
+    };
+  });
+
+  return <Animated.View style={[styles.dot, animatedStyle]} />;
 }
 
 const styles = StyleSheet.create({
@@ -104,6 +135,12 @@ const styles = StyleSheet.create({
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
     backgroundColor: colors.primary,
+  },
+  messageWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   message: {
     fontSize: 14,

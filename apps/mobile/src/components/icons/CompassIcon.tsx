@@ -1,5 +1,6 @@
 import React from 'react';
-import { Path, Circle, Polygon } from 'react-native-svg';
+import { Circle, Polygon } from 'react-native-svg';
+
 import { IconBase, SvgIconProps } from './base';
 
 export function CompassIcon(props: SvgIconProps) {

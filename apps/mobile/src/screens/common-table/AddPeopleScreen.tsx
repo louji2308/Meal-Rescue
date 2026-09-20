@@ -1,25 +1,25 @@
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../../components/motion/Pressable';
+
+import type { DietaryRestriction, HouseholdAgeGroup } from '@meal-rescue/shared-types';
 
 import { AppImage } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 import { TextInput } from '../../components/AppTextInput';
-
-import type { DietaryRestriction, HouseholdAgeGroup } from '@meal-rescue/shared-types';
-
-import { PrimaryButton } from '../../components/PrimaryButton';
 import { ErrorBanner } from '../../components/ErrorBanner';
+import { PrimaryButton } from '../../components/PrimaryButton';
 import { CameraIcon } from '../../components/icons';
+import { FadeInView } from '../../components/motion/FadeInView';
+import { Pressable } from '../../components/motion/Pressable';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { loadPeoplePhotos, savePeoplePhoto } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, fonts, spacing } from '../../theme';
-import { FadeInView } from '../../components/motion/FadeInView';
 
 const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
   { key: 'baby', label: 'Baby', emoji: '•' },
@@ -50,6 +50,7 @@ export function AddPeopleScreen() {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (target) {
@@ -86,7 +87,10 @@ export function AddPeopleScreen() {
   }
 
   function parseEverythingElse(text: string) {
-    const items = text.split(',').map((s) => s.trim()).filter(Boolean);
+    const items = text
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     const DIET_KEYWORDS: string[] = ['vegetarian', 'vegan', 'keto', 'paleo', 'halal', 'kosher'];
     const dietsFound: DietaryRestriction[] = [];
     const avoidFound: string[] = [];
@@ -131,7 +135,8 @@ export function AddPeopleScreen() {
       if (photoUri) {
         await savePeoplePhoto(saved.id, photoUri);
       }
-      navigation.goBack();
+      setSaved(true);
+      setTimeout(() => navigation.goBack(), 1200);
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -156,91 +161,102 @@ export function AddPeopleScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <FadeInView>
-        <ErrorBanner error={error} />
-
-        <View style={styles.photoArea}>
-          <Pressable
-            style={styles.avatar}
-            onPress={() => void handlePhoto()}
-            accessibilityRole="button"
-            accessibilityLabel="Add a profile photo"
-          >
-            {photoUri ? (
-              <AppImage source={{ uri: photoUri }} style={styles.photo} />
-            ) : (
-              <Text style={styles.avatarText}>{initials}</Text>
-            )}
-            <View style={styles.cameraBadge}>
-              <CameraIcon size={14} color={colors.surface} />
+        {saved ? (
+          <FadeInView>
+            <View style={styles.successCenter}>
+              <Ionicons name="checkmark-circle" size={56} color={colors.success} />
+              <Text style={styles.successTitle}>{target ? 'Changes saved!' : 'Person added!'}</Text>
             </View>
-          </Pressable>
-          <Text style={styles.photoHint}>Tap to add a photo</Text>
-        </View>
+          </FadeInView>
+        ) : (
+          <FadeInView>
+            <ErrorBanner error={error} />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Name (e.g. Maya, Dad, Partner)"
-          placeholderTextColor={colors.textSecondary}
-          value={displayName}
-          onChangeText={setDisplayName}
-          autoFocus={!target}
-        />
-
-        <Text style={styles.label}>Age group</Text>
-        <View style={styles.chipRow}>
-          {AGE_GROUPS.map((opt) => {
-            const active = ageGroup === opt.key;
-            return (
+            <View style={styles.photoArea}>
               <Pressable
-                key={opt.key}
-                style={[styles.choiceChip, active && styles.choiceChipActive]}
-                onPress={() => setAgeGroup(opt.key)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
+                style={styles.avatar}
+                onPress={() => void handlePhoto()}
+                accessibilityRole="button"
+                accessibilityLabel="Add a profile photo"
               >
-                <Text style={[styles.choiceText, active && styles.choiceTextActive]}>{opt.label}</Text>
+                {photoUri ? (
+                  <AppImage source={{ uri: photoUri }} style={styles.photo} />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
+                <View style={styles.cameraBadge}>
+                  <CameraIcon size={14} color={colors.surface} />
+                </View>
               </Pressable>
-            );
-          })}
-        </View>
+              <Text style={styles.photoHint}>Tap to add a photo</Text>
+            </View>
 
-        <Text style={styles.label}>Allergies — hard rules</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. peanuts, shellfish, dairy, gluten"
-          placeholderTextColor={colors.textSecondary}
-          value={allergies}
-          onChangeText={setAllergies}
-          autoCapitalize="none"
-        />
+            <TextInput
+              style={styles.input}
+              placeholder="Name (e.g. Maya, Dad, Partner)"
+              placeholderTextColor={colors.textSecondary}
+              value={displayName}
+              onChangeText={setDisplayName}
+              autoFocus={!target}
+            />
 
-        <Text style={styles.label}>Anything else we should know?</Text>
-        <TextInput
-          style={[styles.input, styles.multilineInput]}
-          placeholder="Foods they won't eat, diets they follow, preferences like 'loves salmon, mild spice'..."
-          placeholderTextColor={colors.textSecondary}
-          value={everythingElse}
-          onChangeText={setEverythingElse}
-          autoCapitalize="none"
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-        />
+            <Text style={styles.label}>Age group</Text>
+            <View style={styles.chipRow}>
+              {AGE_GROUPS.map((opt) => {
+                const active = ageGroup === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    style={[styles.choiceChip, active && styles.choiceChipActive]}
+                    onPress={() => setAgeGroup(opt.key)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.choiceText, active && styles.choiceTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-        <Text style={styles.safetyNote}>
-          Allergies are treated as hard rules and are never relaxed. Avoids and
-          diets guide the planner but still never cross an allergy.
-        </Text>
+            <Text style={styles.label}>Allergies — hard rules</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. peanuts, shellfish, dairy, gluten"
+              placeholderTextColor={colors.textSecondary}
+              value={allergies}
+              onChangeText={setAllergies}
+              autoCapitalize="none"
+            />
 
-        <PrimaryButton
-          label={target ? 'Save changes' : 'Add person'}
-          onPress={() => void handleSave()}
-          busy={saving}
-          disabled={!displayName.trim()}
-          style={styles.saveButton}
-        />
-        </FadeInView>
+            <Text style={styles.label}>Anything else we should know?</Text>
+            <TextInput
+              style={[styles.input, styles.multilineInput]}
+              placeholder="Foods they won't eat, diets they follow, preferences like 'loves salmon, mild spice'..."
+              placeholderTextColor={colors.textSecondary}
+              value={everythingElse}
+              onChangeText={setEverythingElse}
+              autoCapitalize="none"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            <Text style={styles.safetyNote}>
+              Allergies are treated as hard rules and are never relaxed. Avoids and diets guide the
+              planner but still never cross an allergy.
+            </Text>
+
+            <PrimaryButton
+              label={target ? 'Save changes' : 'Add person'}
+              onPress={() => void handleSave()}
+              busy={saving}
+              disabled={!displayName.trim()}
+              style={styles.saveButton}
+            />
+          </FadeInView>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -357,5 +373,16 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: spacing.xl,
+  },
+  successCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl * 2,
+    gap: spacing.sm,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
   },
 });

@@ -1,35 +1,37 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState, useCallback } from 'react';
+import { Image } from 'expo-image';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
-  Pressable,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
-import { Text } from '../components/AppText';
-import { TextInput } from '../components/AppTextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import EMPTY_KITCHEN from '../../assets/empty-kitchen.png';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Skeleton } from '../components/Skeleton';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable as MotionPressable } from '../components/motion/Pressable';
 import { toApiError } from '../services/api';
+import { haptics } from '../services/haptics';
 import {
+  type CaptureResult,
   type KitchenDashboard,
   type KitchenItem,
-  type CaptureResult,
-  getKitchenDashboard,
-  upsertKitchenItem,
   deleteKitchenItem,
+  getKitchenDashboard,
   markKitchenItemUsed,
+  upsertKitchenItem,
 } from '../services/kitchen.api';
 import { colors, fonts, spacing, typography } from '../theme';
-import EMPTY_KITCHEN from '../../assets/empty-kitchen.png';
 import KitchenCaptureBottomSheet from './KitchenCaptureBottomSheet';
 import KitchenCaptureReviewScreen from './KitchenCaptureReviewScreen';
 
@@ -158,11 +160,6 @@ export function KitchenScreen() {
     setNewExpiry('');
   }
 
-  function openAddForm() {
-    resetAddForm();
-    setShowAdd(true);
-  }
-
   // --- Add item / leftover manually ---
   async function handleAddItem() {
     const isLeftover = addKind === 'leftover';
@@ -202,11 +199,20 @@ export function KitchenScreen() {
 
   // --- Mark item used ("I ate some") ---
   async function handleMarkUsed(item: KitchenItem) {
-    setBusy(true);
+    if (!dashboard) return;
+    const previous = dashboard;
+    haptics.light();
+    setDashboard({
+      ...dashboard,
+      items: dashboard.items.map((i) =>
+        i.id === item.id ? { ...i, state: 'gone' as const, stateReason: 'Marked as used' } : i,
+      ),
+    });
     try {
       await markKitchenItemUsed(item.id);
       loadDashboard();
     } catch (err) {
+      setDashboard(previous);
       setError(toApiError(err));
     } finally {
       setBusy(false);
@@ -215,11 +221,18 @@ export function KitchenScreen() {
 
   // --- Delete item ---
   async function handleDeleteItem(item: KitchenItem) {
-    setBusy(true);
+    if (!dashboard) return;
+    const previous = dashboard;
+    haptics.warning();
+    setDashboard({
+      ...dashboard,
+      items: dashboard.items.filter((i) => i.id !== item.id),
+    });
     try {
       await deleteKitchenItem(item.id);
       loadDashboard();
     } catch (err) {
+      setDashboard(previous);
       setError(toApiError(err));
     } finally {
       setBusy(false);
@@ -227,74 +240,87 @@ export function KitchenScreen() {
   }
 
   // --- Item card ---
-  function renderItem({ item }: { item: KitchenItem }) {
+  function renderItem({ item, index }: { item: KitchenItem; index: number }) {
     return (
-      <Pressable
-        style={styles.itemCard}
-        onPress={() => handleMarkUsed(item)}
-        onLongPress={() => handleDeleteItem(item)}
-      >
-        <View style={styles.itemHeader}>
-          <View style={styles.itemNameRow}>
-            <View
-              style={[styles.stateDot, { backgroundColor: STATE_COLORS[item.state] ?? colors.textSecondary }]}
-            />
-            <Text style={styles.itemName}>{item.ingredientName}</Text>
+      <FadeInView delay={index * 60}>
+        <MotionPressable
+          style={styles.itemCard}
+          onPress={() => handleMarkUsed(item)}
+          onLongPress={() => {
+            haptics.medium();
+            handleDeleteItem(item);
+          }}
+        >
+          <View style={styles.itemHeader}>
+            <View style={styles.itemNameRow}>
+              <View
+                style={[
+                  styles.stateDot,
+                  { backgroundColor: STATE_COLORS[item.state] ?? colors.textSecondary },
+                ]}
+              />
+              <Text style={styles.itemName}>{item.ingredientName}</Text>
+            </View>
+            {item.quantity !== null && (
+              <Text style={styles.itemQty}>
+                {item.quantity}
+                {item.unit ? ` ${item.unit}` : ''}
+              </Text>
+            )}
           </View>
-          {item.quantity !== null && (
-            <Text style={styles.itemQty}>
-              {item.quantity}
-              {item.unit ? ` ${item.unit}` : ''}
-            </Text>
+          <View style={styles.itemMeta}>
+            <View style={[styles.stateBadge, { backgroundColor: STATE_COLORS[item.state] + '20' }]}>
+              <Text style={[styles.stateText, { color: STATE_COLORS[item.state] }]}>
+                {STATE_LABELS[item.state] ?? item.state}
+              </Text>
+            </View>
+            <Text style={styles.itemHint}>{item.stateReason}</Text>
+          </View>
+          {item.isExpiringSoon && (
+            <View style={styles.expiryWarning}>
+              <Ionicons name="time" size={14} color={colors.softRed} />
+              <Text style={styles.expiryWarningText}>
+                Expires in {item.daysUntilExpiry} day{item.daysUntilExpiry === 1 ? '' : 's'}
+              </Text>
+            </View>
           )}
-        </View>
-        <View style={styles.itemMeta}>
-          <View style={[styles.stateBadge, { backgroundColor: STATE_COLORS[item.state] + '20' }]}>
-            <Text style={[styles.stateText, { color: STATE_COLORS[item.state] }]}>
-              {STATE_LABELS[item.state] ?? item.state}
-            </Text>
-          </View>
-          <Text style={styles.itemHint}>{item.stateReason}</Text>
-        </View>
-        {item.isExpiringSoon && (
-          <View style={styles.expiryWarning}>
-            <Ionicons name="time" size={14} color={colors.softRed} />
-            <Text style={styles.expiryWarningText}>
-              Expires in {item.daysUntilExpiry} day{item.daysUntilExpiry === 1 ? '' : 's'}
-            </Text>
-          </View>
-        )}
-      </Pressable>
+        </MotionPressable>
+      </FadeInView>
     );
   }
 
   // --- Leftover card ---
-  function renderLeftover({ item }: { item: KitchenItem }) {
+  function renderLeftover({ item, index }: { item: KitchenItem; index: number }) {
     return (
-      <Pressable
-        style={[styles.itemCard, styles.leftoverCard]}
-        onPress={() => handleMarkUsed(item)}
-        onLongPress={() => handleDeleteItem(item)}
-      >
-        <View style={styles.itemHeader}>
-          <View style={styles.itemNameRow}>
-            <View style={[styles.stateDot, { backgroundColor: STATE_COLORS.leftover }]} />
-            <Text style={styles.itemName}>{item.dishName ?? item.ingredientName}</Text>
+      <FadeInView delay={index * 60}>
+        <MotionPressable
+          style={[styles.itemCard, styles.leftoverCard]}
+          onPress={() => handleMarkUsed(item)}
+          onLongPress={() => {
+            haptics.medium();
+            handleDeleteItem(item);
+          }}
+        >
+          <View style={styles.itemHeader}>
+            <View style={styles.itemNameRow}>
+              <View style={[styles.stateDot, { backgroundColor: STATE_COLORS.leftover }]} />
+              <Text style={styles.itemName}>{item.dishName ?? item.ingredientName}</Text>
+            </View>
+            {item.servings !== null && item.servings !== undefined && (
+              <Text style={styles.itemQty}>
+                {item.servings} serving{item.servings === 1 ? '' : 's'}
+              </Text>
+            )}
           </View>
-          {item.servings !== null && item.servings !== undefined && (
-            <Text style={styles.itemQty}>
-              {item.servings} serving{item.servings === 1 ? '' : 's'}
-            </Text>
-          )}
-        </View>
-        <View style={styles.itemMeta}>
-          <View style={[styles.stateBadge, { backgroundColor: STATE_COLORS.leftover + '20' }]}>
-            <Text style={[styles.stateText, { color: STATE_COLORS.leftover }]}>Leftover</Text>
+          <View style={styles.itemMeta}>
+            <View style={[styles.stateBadge, { backgroundColor: STATE_COLORS.leftover + '20' }]}>
+              <Text style={[styles.stateText, { color: STATE_COLORS.leftover }]}>Leftover</Text>
+            </View>
+            <Text style={styles.itemHint}>{item.stateReason}</Text>
           </View>
-          <Text style={styles.itemHint}>{item.stateReason}</Text>
-        </View>
-        {item.notes ? <Text style={styles.leftoverNotes}>{item.notes}</Text> : null}
-      </Pressable>
+          {item.notes ? <Text style={styles.leftoverNotes}>{item.notes}</Text> : null}
+        </MotionPressable>
+      </FadeInView>
     );
   }
 
@@ -312,10 +338,7 @@ export function KitchenScreen() {
           style={styles.sheetRoot}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <Pressable
-            style={styles.sheetScrim}
-            onPress={() => setShowAdd(false)}
-          />
+          <Pressable style={styles.sheetScrim} onPress={() => setShowAdd(false)} />
           <View style={styles.sheet}>
             <SafeAreaView edges={['bottom']} style={styles.sheetSafe}>
               <View style={styles.formHeader}>
@@ -337,9 +360,7 @@ export function KitchenScreen() {
                     style={[styles.kindButton, addKind === kind && styles.kindButtonActive]}
                     onPress={() => setAddKind(kind)}
                   >
-                    <Text
-                      style={[styles.kindText, addKind === kind && styles.kindTextActive]}
-                    >
+                    <Text style={[styles.kindText, addKind === kind && styles.kindTextActive]}>
                       {kind === 'pantry' ? 'Pantry item' : 'Leftover dish'}
                     </Text>
                   </Pressable>
@@ -436,7 +457,7 @@ export function KitchenScreen() {
                 label={isLeftover ? 'Add leftover' : 'Add to kitchen'}
                 onPress={() => void handleAddItem()}
                 busy={busy}
-                disabled={!((isLeftover ? newDish : newName).trim())}
+                disabled={!(isLeftover ? newDish : newName).trim()}
                 style={styles.sheetAction}
               />
             </SafeAreaView>
@@ -453,9 +474,21 @@ export function KitchenScreen() {
         <ScrollView contentContainerStyle={styles.exploreContent}>
           <Skeleton height={20} width="55%" style={{ marginBottom: spacing.sm }} />
           <Skeleton height={14} width="35%" style={{ marginBottom: spacing.lg }} />
-          <Skeleton height={64} borderRadius={12} />
-          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
-          <Skeleton lines={3} height={52} borderRadius={12} style={{ marginTop: spacing.lg }} />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <View key={i} style={[styles.itemCard, { marginBottom: spacing.sm }]}>
+              <View style={styles.itemHeader}>
+                <View style={styles.itemNameRow}>
+                  <Skeleton height={8} width={8} borderRadius={4} />
+                  <Skeleton height={15} width="45%" />
+                </View>
+                <Skeleton height={14} width={40} />
+              </View>
+              <View style={styles.itemMeta}>
+                <Skeleton height={18} width={60} borderRadius={6} />
+                <Skeleton height={12} width="30%" />
+              </View>
+            </View>
+          ))}
         </ScrollView>
       </SafeAreaView>
     );
@@ -482,19 +515,27 @@ export function KitchenScreen() {
           <>
             <Text style={[styles.sectionTitle, { fontFamily: fonts.display }]}>Leftovers</Text>
             <View style={styles.list}>
-              {leftovers.map((item) => (
-                <React.Fragment key={item.id}>{renderLeftover({ item })}</React.Fragment>
+              {leftovers.map((item, index) => (
+                <React.Fragment key={item.id}>{renderLeftover({ item, index })}</React.Fragment>
               ))}
             </View>
-            <Text style={[styles.sectionTitle, styles.sectionTitleSpaced, { fontFamily: fonts.display, fontWeight: '600' }]}>In your kitchen</Text>
+            <Text
+              style={[
+                styles.sectionTitle,
+                styles.sectionTitleSpaced,
+                { fontFamily: fonts.display, fontWeight: '600' },
+              ]}
+            >
+              In your kitchen
+            </Text>
           </>
         )}
 
         {/* Pantry items */}
         {activeItems.length > 0 ? (
           <View style={styles.list}>
-            {activeItems.map((item) => (
-              <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
+            {activeItems.map((item, index) => (
+              <React.Fragment key={item.id}>{renderItem({ item, index })}</React.Fragment>
             ))}
           </View>
         ) : leftovers.length > 0 ? (
@@ -506,7 +547,12 @@ export function KitchenScreen() {
           </View>
         ) : (
           <View style={styles.emptyState}>
-            <Image source={EMPTY_KITCHEN} style={styles.emptyMascotLarge} resizeMode="contain" />
+            <Image
+              source={EMPTY_KITCHEN}
+              style={styles.emptyMascotLarge}
+              contentFit="contain"
+              transition={200}
+            />
             <Text style={styles.emptyTitle}>No items yet</Text>
             <Text style={styles.emptySubtitle}>
               Tap + to add ingredients or snap a photo to identify food.
@@ -521,7 +567,9 @@ export function KitchenScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[typography.heading, styles.title, { fontFamily: fonts.display }]}>Kitchen</Text>
+        <Text style={[typography.heading, styles.title, { fontFamily: fonts.display }]}>
+          Kitchen
+        </Text>
       </View>
 
       {/* Manage view (only view) */}
@@ -529,15 +577,20 @@ export function KitchenScreen() {
 
       {/* Floating add button — opens Kitchen Capture */}
       <View style={styles.fabContainer}>
-        <Pressable
-          style={styles.fab}
-          onPress={() => setShowCaptureSheet(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Add to kitchen"
-        >
-          <Ionicons name="add" size={28} color="#FFFFFF" />
-          <Text style={styles.fabLabel}>Add to Kitchen</Text>
-        </Pressable>
+        <FadeInView delay={400} rise={8}>
+          <Pressable
+            style={styles.fab}
+            onPress={() => {
+              haptics.medium();
+              setShowCaptureSheet(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Add to kitchen"
+          >
+            <Ionicons name="add" size={28} color="#FFFFFF" />
+            <Text style={styles.fabLabel}>Add to Kitchen</Text>
+          </Pressable>
+        </FadeInView>
       </View>
 
       {/* Kitchen Capture bottom sheet */}
@@ -555,7 +608,7 @@ export function KitchenScreen() {
         <Modal visible animationType="slide">
           <KitchenCaptureReviewScreen
             result={captureResult}
-            onDone={(summary) => {
+            onDone={(_summary) => {
               setCaptureResult(null);
               loadDashboard();
             }}

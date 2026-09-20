@@ -1,22 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, StyleSheet, View, TextInput, Keyboard, ScrollView } from 'react-native';
+import { Keyboard, Modal, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
-  useSharedValue,
+  runOnJS,
   useAnimatedStyle,
+  useSharedValue,
   withSpring,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
-
-import { Pressable } from './motion/Pressable';
-import { Text } from './AppText';
-import { PrimaryButton } from './PrimaryButton';
-import { XIcon } from './icons';
 
 import type { PlanPreviewResponse } from '@meal-rescue/shared-types';
 
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { spring } from '../theme/motion';
+import { Text } from './AppText';
+import { PrimaryButton } from './PrimaryButton';
+import { XIcon } from './icons';
+import { Pressable } from './motion/Pressable';
 
 interface PlanReviewPopupProps {
   visible: boolean;
@@ -139,7 +138,7 @@ export function PlanReviewPopup({
             )}
 
             <Animated.View style={[styles.mealsSection, normalModeOpacity]}>
-              {preview.days.map((day, dayIndex) => (
+              {preview.days.map((day, _dayIndex) => (
                 <View key={day.dateKey} style={styles.dayCard}>
                   <Text style={styles.dayHeader}>
                     {new Date(day.dateKey).toLocaleDateString('en-US', {
@@ -148,20 +147,20 @@ export function PlanReviewPopup({
                       day: 'numeric',
                     })}
                   </Text>
-                  {day.meals.map((meal, mealIndex) => (
+                  {day.meals.map((meal, _mealIndex) => (
                     <View key={meal.id} style={styles.mealRow}>
                       <View style={styles.mealSlot}>
                         <Text style={styles.mealSlotLabel}>{formatSlot(meal.mealSlot)}</Text>
                       </View>
-<View style={styles.mealInfo}>
-                         <Text style={styles.mealConcept}>{meal.name || meal.recipeName}</Text>
-                         {meal.ingredients && meal.ingredients.length > 0 && (
-                           <Text style={styles.mealReason}>
-                             {meal.ingredients.slice(0, 3).join(', ')}
-                             {meal.ingredients.length > 3 ? '...' : ''}
-                           </Text>
-                         )}
-                       </View>
+                      <View style={styles.mealInfo}>
+                        <Text style={styles.mealConcept}>{meal.name || meal.recipeName}</Text>
+                        {meal.ingredients && meal.ingredients.length > 0 && (
+                          <Text style={styles.mealReason}>
+                            {meal.ingredients.slice(0, 3).join(', ')}
+                            {meal.ingredients.length > 3 ? '...' : ''}
+                          </Text>
+                        )}
+                      </View>
                     </View>
                   ))}
                 </View>

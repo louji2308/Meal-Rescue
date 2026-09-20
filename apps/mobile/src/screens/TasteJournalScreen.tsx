@@ -2,8 +2,6 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -14,23 +12,25 @@ import type {
   TasteSignalSource,
 } from '@meal-rescue/shared-types';
 
+import { Text } from '../components/AppText';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Skeleton } from '../components/Skeleton';
-import { FadeInView } from '../components/motion/FadeInView';
 import {
-  ChevronLeftIcon,
   BookIcon,
-  SparkIcon,
-  GitCompareIcon,
-  TrendingIcon,
-  FlaskIcon,
+  ChevronLeftIcon,
   CompassIcon,
-  XIcon,
+  FlaskIcon,
+  GitCompareIcon,
   HeartIcon,
   LeafIcon,
+  SparkIcon,
+  TrendingIcon,
 } from '../components/icons';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
+import { haptics } from '../services/haptics';
 import {
   correctInsight,
   dismissInsight,
@@ -130,33 +130,40 @@ export function TasteJournalScreen() {
     }, [load]),
   );
 
-  const afterMutation = useCallback(async () => {
-    try {
-      const data = await getJournal();
-      setJournal(data);
-      setError(null);
-    } catch (err) {
-      setError(toApiError(err));
-    }
-  }, []);
-
   const handleDismiss = useCallback(
     async (insight: TasteJournalInsight) => {
+      haptics.light();
       setBusyId(insight.id);
+      const previous = journal;
+      setJournal((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          patterns: prev.patterns.filter((i) => i.id !== insight.id),
+          dependentPatterns: prev.dependentPatterns.filter((i) => i.id !== insight.id),
+          discoveries: prev.discoveries.filter((i) => i.id !== insight.id),
+          stillLearning: prev.stillLearning.filter((i) => i.id !== insight.id),
+          boundaries: prev.boundaries.map((b) => ({
+            ...b,
+            items: b.items.filter((i) => i.id !== insight.id),
+          })),
+        };
+      });
       try {
         await dismissInsight(insight.id);
-        await afterMutation();
       } catch (err) {
+        setJournal(previous);
         setError(toApiError(err));
       } finally {
         setBusyId(null);
       }
     },
-    [afterMutation],
+    [journal],
   );
 
   const handleForget = useCallback(
     (insight: TasteJournalInsight) => {
+      haptics.warning();
       Alert.alert(
         'Forget this?',
         'This strand and everything behind it will be removed from your journal. A genuinely new signal would bring it back.',
@@ -168,10 +175,25 @@ export function TasteJournalScreen() {
             onPress: () => {
               void (async () => {
                 setBusyId(insight.id);
+                const previous = journal;
+                setJournal((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    patterns: prev.patterns.filter((i) => i.id !== insight.id),
+                    dependentPatterns: prev.dependentPatterns.filter((i) => i.id !== insight.id),
+                    discoveries: prev.discoveries.filter((i) => i.id !== insight.id),
+                    stillLearning: prev.stillLearning.filter((i) => i.id !== insight.id),
+                    boundaries: prev.boundaries.map((b) => ({
+                      ...b,
+                      items: b.items.filter((i) => i.id !== insight.id),
+                    })),
+                  };
+                });
                 try {
                   await forgetInsight(insight.id);
-                  await afterMutation();
                 } catch (err) {
+                  setJournal(previous);
                   setError(toApiError(err));
                 } finally {
                   setBusyId(null);
@@ -182,22 +204,37 @@ export function TasteJournalScreen() {
         ],
       );
     },
-    [afterMutation],
+    [journal],
   );
 
   const handleCorrect = useCallback(
     async (insight: TasteJournalInsight, polarity: 'positive' | 'negative') => {
       setBusyId(insight.id);
+      const previous = journal;
+      setJournal((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          patterns: prev.patterns.filter((i) => i.id !== insight.id),
+          dependentPatterns: prev.dependentPatterns.filter((i) => i.id !== insight.id),
+          discoveries: prev.discoveries.filter((i) => i.id !== insight.id),
+          stillLearning: prev.stillLearning.filter((i) => i.id !== insight.id),
+          boundaries: prev.boundaries.map((b) => ({
+            ...b,
+            items: b.items.filter((i) => i.id !== insight.id),
+          })),
+        };
+      });
       try {
         await correctInsight(insight.id, polarity);
-        await afterMutation();
       } catch (err) {
+        setJournal(previous);
         setError(toApiError(err));
       } finally {
         setBusyId(null);
       }
     },
-    [afterMutation],
+    [journal],
   );
 
   const handlers = useMemo<InsightHandlers>(
@@ -262,8 +299,8 @@ export function TasteJournalScreen() {
           </View>
           <Text style={[styles.heroTitle]}>Your Taste Journal</Text>
           <Text style={[typography.body, styles.heroSub]}>
-            What Meal Rescue says about how you eat - every line grounded in something you have
-            told us or shown us.
+            What Meal Rescue says about how you eat - every line grounded in something you have told
+            us or shown us.
           </Text>
           <View style={styles.heroStatRow}>
             <View style={styles.heroStat}>
@@ -369,17 +406,17 @@ function renderInsightSection(
     render: () => (
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
-          <View style={[styles.sectionIcon, { backgroundColor: meta.accent }]}>
-            {meta.icon}
-          </View>
+          <View style={[styles.sectionIcon, { backgroundColor: meta.accent }]}>{meta.icon}</View>
           <View style={styles.sectionHeaderText}>
             <Text style={styles.sectionTitle}>{meta.title}</Text>
             <Text style={styles.sectionHint}>{meta.hint}</Text>
           </View>
         </View>
         <View style={styles.sectionBody}>
-          {insights.map((insight) => (
-            <InsightCard key={insight.id} insight={insight} handlers={handlers} />
+          {insights.map((insight, i) => (
+            <FadeInView key={insight.id} delay={i * 60} rise={6}>
+              <InsightCard insight={insight} handlers={handlers} />
+            </FadeInView>
           ))}
         </View>
       </View>
@@ -412,8 +449,10 @@ function renderBoundaries(
               <Text style={styles.boundaryTitle}>{match.title}</Text>
               <Text style={styles.boundarySubtitle}>{match.subtitle}</Text>
               <View style={styles.boundaryItems}>
-                {match.items.map((insight) => (
-                  <InsightCard key={insight.id} insight={insight} handlers={handlers} />
+                {match.items.map((insight, i) => (
+                  <FadeInView key={insight.id} delay={i * 60} rise={6}>
+                    <InsightCard insight={insight} handlers={handlers} />
+                  </FadeInView>
                 ))}
               </View>
             </View>,
@@ -424,9 +463,15 @@ function renderBoundaries(
   );
 }
 
-function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; handlers: InsightHandlers }) {
+function InsightCard({
+  insight,
+  handlers,
+}: {
+  insight: TasteJournalInsight;
+  handlers: InsightHandlers;
+}) {
   const [correctOpen, setCorrectOpen] = useState(false);
-  const busy = handlers.busyId === insight.id;
+  const _busy = handlers.busyId === insight.id;
 
   return (
     <View style={styles.insightCard}>
@@ -441,7 +486,7 @@ function InsightCard({ insight, handlers }: { insight: TasteJournalInsight; hand
       <Modal
         visible={correctOpen}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setCorrectOpen(false)}
       >
         <View style={styles.modalOverlay}>

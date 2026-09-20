@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -7,11 +7,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RecognizedItem } from '@meal-rescue/shared-types';
 
+import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { Pressable } from '../components/motion/Pressable';
-import { PrimaryButton } from '../components/PrimaryButton';
-import { Text } from '../components/AppText';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
+import { haptics } from '../services/haptics';
 import { colors, radius, spacing, typography } from '../theme';
 
 const UNITS = ['pcs', 'g', 'kg', 'ml', 'l'] as const;
@@ -50,16 +50,14 @@ export function MealReviewScreen() {
   const { analysis } = route.params;
 
   const [items, setItems] = useState<EditableItem[]>(() =>
-    (analysis.items?.length ? analysis.items : deriveItems(analysis)).map(
-      (item, index) => ({
-        id: index,
-        name: item.name,
-        itemType: item.itemType,
-        quantity: item.quantity ?? null,
-        unit: item.unit ?? 'pcs',
-        servings: item.servings ?? null,
-      }),
-    ),
+    (analysis.items?.length ? analysis.items : deriveItems(analysis)).map((item, index) => ({
+      id: index,
+      name: item.name,
+      itemType: item.itemType,
+      quantity: item.quantity ?? null,
+      unit: item.unit ?? 'pcs',
+      servings: item.servings ?? null,
+    })),
   );
 
   const [busy, setBusy] = useState(false);
@@ -72,7 +70,7 @@ export function MealReviewScreen() {
   };
 
   const adjustQty = (item: EditableItem, delta: number) => {
-    const step = item.unit === 'g' ? 50 : item.unit === 'kg' ? 0.5 : item.unit === 'ml' ? 50 : 1;
+    const _step = item.unit === 'g' ? 50 : item.unit === 'kg' ? 0.5 : item.unit === 'ml' ? 50 : 1;
     const next = (item.quantity ?? 0) + delta;
     updateItem(item.id, { quantity: next < 0 ? 0 : Math.round(next * 100) / 100 });
   };
@@ -129,9 +127,7 @@ export function MealReviewScreen() {
           <View key={item.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.typeBadge}>{ITEM_TYPE_LABEL[item.itemType]}</Text>
-              {isFood(item.itemType) && (
-                <Text style={styles.typeHint}>~serves people</Text>
-              )}
+              {isFood(item.itemType) && <Text style={styles.typeHint}>~serves people</Text>}
             </View>
 
             <Text style={styles.label}>Name</Text>
@@ -146,7 +142,10 @@ export function MealReviewScreen() {
             <View style={styles.qtyRow}>
               <Pressable
                 style={styles.qtyBtn}
-                onPress={() => adjustQty(item, -1)}
+                onPress={() => {
+                  haptics.light();
+                  adjustQty(item, -1);
+                }}
                 accessibilityRole="button"
               >
                 <Ionicons name="remove" size={18} color={colors.primary} />
@@ -154,15 +153,16 @@ export function MealReviewScreen() {
               <TextInput
                 style={styles.qtyInput}
                 value={item.quantity != null ? String(item.quantity) : ''}
-                onChangeText={(t) =>
-                  updateItem(item.id, { quantity: t ? Number(t) : null })
-                }
+                onChangeText={(t) => updateItem(item.id, { quantity: t ? Number(t) : null })}
                 keyboardType="decimal-pad"
                 placeholder="—"
               />
               <Pressable
                 style={styles.qtyBtn}
-                onPress={() => adjustQty(item, 1)}
+                onPress={() => {
+                  haptics.light();
+                  adjustQty(item, 1);
+                }}
                 accessibilityRole="button"
               >
                 <Ionicons name="add" size={18} color={colors.primary} />
@@ -172,7 +172,10 @@ export function MealReviewScreen() {
                   <Pressable
                     key={u}
                     style={[styles.unitPill, item.unit === u && styles.unitPillActive]}
-                    onPress={() => updateItem(item.id, { unit: u })}
+                    onPress={() => {
+                      haptics.light();
+                      updateItem(item.id, { unit: u });
+                    }}
                     accessibilityRole="button"
                   >
                     <Text
