@@ -43,7 +43,7 @@ maybeDescribe('meal-completion onboarding (integration)', () => {
       method: 'POST',
       url: '/api/v1/user/taste/onboarding/cuisines',
       headers: { authorization: `Bearer ${token}` },
-      payload: { cuisines: ['italian', 'japanese'] },
+      payload: { cuisines: ['italian', 'east_asian'] },
     });
   });
 
