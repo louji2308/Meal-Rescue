@@ -22,7 +22,7 @@ maybeDescribe('meal-completion onboarding (integration)', () => {
     await closeDatabase();
   });
 
-  it('starts onboarding and returns an adaptive first pair', async () => {
+  it('starts onboarding with a cuisine step for a fresh user', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/user/taste/onboarding',
@@ -35,7 +35,33 @@ maybeDescribe('meal-completion onboarding (integration)', () => {
       kind: string | null;
     };
     expect(body.completed).toBe(false);
-    expect(body.pair?.id).toBe('pair-01');
+    expect(body.kind).toBe('cuisine');
+    expect(body.pair).toBeNull();
+
+    // Seed a cuisine selection so the next call returns a pair
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/user/taste/onboarding/cuisines',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { cuisines: ['italian', 'japanese'] },
+    });
+  });
+
+  it('returns an adaptive first pair after cuisines are set', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/user/taste/onboarding',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      completed: boolean;
+      pair: { id: string } | null;
+      kind: string | null;
+    };
+    expect(body.completed).toBe(false);
+    expect(body.kind).toBe('pair');
+    expect(body.pair?.id).toBeDefined();
   });
 
   it('answers every pair and returns a summary at the end', async () => {

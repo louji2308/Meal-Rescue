@@ -7,12 +7,19 @@ import {
   Animated,
   FlatList,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  UIManager,
   View,
 } from 'react-native';
+import AnimatedReanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MealEvent, MealMemoryIntentResponse, MealSlot } from '@meal-rescue/shared-types';
@@ -20,14 +27,18 @@ import type { MealEvent, MealMemoryIntentResponse, MealSlot } from '@meal-rescue
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { PlanReviewPopup } from '../components/PlanReviewPopup';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { MealPlanLoading } from '../components/meal-plan';
-import { PlanReviewPopup } from '../components/PlanReviewPopup';
+import { FadeInView } from '../components/motion/FadeInView';
 import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
+import { haptics } from '../services/haptics';
 import { useCommonTableStore } from '../stores/common-table.store';
 import { useMealMemoryStore } from '../stores/meal-memory.store';
 import { colors, fonts, spacing, typography } from '../theme';
+
+if (Platform.OS === 'android') UIManager.setLayoutAnimationEnabledExperimental?.(true);
 
 const SLOT_LABELS: Record<MealSlot, string> = {
   breakfast: 'Breakfast',
@@ -78,7 +89,7 @@ function addMonthsYM(ym: string, delta: number): string {
 
 function daysInMonth(ym: string): string[] {
   const [y, m] = ym.split('-').map(Number);
-  const daysCount = new Date(Date.UTC(y ?? 2000, (m ?? 1), 0)).getUTCDate();
+  const daysCount = new Date(Date.UTC(y ?? 2000, m ?? 1, 0)).getUTCDate();
   return Array.from({ length: daysCount }, (_, i) => {
     const day = String(i + 1).padStart(2, '0');
     return `${ym}-${day}`;
@@ -180,6 +191,22 @@ const DayCell = React.memo(function DayCell({
   scrollX: Animated.Value;
   onPress: (index: number, key: string) => void;
 }) {
+  const bounceScale = useSharedValue(1);
+  const prevSelected = useRef(isSelected);
+
+  useEffect(() => {
+    if (isSelected && !prevSelected.current) {
+      bounceScale.value = withSpring(1.15, { damping: 8, stiffness: 300 }, () => {
+        bounceScale.value = withSpring(1, { damping: 12, stiffness: 200 });
+      });
+    }
+    prevSelected.current = isSelected;
+  }, [isSelected, bounceScale]);
+
+  const animatedBounceStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: bounceScale.value }],
+  }));
+
   const offsetFromCenter = Animated.subtract(scrollX, index * cellW);
   const scale = offsetFromCenter.interpolate({
     inputRange: [-2.5 * cellW, -cellW, -cellW / 2, 0, cellW / 2, cellW, 2.5 * cellW],
@@ -199,12 +226,26 @@ const DayCell = React.memo(function DayCell({
       accessibilityLabel={`${weekday} ${dayNum}`}
     >
       <Animated.View style={{ width: cellW, opacity, transform: [{ scale }] }}>
-        <Text style={[styles.dayWeekday, isToday && styles.dayWeekdayToday]}>
-          {weekday}
-        </Text>
-        <Text style={[styles.dayNumber, isToday && styles.dayNumberToday]}>
-          {dayNum}
-        </Text>
+        <AnimatedReanimated.View style={animatedBounceStyle}>
+          <Text
+            style={[
+              styles.dayWeekday,
+              isToday && styles.dayWeekdayToday,
+              isSelected && styles.dayWeekdaySelected,
+            ]}
+          >
+            {weekday}
+          </Text>
+          <Text
+            style={[
+              styles.dayNumber,
+              isToday && styles.dayNumberToday,
+              isSelected && styles.dayNumberSelected,
+            ]}
+          >
+            {dayNum}
+          </Text>
+        </AnimatedReanimated.View>
         <View style={styles.dayDotRow}>
           <View
             style={[
@@ -435,7 +476,9 @@ export function MealPlanScreen() {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.header}>
-          <Text style={[typography.heading, styles.title, { fontFamily: fonts.display }]}>Meal Plan</Text>
+            <Text style={[typography.heading, styles.title, { fontFamily: fonts.display }]}>
+              Meal Plan
+            </Text>
           </View>
           <ErrorBanner error={error} />
           <Pressable
@@ -476,16 +519,18 @@ export function MealPlanScreen() {
           <Text style={[typography.heading, styles.title]}>Meal Plan</Text>
           <View style={styles.headerRight}>
             {saveStatus !== 'idle' && (
-              <Text
-                style={[styles.saveBadge, saveStatus === 'error' && styles.saveBadgeError]}
-                accessibilityLabel={`Meal plan save status: ${saveStatus}`}
-              >
-                {saveStatus === 'saving'
-                  ? 'Saving…'
-                  : saveStatus === 'saved'
-                    ? 'Saved'
-                    : 'Not saved'}
-              </Text>
+              <FadeInView duration={150}>
+                <Text
+                  style={[styles.saveBadge, saveStatus === 'error' && styles.saveBadgeError]}
+                  accessibilityLabel={`Meal plan save status: ${saveStatus}`}
+                >
+                  {saveStatus === 'saving'
+                    ? 'Saving…'
+                    : saveStatus === 'saved'
+                      ? 'Saved'
+                      : 'Not saved'}
+                </Text>
+              </FadeInView>
             )}
             {busy && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
@@ -521,7 +566,11 @@ export function MealPlanScreen() {
             >
               <Ionicons name="chevron-back" size={22} color={colors.text} />
             </Pressable>
-            <Text style={[styles.monthTitle, { fontFamily: fonts.display }]}>{prettyMonth(viewedYM)}</Text>
+            <FadeInView key={viewedYM} duration={180}>
+              <Text style={[styles.monthTitle, { fontFamily: fonts.display }]}>
+                {prettyMonth(viewedYM)}
+              </Text>
+            </FadeInView>
             <Pressable
               style={[
                 styles.monthArrow,
@@ -547,6 +596,7 @@ export function MealPlanScreen() {
             {cellW > 0 && (
               <View style={styles.dayStripFade}>
                 <AnimatedFlatList
+                  key={viewedYM}
                   ref={dayScrollRef}
                   horizontal
                   data={monthDays}
@@ -556,6 +606,7 @@ export function MealPlanScreen() {
                   bounces={false}
                   overScrollMode="never"
                   removeClippedSubviews
+                  initialNumToRender={11}
                   maxToRenderPerBatch={11}
                   windowSize={11}
                   getItemLayout={(_, index) => ({
@@ -563,10 +614,9 @@ export function MealPlanScreen() {
                     offset: cellW * index,
                     index,
                   })}
-                  onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                    { useNativeDriver: false },
-                  )}
+                  onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+                    useNativeDriver: false,
+                  })}
                   scrollEventThrottle={16}
                   onMomentumScrollEnd={handleDayMomentumScrollEnd}
                   contentContainerStyle={{
@@ -587,6 +637,11 @@ export function MealPlanScreen() {
                     />
                   )}
                 />
+                {busy && (
+                  <View style={styles.dayStripLoading}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -603,137 +658,143 @@ export function MealPlanScreen() {
 
           {/* Selected day plan */}
           {selectedDay ? (
-            <View style={styles.dayCard}>
-              <Text style={styles.dayCardLabel}>{prettyDate(selectedDay.dateKey)}</Text>
-              {SLOT_ORDER.map((slotKey) => {
-                const slot = selectedDay.slots.find((s) => s.mealSlot === slotKey);
-                const meal = slot?.planned ?? null;
-                const isExpanded =
-                  expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
-                return (
-                  <View key={slotKey}>
-                    <Pressable
-                      tintBorderRadius={8}
-                      style={[
-                        styles.slotRow,
-                        !meal && styles.slotRowEmpty,
-                      ]}
-                      onPress={() => {
-                        if (!meal) return;
-                        navigation.navigate('DishDetail', {
-                          eventId: meal.id,
-                          concept: meal.concept ?? '',
-                          mealSlot: slotKey,
-                          dateKey: selectedDay.dateKey,
-                        });
-                      }}
-                      onLongPress={() => {
-                        if (!meal) return;
-                        setExpanded(
-                          isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey },
-                        );
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.slotLabel,
-                          isExpanded && styles.slotLabelSelected,
-                          !meal && styles.slotLabelEmpty,
-                        ]}
+            <FadeInView key={selectedDay.dateKey} duration={180} rise={6}>
+              <View style={styles.dayCard}>
+                <Text style={styles.dayCardLabel}>{prettyDate(selectedDay.dateKey)}</Text>
+                {SLOT_ORDER.map((slotKey) => {
+                  const slot = selectedDay.slots.find((s) => s.mealSlot === slotKey);
+                  const meal = slot?.planned ?? null;
+                  const isExpanded =
+                    expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
+                  return (
+                    <View key={slotKey}>
+                      <Pressable
+                        tintBorderRadius={8}
+                        style={[styles.slotRow, !meal && styles.slotRowEmpty]}
+                        onPress={() => {
+                          if (!meal) return;
+                          navigation.navigate('DishDetail', {
+                            eventId: meal.id,
+                            concept: meal.concept ?? '',
+                            mealSlot: slotKey,
+                            dateKey: selectedDay.dateKey,
+                          });
+                        }}
+                        onLongPress={() => {
+                          if (!meal) return;
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setExpanded(
+                            isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey },
+                          );
+                        }}
                       >
-                        {SLOT_LABELS[slotKey]}
-                      </Text>
-                      {meal ? (
-                        <View style={styles.slotMeal}>
-                          <Text style={styles.slotConcept}>{meal.concept ?? 'Planned meal'}</Text>
-                          <Text style={styles.slotMeta}>
-                            {meal.mealRole?.replaceAll('_', ' ') ?? ''}
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text style={styles.slotOpen}>Nothing planned</Text>
-                      )}
-                      {meal && (
-                        <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
-                      )}
-                    </Pressable>
-
-                    {isExpanded && meal && (
-                      <>
-                        <SlotConceptEditor key={meal.id} meal={meal} />
-                        <View style={styles.slotActions}>
-                          <Pressable
-                            style={styles.slotAction}
-                            disabled={busy}
-                            onPress={() =>
-                              void markActual({
-                                dateKey: selectedDay.dateKey,
-                                mealSlot: slotKey,
-                                ate: true,
-                                concept: meal.concept ?? undefined,
-                              }).catch(() => {})
-                            }
-                          >
-                            <Ionicons name="checkmark" size={14} color={colors.softAlert} />
-                            <Text style={styles.slotActionText}>Cooked it</Text>
-                          </Pressable>
-                          <Pressable
-                            style={styles.slotAction}
-                            disabled={busy}
-                            onPress={() =>
-                              void markActual({
-                                dateKey: selectedDay.dateKey,
-                                mealSlot: slotKey,
-                                skipped: true,
-                              }).catch(() => {})
-                            }
-                          >
-                            <Ionicons name="close" size={14} color={colors.softAlert} />
-                            <Text style={styles.slotActionText}>Skipped</Text>
-                          </Pressable>
-                          <Pressable
-                            style={styles.slotAction}
-                            disabled={busy}
-                            onPress={() =>
-                              void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(
-                                () => {},
-                              )
-                            }
-                          >
-                            <Ionicons name="heart" size={14} color={colors.softAlert} />
-                            <Text style={styles.slotActionText}>Loved</Text>
-                          </Pressable>
-                          <Pressable
-                            style={styles.slotAction}
-                            disabled={busy}
-                            onPress={() =>
-                              void moveEvent(
-                                meal.id,
-                                addDays(selectedDay.dateKey, 1),
-                                slotKey,
-                              ).catch(() => {})
-                            }
-                          >
-                            <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
-                            <Text style={styles.slotActionText}>Tomorrow</Text>
-                          </Pressable>
-                          <Pressable
-                            style={[styles.slotAction, styles.slotActionDanger]}
-                            disabled={busy}
-                            onPress={() => void removeEvent(meal.id).catch(() => {})}
-                          >
-                            <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
-                            <Text style={[styles.slotActionText, { color: colors.error }]}>
-                              Remove
+                        <Text
+                          style={[
+                            styles.slotLabel,
+                            isExpanded && styles.slotLabelSelected,
+                            !meal && styles.slotLabelEmpty,
+                          ]}
+                        >
+                          {SLOT_LABELS[slotKey]}
+                        </Text>
+                        {meal ? (
+                          <View style={styles.slotMeal}>
+                            <Text style={styles.slotConcept}>{meal.concept ?? 'Planned meal'}</Text>
+                            <Text style={styles.slotMeta}>
+                              {meal.mealRole?.replaceAll('_', ' ') ?? ''}
                             </Text>
-                          </Pressable>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
+                          </View>
+                        ) : (
+                          <Text style={styles.slotOpen}>Nothing planned</Text>
+                        )}
+                        {meal && (
+                          <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
+                        )}
+                      </Pressable>
+
+                      {isExpanded && meal && (
+                        <FadeInView duration={150} rise={4}>
+                          <SlotConceptEditor key={meal.id} meal={meal} />
+                          <View style={styles.slotActions}>
+                            <Pressable
+                              style={styles.slotAction}
+                              disabled={busy}
+                              onPress={() => {
+                                haptics.success();
+                                void markActual({
+                                  dateKey: selectedDay.dateKey,
+                                  mealSlot: slotKey,
+                                  ate: true,
+                                  concept: meal.concept ?? undefined,
+                                }).catch(() => {});
+                              }}
+                            >
+                              <Ionicons name="checkmark" size={14} color={colors.softAlert} />
+                              <Text style={styles.slotActionText}>Cooked it</Text>
+                            </Pressable>
+                            <Pressable
+                              style={styles.slotAction}
+                              disabled={busy}
+                              onPress={() => {
+                                haptics.light();
+                                void markActual({
+                                  dateKey: selectedDay.dateKey,
+                                  mealSlot: slotKey,
+                                  skipped: true,
+                                }).catch(() => {});
+                              }}
+                            >
+                              <Ionicons name="close" size={14} color={colors.softAlert} />
+                              <Text style={styles.slotActionText}>Skipped</Text>
+                            </Pressable>
+                            <Pressable
+                              style={styles.slotAction}
+                              disabled={busy}
+                              onPress={() => {
+                                haptics.success();
+                                void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(
+                                  () => {},
+                                );
+                              }}
+                            >
+                              <Ionicons name="heart" size={14} color={colors.softAlert} />
+                              <Text style={styles.slotActionText}>Loved</Text>
+                            </Pressable>
+                            <Pressable
+                              style={styles.slotAction}
+                              disabled={busy}
+                              onPress={() =>
+                                void moveEvent(
+                                  meal.id,
+                                  addDays(selectedDay.dateKey, 1),
+                                  slotKey,
+                                ).catch(() => {})
+                              }
+                            >
+                              <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
+                              <Text style={styles.slotActionText}>Tomorrow</Text>
+                            </Pressable>
+                            <Pressable
+                              style={[styles.slotAction, styles.slotActionDanger]}
+                              disabled={busy}
+                              onPress={() => {
+                                haptics.warning();
+                                void removeEvent(meal.id).catch(() => {});
+                              }}
+                            >
+                              <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
+                              <Text style={[styles.slotActionText, { color: colors.error }]}>
+                                Remove
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </FadeInView>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </FadeInView>
           ) : null}
         </ScrollView>
 
@@ -872,6 +933,12 @@ const styles = StyleSheet.create({
   },
   dayStripFade: {
     width: '100%',
+  },
+  dayStripLoading: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    marginTop: -10,
   },
   dayCenterMarker: {
     position: 'absolute',
