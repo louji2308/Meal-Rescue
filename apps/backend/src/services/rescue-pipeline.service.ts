@@ -42,6 +42,7 @@ import { PROMPT_VERSIONS } from './ai/prompts';
 import { CandidateGeneratorService } from './candidate-generator.service';
 import { ConstraintEngineService } from './constraint-engine.service';
 import type { MealCompletionService } from './meal-completion.service';
+import { OnboardingPrefContextService } from './onboarding-pref-context.service';
 import { RankingEngineService } from './ranking-engine.service';
 import { additionsFromRescues, deriveMealGroup } from './ranking/cold-start-signals';
 import type { RankingProfileInput } from './ranking/cold-start-signals';
@@ -75,6 +76,7 @@ export class RescuePipelineService {
   private readonly tasteMemory: TasteMemoryService | null;
   private readonly mealCompletion: MealCompletionService | null;
   private readonly eventWriter: DecisionEventService | null;
+  private readonly prefContext: OnboardingPrefContextService | null;
 
   constructor(
     private readonly llm: LlmClient,
@@ -82,6 +84,7 @@ export class RescuePipelineService {
     tasteMemory?: TasteMemoryService,
     mealCompletion?: MealCompletionService,
     events?: DecisionEventService,
+    prefContext?: OnboardingPrefContextService,
   ) {
     this.generator = new CandidateGeneratorService();
     this.constraintEngine = new ConstraintEngineService();
@@ -91,6 +94,8 @@ export class RescuePipelineService {
     this.mealCompletion = mealCompletion ?? null;
     // Null in unit tests that wire the pipeline without a DB; the event
     // stream is then skipped (composition passes the real service).
+    this.eventWriter = events ?? null;
+    this.prefContext = prefContext ?? null;
     this.eventWriter = events ?? null;
   }
 
@@ -121,6 +126,29 @@ export class RescuePipelineService {
     // ── V2 intent + reality (hard constraint conversion, §5/§8) ────────────
     const intent = resolveIntent(v2?.intent);
     const reality = deriveReality(constraints, v2?.reality);
+
+    // Auto-load dietary restrictions + religious/cultural from stored onboarding
+    // prefs so they are never silently lost between onboarding and rescue.
+    if (this.prefContext) {
+      const stored = await this.prefContext.getStoredDietaryConstraints(userId);
+      if (stored.dietaryRestrictions?.length) {
+        reality.constraints.dietaryRestrictions = [
+          ...new Set([
+            ...(reality.constraints.dietaryRestrictions ?? []),
+            ...stored.dietaryRestrictions,
+          ]),
+        ] as typeof reality.constraints.dietaryRestrictions;
+      }
+      if (stored.religiousCultural?.length) {
+        // religiousCultural maps to avoidIngredients for constraint filtering
+        reality.constraints.avoidIngredients = [
+          ...new Set([
+            ...(reality.constraints.avoidIngredients ?? []),
+            ...stored.religiousCultural,
+          ]),
+        ];
+      }
+    }
 
     // No-events DB wiring stays optional: the pipeline runs standalone in unit
     // tests; the composition root passes the real service.
@@ -245,6 +273,11 @@ export class RescuePipelineService {
 
     const recentlyShown = await this.recentlyShownAdditions(userId);
 
+    // Build onboarding preference context for the ranking LLM.
+    const onboardingPrefContext = this.prefContext
+      ? ((await this.prefContext.buildContext(userId)) ?? undefined)
+      : undefined;
+
     const rankingTracking = { fallbackUsed: false };
     const ranked = await this.rankingEngine.rankAndExplain(
       feasible,
@@ -255,6 +288,7 @@ export class RescuePipelineService {
       profile ?? null,
       recentlyShown,
       rankingTracking,
+      onboardingPrefContext,
     );
 
     // 5. Safety validation - drop anything invalid, keep going.

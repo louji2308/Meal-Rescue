@@ -36,12 +36,21 @@ export interface RankingPayloadInput {
   preferences: UserPreferenceSnapshot;
   profile?: RankingProfileInput | null;
   recentlyShown?: string[];
+  onboardingPrefContext?: string;
 }
 
 /** JSON payload shared by the LLM prompt and the deterministic fallback. */
 export function buildRankingPayload(input: RankingPayloadInput) {
-  const { candidates, meal, missingComponents, constraints, preferences, profile, recentlyShown } =
-    input;
+  const {
+    candidates,
+    meal,
+    missingComponents,
+    constraints,
+    preferences,
+    profile,
+    recentlyShown,
+    onboardingPrefContext,
+  } = input;
 
   const mealGroup =
     profile && profile.mealGroup && profile.mealGroup !== 'other'
@@ -55,6 +64,7 @@ export function buildRankingPayload(input: RankingPayloadInput) {
     preferences: {
       favorites: preferences.favoriteFoods ?? [],
       avoided: preferences.avoidedFoods ?? [],
+      ...(onboardingPrefContext ? { onboardingProfile: onboardingPrefContext } : {}),
       ...(profile
         ? {
             coldStartProfile: {
@@ -106,6 +116,7 @@ export class RankingEngineService {
     profile?: RankingProfileInput | null,
     recentlyShown: string[] = [],
     tracking?: { fallbackUsed: boolean },
+    onboardingPrefContext?: string,
   ): Promise<RankedRecommendation[]> {
     if (candidates.length === 0) return [];
 
@@ -118,6 +129,7 @@ export class RankingEngineService {
       preferences,
       profile,
       recentlyShown,
+      onboardingPrefContext,
     });
 
     let result: RankingResult;

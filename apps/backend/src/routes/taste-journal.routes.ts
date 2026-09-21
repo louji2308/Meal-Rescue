@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { dbModels } from '../database/models';
 import { AppError } from '../lib/errors';
 import { buildServices } from '../services/composition';
 
@@ -101,5 +102,18 @@ export async function tasteJournalRoutes(app: FastifyInstance): Promise<void> {
         note: parsed.data.note,
       }),
     );
+  });
+
+  /**
+   * GET /api/v1/user/taste-journal/preference-profile
+   * Returns the user's onboarding preference profile formatted for display
+   * (Option C style: checklist + hint line).
+   */
+  app.get('/preference-profile', async (request, reply) => {
+    const { OnboardingPrefContextService } =
+      await import('../services/onboarding-pref-context.service');
+    const prefCtx = new OnboardingPrefContextService(dbModels);
+    const profile = await prefCtx.buildContext(request.user.sub);
+    return reply.send({ profile: profile ?? null });
   });
 }

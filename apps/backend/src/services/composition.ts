@@ -28,6 +28,7 @@ import { MemoryLearningService } from './meal-memory/memory-learning.service';
 import { PlanningEngine } from './meal-memory/planning-engine';
 import { WorldStateService } from './meal-memory/world-state.service';
 import { ModificationMagnitudeService } from './modification-magnitude.service';
+import { OnboardingPrefContextService } from './onboarding-pref-context.service';
 import { OnboardingPreferencesService } from './onboarding/onboarding-preferences.service';
 import { PantryService } from './pantry.service';
 import { PreferenceLearningService } from './preference-learning.service';
@@ -158,6 +159,7 @@ export function buildServices(redis: Redis | null): {
       tasteMemory,
       mealCompletion,
       decisionEvents,
+      new OnboardingPrefContextService(dbModels),
     ),
     feedback: new FeedbackService(models, tasteEvents, tasteSensory, tasteTreatment),
     preferenceLearning: new PreferenceLearningService(models),

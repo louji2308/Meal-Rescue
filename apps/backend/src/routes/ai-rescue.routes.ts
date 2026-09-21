@@ -19,6 +19,23 @@ import { buildServices, dbModels } from '../services/composition';
 
 const aiRescue = new AiRescueService();
 
+/** Simple per-user in-memory rate limiter for AI endpoints. */
+const aiRateLimit = new Map<string, { count: number; windowStart: number }>();
+const AI_RATE_LIMIT = 10; // per minute
+const AI_RATE_WINDOW_MS = 60_000;
+
+function checkAiRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = aiRateLimit.get(userId);
+  if (!entry || now - entry.windowStart > AI_RATE_WINDOW_MS) {
+    aiRateLimit.set(userId, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= AI_RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 /** Resolve the verified user id, or null when no token was presented. */
 function authedUserId(request: { user?: { sub?: string } }): string | null {
   return request.user?.sub ?? null;
@@ -42,7 +59,16 @@ async function buildTasteContext(
       services.tasteEvents,
     );
     const ctx = await ctxBuilder.buildContext(userId);
-    return ctxBuilder.formatForPrompt(ctx);
+    const tasteStr = ctxBuilder.formatForPrompt(ctx);
+
+    // Append onboarding preference context (Option C format)
+    const { OnboardingPrefContextService } =
+      await import('../services/onboarding-pref-context.service');
+    const prefCtx = new OnboardingPrefContextService(dbModels);
+    const prefStr = await prefCtx.buildContext(userId);
+
+    const parts = [tasteStr, prefStr].filter(Boolean);
+    return parts.length > 0 ? parts.join('\n\n') : undefined;
   } catch {
     // Taste context is optional — proceed without it
     return undefined;
@@ -58,6 +84,16 @@ export async function aiRescueRoutes(app: FastifyInstance) {
    * Auth: Bearer token (optional — user ID extracted from token)
    */
   app.post('/api/v1/ai-rescue/generate', async (request, reply) => {
+    const userId = authedUserId(request);
+    if (userId && !checkAiRateLimit(userId)) {
+      throw new AppError({
+        category: ErrorCategory.RATE_LIMIT_EXCEEDED,
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many AI requests. Please wait a moment and try again.',
+        statusCode: 429,
+      });
+    }
+
     const body = request.body as Record<string, unknown>;
 
     const foods = body.foods as string[] | undefined;
@@ -81,9 +117,10 @@ export async function aiRescueRoutes(app: FastifyInstance) {
         timeOfDay: timeOfDay as 'morning' | 'afternoon' | 'evening' | 'night',
         userMood: body.userMood as string | undefined,
         kitchenItems: body.kitchenItems as
-          | Array<{ name: string; state: string; expiresSoon: boolean }>
-          | undefined,
+          Array<{ name: string; state: string; expiresSoon: boolean }> | undefined,
         tasteContext,
+        timeMinutes: body.timeMinutes as number | undefined,
+        cookingAllowed: body.cookingAllowed as boolean | undefined,
       });
 
       // Persist a Rescue record so feedback can reference a real DB row.
@@ -142,11 +179,20 @@ export async function aiRescueRoutes(app: FastifyInstance) {
    * Body: { conversation, originalFoods, pushback }
    */
   app.post('/api/v1/ai-rescue/negotiate', async (request, reply) => {
+    const userId = authedUserId(request);
+    if (userId && !checkAiRateLimit(userId)) {
+      throw new AppError({
+        category: ErrorCategory.RATE_LIMIT_EXCEEDED,
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many AI requests. Please wait a moment and try again.',
+        statusCode: 429,
+      });
+    }
+
     const body = request.body as Record<string, unknown>;
 
     const conversation = body.conversation as
-      | Array<{ role: 'user' | 'ai'; content: string }>
-      | undefined;
+      Array<{ role: 'user' | 'ai'; content: string }> | undefined;
     const originalFoods = body.originalFoods as string[] | undefined;
     const pushback = body.pushback as string | undefined;
 

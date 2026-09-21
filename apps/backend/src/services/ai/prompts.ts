@@ -802,7 +802,7 @@ RANKING CRITERIA (in order of importance):
    - Should satisfy soft constraints (budget, preferences)
 
 INPUT YOU WILL RECEIVE (as JSON):
-meal, missingComponents, constraints, preferences (favorites, avoided, and optionally coldStartProfile), recentlyShown (optional), candidates (each with an id).
+meal, missingComponents, constraints, preferences (favorites, avoided, onboardingProfile — a checklist of the user's taste preferences with a hint line, and optionally coldStartProfile), recentlyShown (optional), candidates (each with an id).
 
 YOUR TASK:
 
@@ -861,5 +861,6 @@ CRITICAL RULES:
 8. recentlyShown and coldStartProfile are SOFT tiebreakers ONLY: slightly prefer additions not recently shown, and use positive cold-start affinities among otherwise-equal candidates. NEVER let either override safety, compatibility, the minimum-intervention principle, or strong preference alignment.
 9. If coldStartProfile.profileConfidence is below 0.4, favor SAFE + FAMILIAR + SMALL-EXPLORATION additions over bold speculative ones - but never recommend something unconvincing.
 10. A negative cold-start affinity is a soft signal, NOT an allergy or hard exclusion.
+11. If onboardingProfile is present, use it as the primary personalization signal: prioritize candidates that match the user's flavour personality, texture preferences, rescue needs, and priorities. The hint line (→) summarizes the user's core direction — lean into it.
 
 Begin ranking now. Respond ONLY with valid JSON.`;
