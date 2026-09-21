@@ -1,417 +1,1068 @@
-# Meal Rescue 🍽️
+<div align="center">
+  <img src="assets/Logo.png" alt="Meal Rescue logo" width="180" />
 
-**The Minimum Intervention Engine** — AI-powered meal optimization that suggests the *smallest change* that makes a meal better. Not a recipe dump.
+  # Meal Rescue
 
-> Snap a photo of any meal → AI identifies what's on the plate → the engine suggests one practical improvement (add protein, swap an ingredient) that fits your time, budget, and preferences — and learns what you actually like with every decision.
+  ### The smallest change that makes a meal better.
 
-Built for **Shipaton 2026**. One repo, two apps, a deterministic-first AI pipeline, and a learning system that turns every "yes" and "no" into a better next rescue.
+  **An AI meal-optimization system that starts with the food you already have, finds one practical improvement, and learns from what happens next.**
 
----
-
-## Table of Contents
-
-- [The Core Idea](#the-core-idea)
-- [Features](#features)
-- [How It Works — The Rescue Loop](#how-it-works--the-rescue-loop)
-- [Architecture](#architecture)
-- [Deterministic-First AI Pipeline](#deterministic-first-ai-pipeline)
-- [Tech Stack](#tech-stack)
-- [Repository Layout](#repository-layout)
-- [Backend API](#backend-api)
-- [Personalization & Learning](#personalization--learning)
-- [Startup Guide](#startup-guide)
-- [Configuration](#configuration)
-- [Testing & CI](#testing--ci)
-- [Engineering Principles](#engineering-principles)
-- [Development Status](#development-status)
-- [Contributing](#contributing)
+  <p>
+    <a href="https://www.shipaton.com/">Shipaton 2026</a> · Expo · React Native · Fastify · PostgreSQL · Redis · TypeScript
+  </p>
+</div>
 
 ---
 
-## The Core Idea
+## Judge Fast Lane
 
-Most meal apps answer "what should I cook?" with a wall of recipes you'll never follow. Meal Rescue answers a different question:
+Meal Rescue is not a recipe generator. It is a **minimum-intervention decision system** for the meal that is already in front of you.
 
-> **What's the one thing that would make this meal I'm already eating noticeably better — without turning my day upside down?**
+| In 30 seconds | What to look for |
+|---|---|
+| **The problem** | People often need a better meal, not an entirely different meal. |
+| **The interaction** | Show us the meal by **photo, text, or voice**. Then describe what is realistic right now. |
+| **The decision engine** | Generate bounded candidates → enforce hard constraints → rank and explain the viable options → return **one best move + alternatives**. |
+| **The learning loop** | Capture the decision and satisfaction outcome → update context-scoped taste memory → use that evidence on future rescues. |
+| **The engineering thesis** | **LLMs rank and explain; deterministic code owns safety, feasibility, validation, and fallback behaviour.** |
 
-The engine never recommends a full rebuild of your plate. It finds a single **Minimum Intervention** — add a protein, swap a refined carb, fold in a vegetable, tweak the cooking technique — constrained by *your* time, budget, equipment, allergies, and taste. Every suggestion is framed by plain-language reasoning ("why this?"), and every outcome feeds back into a **Taste Memory Bank** so the next rescue is more personal than the last.
+> **Core idea:** the smallest useful intervention usually beats a full meal reset.
 
----
+## Built for Fast Technical Review
 
-## Features
+Shipaton’s published judging process says prescreeners read the project submission and watch the first two minutes of the demo, while judges read the full description, review screenshots, and may download the app. The 2025 Grand Prize criteria also emphasized **innovation, execution, feasibility, and integration**. This README is organized around those same review questions: what is novel, where the implementation lives, how the system works, how it runs, and how the integrations are used.
 
-### Core experience
-- **Multi-modal capture** — snap a photo 📸, type a description, or speak it 🎙️
-- **AI meal understanding** — detects foods, ingredients, and nutritional components with confidence scores and uncertainty flags
-- **One recommendation, up to two alternatives** — never a list dump
-- **Exactly four actions** — `rescue`, `swap`, `dont_have`, `keep_as_is` — each wired to real behavior (swapping re-runs the funnel; `dont_have` reranks around the missing ingredient)
-- **Satisfaction feedback** — Better / Same / Not for me, in three taps
-
-### Personalization & learning
-- **Taste Memory Bank** — per-context learned tastes (cuisine, meal time, meal pattern, ingredient × meal group). Context-scoped, never a blanket per-ingredient score
-- **Meal-Completion Onboarding** — an adaptive A/B pairing game that learns your latent addition preferences (balance, crunch, satisfaction, effort, exploration) through weighted-posterior inference before your first real rescue
-- **Culinary Compass** — culture-aware recommendations across 8 culinary families, with a learned tradition↔modern axis
-- **Taste Journal** — a living story of your food personality: learned entries, personality shifts, milestones, corrections, and cultural evolution
-- **Feedback-driven preference learning** — confidence-weighted preference signals that grow with consistent signals and decay on contradiction
-- **Cold-start ranking signals** — anti-fatigue and diversity guardrails so the engine explores before it exploits
-
-### Deeper tools
-- **Fridge Negotiator** 🧊 — "what can I make from what I already have?" using your pantry + a time budget
-- **Leftover Alchemist** ✨ — transform leftovers into bowls, wraps, soups, and skillets, ranked by effort
-- **Smart Pantry** 🥫 — expiry tracking ("expires in N days"), low-stock badges, suggested uses that surface expiring/low-stock items with one-line rescue previews
-
-### Monetization & engagement
-- **Free tier**: 3 server-authoritative rescues / day
-- **Meal Rescue Pro** — unlimited rescues via RevenueCat subscriptions (in-app purchase + server webhook, timing-safe)
-- **Rescue Fuel** 🚀 — watch a rewarded ad, earn +2 rescues (idempotent, replay-proof grant ledger, max 2 rewarded ads/day)
-- **Pro Pass** — a 1-hour temporary Pro upgrade earned via rewarded ad
-- **Rescue Windows** ⏰ — push notifications timed to *your* learned mealtime (median-of-last-meals, cron scheduler, quiet-hour and snooze aware)
-- **Spoiler Alert** 🔔 — nudges before pantry items expire
-- **Staples Shelf** — sponsored ingredient strip for free-tier users
-
-### Craft
-- Animated **PlateDiffReveal** — your plate dims and the one addition drops in with spring physics
-- **Scraps the Cat** 🐱 — a vector mascot with idle / scanning / celebrate moods
-- Day-phase-aware living palette, confetti reward moments, haptic feedback, and press physics throughout
-- Scannling loader, structured error banners with suggested actions, and full accessibility foundations
+**Official reviewer guidance:** [How we judge Shipaton](https://www.shipaton.com/blog/how-we-judge-shipaton) · [How to win Shipaton: pitching](https://www.shipaton.com/blog/how-to-win-shipaton-part-4-pitching)
 
 ---
 
-## How It Works — The Rescue Loop
+## Why This Repository Is Interesting
 
-```
-        ┌─────────────┐
-        │  Capture     │   photo · text · voice
-        └──────┬──────┘
-        ┌──────▼──────┐
-        │  Review      │   AI extraction, confirm + constrain
-        └──────┬──────┘      (5-min / no-cook / cheap / allergies)
-        ┌──────▼──────┐
-        │  Generator   │   constraint-filtered candidates (deterministic)
-        └──────┬──────┘
-        ┌──────▼──────┐
-        │  Ranking     │   LLM ranks + explains (never decides alone)
-        └──────┬──────┘
-        ┌──────▼──────┐
-        │  Pose        │   ONE recommendation + up to 2 alternatives
-        └──────┬──────┘
-        ┌──────▼──────┐
-        │  Decide      │   rescue · swap · dont_have · keep_as_is
-        └──────┬──────┘
-        ┌──────▼──────┐
-        │  Learn       │   feedback → Taste Memory → better next rescue
-        └─────────────┘
+### 1. Minimum intervention, not maximum generation
+
+The system is optimized around a constrained change to the current meal. A rescue can be an addition, substitution, modification, or an intentional **keep-as-is** decision. The output is deliberately small: one primary recommendation and a limited set of alternatives.
+
+### 2. Deterministic-first AI
+
+The model does not receive unrestricted authority over the final decision. The backend constructs a feasible solution space, applies hard constraints, asks the LLM to rank or explain that space, validates the result, and falls back deterministically when the model path is unavailable or invalid.
+
+### 3. Personalization is evidence-backed
+
+Taste is stored as context, not as a single global score. A preference can depend on cuisine, meal time, meal pattern, or intervention pattern. The system also tracks confidence and evidence so that a weak inference does not masquerade as a permanent preference.
+
+### 4. The household problem is solved as a convergence problem
+
+Common Table does not try to invent a fictional “perfect meal” for everyone. It finds a shared base, determines where preferences can split, and pushes personalization as late as possible in the cooking graph.
+
+### 5. This is a real product surface, not a model demo
+
+The repository includes authentication, structured APIs, PostgreSQL persistence, Redis caching, rate limiting, subscription state, rewarded-ad credits, push notification infrastructure, household workflows, meal planning, telemetry/provenance, and a substantial automated backend test suite.
+
+---
+
+## Product Loop
+
+```mermaid
+flowchart LR
+    A[Photo / Text / Voice] --> B[Structured Meal Input]
+    B --> C[Intent]
+    C --> D[Reality Constraints]
+    D --> E[Craving Guardrail]
+    E --> F[Candidate Generation]
+    F --> G[Deterministic Constraint Filter]
+    G --> H[LLM Ranking + Explanation]
+    H --> I[Final Validation]
+    I --> J[Best Move + Alternatives]
+    J --> K[User Decision]
+    K --> L[Feedback + Satisfaction]
+    L --> M[Taste Memory / Meal Memory]
+    M --> F
 ```
 
-Every step persists real data: the meal, the candidates, the recommendation, the user's decision, and the outcome. Rows in the `rescues` table are **first-class objects** — the system actually learns, it doesn't just log.
+The same architecture extends into Kitchen intelligence, Meal Plan, and Common Table rather than treating each feature as an isolated AI call.
 
 ---
 
-## Architecture
+# Architecture
 
-```
-┌──────────────────────┐        ┌───────────────────────────────────────────┐
-│   apps/mobile        │  HTTP  │   apps/backend  (Fastify 5)               │
-│   Expo SDK 57 / RN   │◄──────►│                                          │
-│   14 screens          │  JWT   │  routes ──► services ──► models          │
-│   zustand + react-query│        │       │                     │            │
-└──────────────────────┘        │       │              ┌──────▼───────┐   │
-                                │       │              │  PostgreSQL  │   │
-        ┌──────────────────┐    │       │              └──────────────┘   │
-        │ shared-types     │    │    AI layer:                            │
-        │ API contracts    │    │   OpenRouter (GLM-5.2) ─┐               │
-        │ (package)        │    │   Heuristic fallback     ├─ LlmClient  │
-        └──────────────────┘    │   Resilient wrapper     ┘               │
-                                │   Redis (vision + rate-limit cache)     │
-                                └───────────────────────────────────────────┘
-```
+## Repository Topology
 
-- **Monorepo** orchestrated with **Turborepo** + npm workspaces
-- **Composition root** (`composition.ts`) wires the whole service graph — services never touch provider SDKs or config directly
-- **Contract-first**: every byte crossing the backend ↔ mobile boundary validates against `@meal-rescue/shared-types`
+Meal Rescue is a Turborepo + npm-workspaces monorepo with two applications and three shared packages.
 
-### Backend services (the intelligence)
-
-| Service | Responsibility |
-| --- | --- |
-| `rescue-pipeline` | The core funnel — detect → generate → filter → rank → validate → persist |
-| `vision` | Image → sha256 → cache → resize → LLM → zod-validated structured JSON (24h cache) |
-| `llm-factory` / `resilient-llm-client` | Provider selection + per-request heuristic fallback on provider failure |
-| `heuristic-llm-client` | Deterministic, zero-network AI engine (offline demos, tests, no-key mode) |
-| `constraint-engine` | Hard filters (allergies **fail closed**, budget, time, equipment, keep-original) |
-| `candidate-generator` | Builds additions / substitutions / modifications, culture-aware strategies |
-| `ranking-engine` | Weighted-additive heuristic ranking + LLM ordering/explanation + diversity guardrail |
-| `meal-completion` | Weighted-posterior inference from onboarding A/B answers (cold-start profile) |
-| `preference-learning` | Confidence-weighted preference rows that grow/shrink with signals |
-| `taste-memory` | Per-context affinity store + Culinary Compass seeding + Taste Journal |
-| `rescue-allowance` | Server-authoritative quota: free=3/day, pro=∞, credits, pro-pass — client never decides |
-| `fridge-negotiator` / `leftover-alchemist` | Pantry-driven meal ideas and leftover transformations |
-| `notifications` | Rescue Windows (median-mealtime cron), Spoiler Alert scanner, quiet hours, dedupe ledger, OneSignal sender |
-
----
-
-## Deterministic-First AI Pipeline
-
-**The single most important design principle in this codebase:**
-
-> **LLMs rank and explain. They never decide alone.**
-
-```
-Input → AI Extraction → Structured JSON → Validation → Constraint Engine
-     → Candidates → LLM Ranking → Safety Validation → Output
-```
-
-1. **AI extraction** produces *structured, zod-validated* JSON only (`MealAnalysisResponse`, `RescueGenerateRequest`)
-2. The **constraint engine** applies hard, deterministic rules first — a declared allergy always rejects a candidate (fails closed); missing equipment filters; budget/time are enforced in code, not in prose
-3. The **candidate generator** produces a bounded candidate set from a curated, in-code ingredient knowledge base
-4. The **LLM only re-orders and writes explanations** for candidates that already survived deterministic filtering — it cannot invent, and it cannot single-handedly fail a candidate through the funnel
-5. A final **safety validation** layer re-checks the output before it reaches the user
-
-If the LLM provider dies mid-request, the **ResilientLlmClient** degrades to the deterministic `HeuristicLlmClient` *for that request* — no 502s, no blank screens. If there's no `OPENAI_API_KEY` at all, the entire product still works offline on heuristics. One config line flips the whole pipeline between real AI and deterministic fallback.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-| --- | --- |
-| **Monorepo** | npm workspaces · Turborepo 2 · npm@11 |
-| **Backend** | Node.js ≥ 20 · Fastify 5 · TypeScript (strict, ES2022) |
-| **Database** | PostgreSQL 15 · Sequelize 6 · pg |
-| **Cache** | Redis 7 (ioredis) — optional, graceful degradation |
-| **Auth** | JWT (@fastify/jwt) · bcryptjs (12 rounds) · Firebase cutover point wired |
-| **AI layer** | OpenAI-compatible client (OpenRouter, GLM-5.2 / GLM-5V) · sharp image optimization · deterministic heuristic fallback |
-| **Validation** | zod + zod-validation-error |
-| **Mobile** | Expo SDK 57 · React Native 0.86 · React 19 · TypeScript 6 |
-| **Mobile libraries** | @react-navigation · zustand · @tanstack/react-query · axios · expo-camera / image-picker / speech-recognition / haptics · reanimated · react-native-svg |
-| **Payments** | RevenueCat (react-native-purchases + server webhook) |
-| **Push** | OneSignal |
-| **Tests** | Jest + ts-jest · fastify.inject · GH Actions with real PostgreSQL service |
-| **Tooling** | ESLint (typescript-eslint) · Prettier (import sorting) · husky + lint-staged · tsx |
-| **Containers** | Docker (multi-stage, non-root) · docker-compose |
-
----
-
-## Repository Layout
-
-```
-meal-rescue/
+```text
+.
 ├── apps/
-│   ├── backend/                # Fastify API — the intelligence
-│   │   └── src/
-│   │       ├── config/         # zod-validated env (fails fast at boot)
-│   │       ├── database/models # 10 Sequelize models + associations
-│   │       ├── lib/            # AppError hierarchy, JWT, timing-safe helpers
-│   │       ├── middleware/     # auth hook, error handler, zod formatter
-│   │       ├── modules/        # auth (routes/schemas/service)
-│   │       ├── routes/         # 11 route modules (see API table below)
-│   │       ├── plugins/        # Redis plugin (graceful degradation)
-│   │       └── services/       # AI layer + all domain services
-│   └── mobile/                 # Expo app — the experience
-│       └── src/
-│           ├── components/     # chips, buttons, ads sheets, mascot, plate-diff…
-│           ├── hooks/          # useDayPhase, useEntitlement, usePaywallNudge…
-│           ├── navigation/     # 5-tab navigator + gated onboarding flow
-│           ├── screens/        # 14 production screens
-│           ├── services/       # typed API clients (axios + error contract)
-│           ├── stores/         # zustand auth + monetization
-│           └── theme/          # design tokens + motion
+│   ├── mobile/                  # Expo / React Native client
+│   └── backend/                 # Fastify API + domain services
 ├── packages/
-│   ├── shared-types/           # ★ single source of truth for the API contract
-│   ├── ui-components/          # shared RN components
-│   └── ai-pipeline/            # (pipeline lives in backend/src/services/ai)
-├── infrastructure/             # Docker / K8s / Terraform
-├── docs/                       # demo script, superpowers specs & plans
-├── scripts/setup/              # dev-setup.ps1 / .sh
-├── tests/                      # e2e / integration / unit roots
-├── docker-compose.yml          # postgres 15 + redis 7 + backend
-├── meal-rescue-project/        # full engineering documentation suite
-└── PROGRESS.md                 # 500-line build log, per phase
+│   ├── shared-types/            # Zod-backed API/domain contracts
+│   ├── design-tokens/           # Shared visual tokens
+│   └── eslint-config/            # Shared lint configuration
+├── assets/                      # Product / mascot / cuisine assets
+├── docs/                        # Documentation namespaces (currently skeletal)
+├── .github/workflows/           # CI
+├── docker-compose.yml           # PostgreSQL + Redis + backend
+├── railway.toml                 # Railway deployment configuration
+├── turbo.json                   # Monorepo task graph
+└── package.json                 # Workspace scripts and engine requirements
+```
+
+## System Architecture
+
+```mermaid
+flowchart TB
+    subgraph Client[Mobile Client]
+      RN[Expo / React Native]
+      NAV[React Navigation]
+      RQ[React Query]
+      Z[Zustand Stores]
+      RN --> NAV
+      RN --> RQ
+      RN --> Z
+    end
+
+    subgraph API[Fastify API]
+      ROUTES[20 Route Modules]
+      AUTH[Auth / JWT]
+      DOMAIN[Domain Services]
+      DECISION[Decision + Constraint Engines]
+      AI[AI Abstraction Layer]
+      MONETIZE[Subscription / Allowance / Ads]
+      NOTIFY[Notification Services]
+      ROUTES --> AUTH
+      ROUTES --> DOMAIN
+      DOMAIN --> DECISION
+      DOMAIN --> AI
+      DOMAIN --> MONETIZE
+      DOMAIN --> NOTIFY
+    end
+
+    subgraph Infra[State + Infrastructure]
+      PG[(PostgreSQL)]
+      REDIS[(Redis)]
+      CACHE[Vision / Request Cache]
+    end
+
+    RN -->|JSON / Multipart / JWT| ROUTES
+    DOMAIN --> PG
+    AI --> CACHE
+    AI -->|OpenAI-compatible provider| MODEL[LLM / Vision Model]
+    AI -->|provider failure| FALLBACK[Deterministic Heuristic LLM]
+    CACHE --> REDIS
+    NOTIFY --> PUSH[OneSignal]
+    MONETIZE --> RC[RevenueCat]
 ```
 
 ---
 
-## Backend API
+# The Rescue Engine
 
-All endpoints under `/api/v1`. Swagger UI live at `/docs` in dev.
+The Rescue engine is the technical heart of the project.
 
-| Module | Endpoints |
-| --- | --- |
-| **Auth** | `POST /auth/register` · `POST /auth/login` · `GET /auth/me` |
-| **Meal** | `POST /meal/analyze` (multipart photo) · `POST /meal/analyze` (JSON text) |
-| **Rescue** | `POST /rescue/generate` · `GET /rescue/:id` |
-| **Feedback** | `POST /rescue/:id/feedback` |
-| **Pantry** | `GET /pantry` · `POST /pantry` · `DELETE /pantry/:id` |
-| **User** | `GET /user/me` · `GET /user/preferences` · `GET /user/insights` · taste journal & culture endpoints |
-| **Onboarding** | `POST /user/onboarding/start` · `POST /user/onboarding/answer` · `GET /user/onboarding/summary` · Compass seed |
-| **Fridge** | `POST /fridge/negotiate` |
-| **Leftovers** | `POST /leftover/transform` |
-| **Ads** | `GET /ads/eligibility` · `POST /ads/rewards/rescue-fuel` · `POST /ads/rewards/pro-pass` |
-| **Notifications** | various push/snooze endpoints |
-| **Webhooks** | `POST /webhooks/revenuecat` (timing-safe, lifecycle → tier flip) |
-| **System** | `GET /health` |
+## End-to-End Decision Pipeline
 
-**Structured errors everywhere** — every failure returns:
-
-```json
-{
-  "success": false,
-  "error": {
-    "category": "CONSTRAINT_CONFLICT",
-    "code": "NO_FEASIBLE_RESCUE",
-    "message": "No candidate survived your constraints",
-    "recoverable": true,
-    "suggestedAction": "Relax a constraint to unlock alternatives"
-  },
-  "requestId": "…",
-  "timestamp": "…"
-}
+```text
+Meal signal
+   │
+   ├─ photo → vision analysis → normalized detected items
+   ├─ text  → ingredient / meal interpretation
+   └─ voice → speech recognition → text path
+                │
+                ▼
+      Intent + reality + craving
+                │
+                ▼
+      Candidate generation
+                │
+                ▼
+      HARD deterministic constraints
+                │
+                ▼
+      LLM ranking + explanation
+                │
+                ▼
+      Schema / identity / safety validation
+                │
+                ▼
+       One best move + alternatives
+                │
+                ▼
+       Decision + satisfaction event
+                │
+                ▼
+        Personalization update
 ```
 
-AI, cache, and provider failures never leak to clients.
+The implementation separates **generation**, **constraint enforcement**, **ranking**, **presentation**, and **learning** so that a provider failure does not become a product failure.
+
+## Step 1 — Capture
+
+Meal Rescue accepts three input modes:
+
+- **Photo:** mobile capture or gallery selection.
+- **Text:** direct description of the meal.
+- **Voice:** speech recognition with a graceful fallback to text input.
+
+The photo path produces an editable review of detected items before the rescue request continues. This keeps the user in control of what the model believes is on the plate.
+
+## Step 2 — Model Intent, Not Just Ingredients
+
+The Rescue flow explicitly asks what the user wants from the current meal:
+
+| Intent | Meaning |
+|---|---|
+| `SATISFY` | Protect a craving or desired sensory outcome |
+| `PRESERVE` | Keep the meal recognizable while improving it |
+| `LIGHTEN` | Move the meal toward something lighter |
+| `DECIDE` | Help choose a practical direction |
+| `NO_COOK` | Improve the meal without requiring cooking |
+
+This is followed by the reality layer:
+
+- available time: **5 / 15 / 30+ minutes**
+- cooking ability: **cook a bit / no cooking**
+- budget: **tight / medium / open**
+- cleanup tolerance: **minimal / medium / no limits**
+- additional hard constraints such as dietary restrictions, allergies, equipment, and ingredients to avoid
+
+The craving step is optional, so the flow remains low-friction while still providing a guardrail against technically valid but emotionally wrong suggestions.
+
+## Step 3 — Generate a Bounded Candidate Set
+
+Candidates are structured as one of:
+
+- `addition`
+- `substitution`
+- `modification`
+
+The pipeline also supports a deliberate `keep_as_is` path. This matters because the system is allowed to conclude that **doing nothing is better than making a needless change**.
+
+## Step 4 — Apply Hard Constraints Before Ranking
+
+Hard constraints are enforced in deterministic code rather than delegated to the model.
+
+Examples include:
+
+- maximum preparation time
+- budget ceiling
+- whether cooking is allowed
+- equipment requirements
+- ingredients to avoid
+- allergies
+- dietary restrictions
+- preservation of the original meal when required
+
+The allergy and feasibility path is designed to fail closed when the available information is insufficient for a safe deterministic decision.
+
+## Step 5 — Let the Model Rank, Not Invent
+
+The LLM receives an already constrained candidate set and helps answer:
+
+> “Among the options that are actually feasible, which one best satisfies the user’s intent and constraints, and how should it be explained?”
+
+The ranking layer validates the returned candidate IDs. Unknown or invented IDs are dropped. Candidates omitted by the model can be restored with a neutral score so the final result remains grounded in the backend-generated solution space.
+
+There is a deterministic ranking fallback when model ranking fails.
+
+## Step 6 — Validate Before Presentation
+
+The pipeline records structured AI provenance and validates the final response before it reaches the client.
+
+Current provenance includes:
+
+- provider
+- model
+- prompt version
+- pipeline version
+- ranking version
+- whether fallback was used
+- processing time
+- validation outcome
+
+That turns an opaque AI call into a traceable application event.
 
 ---
 
-## Personalization & Learning
+# AI Architecture
 
-The system is built around **memory, not sessions**.
+## Provider Abstraction
 
-1. **Onboarding (meal-completion)** — new users answer a short deck of A/B pairing cards ("Which finishes this rice bowl better — chickpeas or pickled crunch?"). Latent addition factors (nutritional, sensory, satisfaction, modification, exploration) are inferred with a weighted-posterior model into a **cold-start profile** with confidence states: `unknown → inferred → confirmed`.
-2. **Taste Memory Bank** — every rescue decision (accept/reject/swap/feedback) writes a *context-scoped* affinity entry. Likes are never stored as a blanket global score; they're bound to cuisine, meal time, meal pattern, and ingredient × meal group.
-3. **Culinary Compass** — 8 culinary families with signature ingredients, ambiguous-keyword matchers, explicit cuisine intent detection (explicit intent always wins), and a seedable tradition↔modern axis. Copy is always framed as *learning*, never a stereotype.
-4. **Ranking integration** — cold-start priors and recency feed directly into the ranker alongside a safety gate and diversity guardrail (anti-fatigue). Real feedback **promotes** confirmed signals once behavior lands.
-5. **Taste Journal** — surfaces the journey back to the user: learned entries, personality shifts, milestones, corrections, and culture.
+The composition root chooses the LLM implementation at startup. Product services do not import the provider SDK directly.
+
+```text
+Domain service
+      │
+      ▼
+   LlmClient
+      │
+ ┌────┴───────────────┐
+ ▼                    ▼
+OpenAI-compatible   Heuristic
+client               fallback
+ │                    │
+ ▼                    └── zero-network deterministic path
+Provider / model
+```
+
+The OpenAI-compatible client is configurable through environment variables, so the model/provider can change without rewriting the domain layer.
+
+## Resilient Provider Strategy
+
+The current AI layer supports:
+
+1. **Configurable provider/model selection** through environment variables.
+2. **Structured JSON responses** validated with Zod schemas.
+3. **Transport/application retry controls** for transient model failures.
+4. **Deterministic heuristic fallback** when the network/model path is unavailable.
+5. **Explicit fallback provenance** so degraded responses are distinguishable from model-backed responses.
+
+The heuristic implementation is deliberately boring: it uses deterministic rules and local data instead of pretending to be an LLM.
+
+## Vision Pipeline
+
+Vision analysis has a separate path from ordinary text generation:
+
+```text
+Image bytes
+   │
+   ▼
+SHA-256 fingerprint
+   │
+   ▼
+Redis cache lookup
+   │
+   ├─ hit ───────────────► structured result
+   │
+   └─ miss
+       │
+       ▼
+  Image optimization
+       │
+       ▼
+ Vision model
+       │
+       ▼
+ Zod validation
+       │
+       ▼
+ 24-hour contextual cache
+```
+
+The cache key is scoped by the image and contextual hints such as cuisine, and the kitchen scanning path uses its own namespace.
+
+Current prompt identifiers are versioned rather than anonymous, including:
+
+- `v3.0-food-recognizer`
+- `v1.0-kitchen-analyzer`
+- `v2.0-mr1`
+- `v2.1-mr2`
+
+This makes prompt changes observable alongside application versions.
+
+## Current Model Configuration
+
+The repository intentionally does not hard-code a single vendor as the product architecture.
+
+The supplied backend environment template includes configurable values for:
+
+```env
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_TEXT_MODEL=gpt-4o-mini
+OPENAI_VISION_MODEL=gpt-4o-mini
+OPENROUTER_VISION_API_KEY=
+OPENROUTER_VISION_MODEL=qwen/qwen3-vl-32b-instruct
+```
+
+Use the environment file in your deployment rather than copying example values into source code. Model names in this README are configuration defaults from the repository, not a claim that they are the only supported models.
 
 ---
 
-## Startup Guide
+# Personalization Architecture
 
-### Prerequisites
+Meal Rescue treats personalization as an evidence problem rather than a single “taste score.”
 
-- **Node.js ≥ 20** (npm ≥ 11)
-- **Docker Desktop** running (for PostgreSQL 15 + Redis 7)
-- Optional but recommended: an **OpenRouter** (or OpenAI-compatible) API key for live AI instead of the deterministic engine
+## Context-Scoped Taste Memory
 
-### Quick start
+Taste memory can be scoped by context such as:
+
+- cuisine
+- meal time
+- meal pattern
+- intervention pattern
+
+This prevents a preference observed in one context from silently becoming a global preference.
+
+## Evidence Update
+
+The current meal-completion service updates an affinity using a weighted posterior-style formula:
+
+```text
+newAffinity = oldAffinity × (1 - w) + evidence × w
+
+w = evidenceWeight / (1 + oldCount × 0.35)
+```
+
+The resulting affinity is clamped to `[-1, +1]` and rounded to two decimal places.
+
+The design creates a useful property: repeated evidence does matter, but repeated evidence does not make the memory explode toward certainty at an arbitrary rate.
+
+## Confidence States
+
+The preference layer distinguishes:
+
+- **unknown**
+- **inferred**
+- **confirmed**
+
+Cold-start signals and explicit user feedback are therefore not treated as equally authoritative.
+
+## Anti-Fatigue
+
+The cold-start logic also includes recency penalties so that repeated exposure can become less attractive over time instead of producing the same recommendation indefinitely.
+
+---
+
+# Meal Memory
+
+Meal Memory turns the recommendation engine into a planning system.
+
+It contains:
+
+- conversational planning intents
+- deterministic slot ranking
+- plan generation and refinement
+- meal rules
+- event memory
+- inventory reservation concepts
+- autosave and plan persistence
+- post-meal feedback
+
+The planning engine is deterministic at the persistence boundary: candidates are evaluated against meal slots, household context, expiring ingredients, leftovers, diversity, recency, and convenience before plan state is written.
+
+This is an important architectural distinction:
+
+> **LLM assistance can improve the plan; it does not become the source of truth for persisted planning state.**
+
+---
+
+# Kitchen Intelligence
+
+The Kitchen tab is not just CRUD.
+
+It supports:
+
+- pantry items
+- leftovers
+- expiry tracking
+- item state such as fresh / opened / leftover / use soon / gone
+- “What can I make?” style retrieval
+- camera/photo capture for kitchen items
+- AI identification with an editable review step
+- manual capture
+- relative date parsing such as “tomorrow” or “in 3 days”
+
+The kitchen capture flow mirrors the meal capture philosophy: **AI proposes; the user confirms the structured data before it becomes inventory.**
+
+---
+
+# Common Table
+
+Common Table addresses a different optimization problem: **one household, multiple preferences**.
+
+The convergence engine is deterministic and currently follows a late-branching strategy:
+
+```text
+Household preferences
+       │
+       ▼
+Remove unsafe options for any member
+       │
+       ▼
+Find shared cooking structure
+       │
+       ▼
+Choose latest viable split point
+       │
+       ├──────────── Shared base ────────────┐
+       │                                     │
+       ▼                                     ▼
+Member A finish                         Member B finish
+```
+
+The split point is derived from the cooking graph rather than hard-coded for a particular meal. Supported convergence patterns include bowl, stir-fry, pasta, skillet, and platter structures.
+
+When genuine convergence cannot be produced, the system returns an honest fallback rather than fabricating a “one meal for everyone” result.
+
+---
+
+# Product Surfaces
+
+## Mobile navigation
+
+```text
+RootStack
+├── Tabs
+│   ├── Rescue
+│   ├── Kitchen
+│   ├── Meal Plan
+│   └── Profile
+├── Onboarding
+├── Paywall
+├── Taste Journal
+└── Common Table
+```
+
+The Rescue stack contains the core capture → intent → reality → craving → recommendation → feedback loop. The report generated from the repository identifies 14 screens in that HomeStack, while the full mobile source tree contains additional root, Kitchen, Common Table, and detail screens.
+
+## Profile + Taste Journal
+
+Profile surfaces subscription state, learned preferences, reminder settings, account actions, and confidence-backed insights.
+
+Taste Journal turns those insights into a user-facing explanation of what the system thinks it has learned, including the ability to dismiss, correct, or forget insights.
+
+## Monetization
+
+The backend owns allowance state and credit-grant operations rather than trusting the client.
+
+Current monetization infrastructure includes:
+
+- Free tier allowance
+- Pro subscription state
+- RevenueCat synchronization and webhook handling
+- rewarded-ad Rescue Fuel credits
+- temporary Pro Pass state
+- idempotent rewarded-ad transaction handling
+- interstitial/rewarded ad integration on mobile
+
+The repository environment defaults include **2 reward credits per eligible ad grant** and a **60-minute Pro Pass**.
+
+---
+
+# Notifications & Engagement
+
+Notification infrastructure includes:
+
+- OneSignal push delivery
+- quiet hours
+- duplicate suppression
+- snooze behaviour for expiry alerts
+- an in-app notification inbox
+- scheduler support
+- dry-run behaviour when provider credentials are not configured
+
+The expiry-alert path looks ahead by **48 hours** and is designed to avoid repeatedly nudging the same user about the same inventory state.
+
+Default quiet hours in the backend are **22:00–08:00**.
+
+---
+
+# State Management
+
+The mobile client currently uses eight Zustand stores:
+
+| Store | Role |
+|---|---|
+| `auth.store` | JWT + user profile |
+| `monetization.store` | Free/Pro tier and credits |
+| `decision.store` | Ephemeral rescue intent / reality / craving |
+| `meal-memory.store` | Planning state and intents |
+| `rescues.store` | Recent rescue history |
+| `notifications.store` | Notification inbox |
+| `settings.store` | Kitchen-import privacy setting |
+| `common-table.store` | Household/shared-meal state |
+
+React Query is used alongside Zustand for API-state management, keeping long-lived server state separate from local interaction state.
+
+---
+
+# API Surface
+
+The backend exposes **83 application endpoints across 20 route modules**, plus the `/health` endpoint.
+
+| Domain | Scope |
+|---|---|
+| Auth | Registration, login, Google auth, verification, onboarding |
+| Meal | Meal analysis and meal data |
+| Rescue | Analyze, generate, decide, feedback, satisfaction, aftercare |
+| AI Rescue | Conversational rescue generation and negotiation |
+| Decision | Intent / reality / decision support |
+| Kitchen | Dashboard, capture, identify, inventory intelligence |
+| Pantry | Inventory CRUD + used-state transitions |
+| Taste Journal | Patterns, insights, discoveries, boundaries, overrides |
+| User / Taste | Taste profile and personalization APIs |
+| Household | Household members and shared state |
+| Common Table | Shared-meal convergence and lifecycle |
+| Meal Memory | Intent, plans, rules, feedback, memory events |
+| Subscription | Subscription and entitlement state |
+| Ads | Eligibility, rewards, sync |
+| Notifications | Inbox/snooze interactions |
+| Webhook | RevenueCat and provider webhook handling |
+
+### API documentation
+
+When the backend is running, Swagger/OpenAPI is served at:
+
+```text
+/docs
+```
+
+The application also exposes:
+
+```text
+GET /health
+```
+
+The shared contract package is the primary cross-client API/type boundary:
+
+```text
+packages/shared-types/src/index.ts
+```
+
+---
+
+# Data Model
+
+The repository currently contains **35 domain model definitions** spanning:
+
+### Core product state
+
+`User`, `Meal`, `Rescue`, `Feedback`, `Preference`, `Pantry`
+
+### Taste V2
+
+`TasteMemory`, `TasteEvent`, `TasteExposure`, `TasteCombination`, `TasteSensoryPreference`, `TasteTreatmentPreference`
+
+### Taste Journal
+
+`TasteSignal`, `TasteSignalEvidence`, `TasteInsightOverride`, `TasteJournalMeta`, `UserTastePreferences`
+
+### Decision / satisfaction
+
+`AdditionEvent`, `SatisfactionRecord`, `DecisionEvent`
+
+### Household
+
+`Household`, `HouseholdMember`, `HouseholdPreference`, `SharedMeal`, `SharedMealMember`, `TableOutcome`, `TableEvent`
+
+### Meal Memory
+
+`MealMemoryEvent`, `MealPlan`, `MealEvent`, `MealRule`, `InventoryReservation`
+
+> **Schema note:** the current repository initializes Sequelize with `sync({ alter: true })`. A dedicated migration runner is not present in this snapshot. Treat the existing startup sync as the current development schema-management strategy, not as a production migration system.
+
+---
+
+# Reliability & Security
+
+The Fastify bootstrap configures the application with several production-oriented controls:
+
+- CORS
+- Helmet
+- JWT authentication
+- global rate limiting
+- multipart upload limits
+- structured route/service boundaries
+- Swagger/OpenAPI exposure for discoverability
+- Redis integration
+- graceful shutdown
+- request-level testability through `fastify.inject()`
+
+The codebase also includes tests covering areas such as:
+
+- authorization and cross-user isolation
+- authentication and security behaviour
+- AI constraint enforcement
+- candidate ranking validation
+- fallback behaviour
+- monetization and ad idempotency
+- notifications / snooze / expiry flows
+- taste memory and cold-start learning
+- household convergence
+- meal memory
+- webhook handling
+
+The current source tree contains **65 backend test files**. Those files are evidence of intended behaviour; this README does **not** claim that every test/build command was re-run as part of documentation generation.
+
+---
+
+# Why the AI Architecture Is Deliberately Boring
+
+A useful product should degrade gracefully.
+
+Meal Rescue therefore avoids a design where:
+
+```text
+LLM output = application truth
+```
+
+Instead, the intended trust hierarchy is:
+
+```text
+User constraints
+      ↓
+Deterministic business rules
+      ↓
+Validated candidate set
+      ↓
+LLM ranking / explanation
+      ↓
+Application validation
+      ↓
+Persisted decision + provenance
+```
+
+This is useful for three reasons:
+
+1. **Safety:** hard constraints are executable and testable.
+2. **Reliability:** provider outages can fall back without taking the whole feature down.
+3. **Debuggability:** decisions can be traced to candidate generation, ranking, validation, prompt version, and fallback state.
+
+---
+
+# Repository Proof Map
+
+A technical judge should be able to move from a claim in this README to the implementation quickly.
+
+| Claim | Where to inspect |
+|---|---|
+| Fastify application composition | `apps/backend/src/app.ts` |
+| Service composition / dependency wiring | `apps/backend/src/services/composition.ts` |
+| LLM abstraction | `apps/backend/src/services/ai/` |
+| OpenAI-compatible client | `apps/backend/src/services/ai/openai-llm-client.ts` |
+| Deterministic fallback | `apps/backend/src/services/ai/heuristic-llm-client.ts` |
+| Resilient provider selection | `apps/backend/src/services/ai/llm-factory.ts` / `resilient-llm-client.ts` |
+| Vision caching + validation | `apps/backend/src/services/ai/vision.service.ts` |
+| Prompt versioning | `apps/backend/src/services/ai/prompts.ts` |
+| Rescue pipeline | `apps/backend/src/services/rescue-pipeline.service.ts` |
+| Decision / constraint pipeline | `apps/backend/src/services/v2/` |
+| Taste learning | `apps/backend/src/services/meal-completion.service.ts`, `apps/backend/src/services/taste-*`, and `taste-journal/` |
+| Planning | `apps/backend/src/services/meal-memory/` |
+| Household convergence | `apps/backend/src/services/common-table/` |
+| Allowance / monetization | `apps/backend/src/services/rescue-allowance.service.ts` and `apps/backend/src/routes/subscription.routes.ts` |
+| Shared contract | `packages/shared-types/src/index.ts` |
+| Mobile navigation | `apps/mobile/src/navigation/AppNavigator.tsx` |
+| Mobile feature surfaces | `apps/mobile/src/screens/` |
+| CI | `.github/workflows/ci.yml` |
+| Local infrastructure | `docker-compose.yml` |
+| Deployment | `railway.toml` |
+
+---
+
+# Developer Quickstart
+
+## Prerequisites
+
+Recommended versions for the current repository:
+
+- Node.js **20+**
+- npm **11.6.2** (the repository declares this package-manager version)
+- Docker Desktop / Docker Engine with Compose
+- PostgreSQL 15 and Redis 7 if you run infrastructure outside Docker
+- Expo tooling compatible with the project’s Expo SDK
+
+## 1. Install workspace dependencies
 
 ```bash
-# 1. One-time setup: install deps + start postgres/redis + create .env files
-./scripts/setup/dev-setup.ps1    # Windows
-./scripts/setup/dev-setup.sh     # macOS / Linux
+npm ci
+```
 
-# 2. Start the API            → http://localhost:3000  (Swagger at /docs)
-npm run dev --workspace @meal-rescue/backend
+## 2. Configure the backend
 
-# 3. Start the mobile app     → Expo dev server
+```bash
+cp apps/backend/.env.example apps/backend/.env
+```
+
+PowerShell:
+
+```powershell
+Copy-Item apps/backend/.env.example apps/backend/.env
+```
+
+Set at minimum:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/meal_rescue
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=replace-this-in-development
+```
+
+For model-backed AI, configure the relevant API key/model variables as well.
+
+> Never commit real credentials. The mobile `EXPO_PUBLIC_*` variables are client-exposed configuration and must never contain server secrets.
+
+## 3. Start PostgreSQL, Redis, and the API
+
+The repository includes a Compose setup for:
+
+- PostgreSQL 15
+- Redis 7
+- Fastify backend
+
+Run:
+
+```bash
+docker compose up -d
+```
+
+The Compose backend is exposed on:
+
+```text
+http://localhost:3010
+```
+
+Swagger:
+
+```text
+http://localhost:3010/docs
+```
+
+Health:
+
+```text
+http://localhost:3010/health
+```
+
+## 4. Configure the mobile app
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env
+```
+
+PowerShell:
+
+```powershell
+Copy-Item apps/mobile/.env.example apps/mobile/.env
+```
+
+For an Android emulator, the supplied example uses:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3010
+```
+
+For an iOS simulator, use the host machine address appropriate to your environment (commonly `http://localhost:3010`).
+
+## 5. Start Expo
+
+```bash
 npm run dev --workspace @meal-rescue/mobile
 ```
 
-> **Android emulator?** Use `http://10.0.2.2:3000` for `EXPO_PUBLIC_API_BASE_URL` (loopback note in `apps/mobile/.env.example`).
+Then open the app in Expo Go or the configured emulator/device workflow.
 
-### Components-only (docker)
+---
 
-```bash
-npm run docker:up      # postgres + redis + backend
-npm run docker:down    # tear down
+# Running the Backend Directly
+
+The backend defaults to the port declared in `apps/backend/.env.example`:
+
+```env
+PORT=3000
 ```
 
-### Useful commands
+When running it directly, make sure your local `PORT` matches the address configured in the mobile client.
 
-| Command | What it does |
-| --- | --- |
-| `npm run build` | Build all workspaces via Turborepo |
-| `npm run typecheck` | TypeScript strict check across workspaces |
-| `npm run lint` | ESLint across workspaces |
-| `npm test` | Unit + integration tests (backend, via turbo) |
-| `npm run format` | Prettier write (ts/tsx/md/json/yaml) |
-| `npm run db:migrate` | Run Sequelize migrations |
-| `npm run dev --workspace @meal-rescue/backend` | Backend dev server (tsx watch) |
-| `npm run dev --workspace @meal-rescue/mobile` | Expo dev server |
+```bash
+npm run dev --workspace @meal-rescue/backend
+```
+
+The Docker setup intentionally exposes the backend on port **3010**, so the Docker and direct-local workflows use different default ports.
 
 ---
 
-## Configuration
+# Verification Commands
 
-### Backend (`apps/backend/.env`, see `.env.example`)
+From the repository root:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Targeted backend commands:
+
+```bash
+npm run test --workspace @meal-rescue/backend
+npm run test:e2e --workspace @meal-rescue/backend
+```
+
+The repository’s CI workflow currently runs:
+
+1. lint
+2. typecheck
+3. backend tests with a PostgreSQL 15 service
+4. backend build
+5. Expo Doctor for the mobile workspace
+
+The CI workflow does **not** constitute a full native Android/iOS release build. Store packaging and release operations should therefore be verified separately before submission.
+
+---
+
+# Environment Reference
+
+The repository ships example environment files so that deployment configuration is explicit.
 
 | Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` / `REDIS_DISABLED` | Redis for vision cache + rate-limit; disable for graceful degradation |
-| `JWT_SECRET` / `JWT_EXPIRES_IN` | Auth signing (must be strong in production) |
-| `OPENAI_API_KEY` | **The switch**: present → real LLM pipeline (OpenRouter-compatible, `LLM_MODEL_VERSION`); absent → deterministic heuristic engine |
-| `ANTHROPIC_API_KEY` | Reserved provider slot |
-| `RATE_LIMIT_*` | Global request rate limiting |
-| `CORS_ORIGIN` | Comma-separated origins or `*` |
-| `SENTRY_DSN` | Monitoring |
-| `TEST_DATABASE_URL` | Used by integration tests (`NODE_ENV=test`) |
+|---|---|
+| `PORT` | Backend listen port |
+| `DATABASE_URL` | PostgreSQL connection |
+| `REDIS_URL` | Redis connection |
+| `JWT_SECRET` | Authentication signing secret |
+| `OPENAI_API_KEY` | Primary model-provider credential |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible API base URL |
+| `OPENAI_TEXT_MODEL` | Text model identifier |
+| `OPENAI_VISION_MODEL` | Vision model identifier for the OpenAI-compatible path |
+| `OPENROUTER_VISION_API_KEY` | Optional dedicated vision-provider credential |
+| `OPENROUTER_VISION_MODEL` | Dedicated vision model identifier |
+| `AI_REQUEST_TIMEOUT_MS` | AI request timeout |
+| `AI_MAX_RETRIES` | Application retry limit |
+| `LLM_MAX_TOKENS` | Response token budget |
+| `AD_REWARD_CREDITS` | Rewarded-ad Rescue Fuel grant |
+| `PRO_PASS_MINUTES` | Temporary Pro Pass duration |
+| `REVENUECAT_WEBHOOK_SECRET` | Subscription webhook verification |
+| `ONESIGNAL_REST_API_KEY` | Push provider credential |
+| `ONESIGNAL_APP_ID` | Push app identifier |
 
-Production boots **fail-fast**: a missing `DATABASE_URL` or a default `JWT_SECRET` aborts startup.
-
-### Mobile (`apps/mobile/.env`, see `.env.example`)
-
-| Variable | Purpose |
-| --- | --- |
-| `EXPO_PUBLIC_API_BASE_URL` | Backend base URL (public — inlined into the bundle) |
-| `EXPO_PUBLIC_FIREBASE_*` | Firebase (optional until provisioned) |
-| `EXPO_PUBLIC_REVENUECAT_PUBLIC_KEY` | In-app purchases |
-| `EXPO_PUBLIC_ONE_SIGNAL_APP_ID` | Push notifications |
-
-All SDKs no-op safely when their keys are absent — dev builds never crash.
+Mobile-only configuration is kept under `EXPO_PUBLIC_*` and SDK/provider keys required by the installed integrations.
 
 ---
 
-## Testing & CI
+# Testing Philosophy
 
-- **Backend** — Jest + ts-jest; unit suites plus **DB-gated integration suites** that run the *full funnel through `fastify.inject()`* (analyze → generate → alternatives → feedback → pantry CRUD → ads/allowance ledger). They auto-skip when `TEST_DATABASE_URL` is unset and run against a real PostgreSQL 15 service container in CI.
-- **Mobile** — lint + strict typecheck + `expo-doctor` enforced in CI (on-device E2E and unit tests land as screens gain testable logic).
-- **GitHub Actions** (`.github/workflows/ci.yml`) — on push/PR to `main`/`develop`:
-  `lint → typecheck → test-backend (real Postgres) → build-backend → build-mobile` — gated sequentially, with jest output mirrored into the run summary.
+Meal Rescue’s tests are organized around **behavioural contracts**, not only route snapshots.
 
-Pre-commit (husky + lint-staged) auto-lints and formats staged files.
+The highest-value areas to inspect are:
 
----
+### AI safety and constraint tests
 
-## Engineering Principles
+These verify that a model cannot bypass hard business constraints and that invalid model output is contained.
 
-1. **Deterministic-first AI** — LLMs rank and explain; they never decide alone. Safety gates live in code.
-2. **Rescues are first-class database objects** — every recommendation persists the meal, candidates, decision, and outcome so the system can genuinely learn.
-3. **Structured errors everywhere** — one error contract across the whole app, with `requestId`, recoverability, and a suggested action.
-4. **Graceful degradation** — cache down? serve anyway. Vision model down? fall to text. No key? run deterministic. Provider dies mid-request? fall back per-request.
-5. **Server-authoritative monetization** — the client never decides entitlement; quotas, credits, and ad rewards are enforced and ledgered server-side, idempotent and replay-proof.
-6. **Contract-first monorepo** — every cross-boundary payload validates against `@meal-rescue/shared-types` before it leaves the server.
-7. **Composition root** — no service talks to providers/config directly; `composition.ts` owns the wiring.
-8. **Fail-fast config** — zod-validated env, production guards on secrets, boot aborts on misconfiguration.
+### Personalization tests
 
----
+These cover cold-start signals, feedback weighting, recency/anti-fatigue behaviour, and context-scoped taste memory.
 
-## Development Status
+### Household tests
 
-Completed through the design-polish and personalization phases. Fully green: backend ~17 suites / 100+ tests, all workspaces lint/typecheck/build clean, CI pipeline green end-to-end.
+These exercise the convergence engine, member-specific constraints, late branching, and honest fallback behaviour.
 
-- [x] **Phase 1 — Foundation**: monorepo, Fastify scaffold, Sequelize models, Expo shell, JWT auth, Docker, CI
-- [x] **Phase 2 — Core AI Pipeline**: vision analysis, constraint engine, candidate generation, ranking, safety validation
-- [x] **Phase 3 — Mobile Frontend**: full core loop — capture → review → result → feedback
-- [x] **Phase 4 — Personalization & Learning**: feedback, preference learning, pantry, taste memory
-- [x] **Phase 4b — Meal Completion Onboarding**: adaptive A/B preference onboarding + cold-start ranking integration
-- [x] **Phase 5 — Advanced Features**: Fridge Negotiator, Leftover Alchemist, voice input
-- [x] **Phase 6 — Real AI**: GLM-5.2 / GLM-5V via OpenRouter + resilient per-request fallback
-- [x] **Phase 7 — Monetization & Engagement**: RevenueCat Pro, Rescue Fuel, Pro Pass, Rescue Windows, Spoiler Alert
-- [x] **Phase 8 — Design Award Polish**: motion, PlateDiffReveal, Scraps the Cat, confetti, adaptive paywall
-- [x] **Cultural Awareness (Culinary Compass)**: culture-learner + taste journal integration
-- [ ] **Hardening**: initial Sequelize migration, on-device E2E, store submission (EAS), iOS build
+### Monetization tests
 
-See `PROGRESS.md` for the complete per-phase build log, decisions, and deviations.
+These include allowance state, rewarded-ad idempotency, subscription transitions, and Pro/free gating.
+
+### Security and isolation tests
+
+These focus on authorization boundaries and preventing one user from accessing another user’s data.
 
 ---
 
-## Contributing
+# Engineering Decisions
 
-- Conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`)
-- Pre-commit hooks lint + format staged files automatically
-- Keep changes deterministic-first: AI layer stays behind the `LlmClient` seam
-- Extend `shared-types` first when the API contract changes — both apps must stay in sync
+## Decision 1 — Shared contracts before duplicated DTOs
+
+The `packages/shared-types` package is the contract boundary between mobile and backend. Zod-backed schemas make malformed data observable rather than silently accepted.
+
+## Decision 2 — Domain services do not own provider configuration
+
+Provider/model selection lives at the composition boundary. This reduces coupling and makes testing with deterministic implementations possible.
+
+## Decision 3 — Deterministic code owns hard constraints
+
+Safety-critical or business-critical constraints need executable rules, not optimistic prompting.
+
+## Decision 4 — User confirmation before state creation
+
+AI-produced meal/kitchen detections are reviewable before they become structured state.
+
+## Decision 5 — Provenance is part of the result
+
+Model/provider/prompt/pipeline/fallback metadata is treated as application data rather than debug-only logging.
+
+## Decision 6 — Graceful degradation is a feature
+
+The heuristic implementation is intentionally available without network access, while the resilient client can fall back per request.
 
 ---
 
-*Meal Rescue — the smallest change that makes a meal better.* 🐱
+# Current Implementation Notes
+
+This repository is substantial, but the following limitations are intentionally documented rather than hidden:
+
+- **Database migrations:** the current code uses Sequelize `sync({ alter: true })`; a dedicated migration runner is not present in this snapshot.
+- **Mobile CI:** CI runs Expo Doctor rather than a full native release build.
+- **Release links:** store listing, demo-video, and Devpost submission URLs are not encoded in the repository snapshot and are therefore not guessed here.
+- **Documentation namespaces:** `docs/api`, `docs/product`, and `docs/technical` currently contain placeholder files rather than a full separate documentation site.
+- **Test/build status:** this README documents the repository and its test inventory; it does not claim that every command has passed in this documentation run.
+
+These are explicit boundaries of the current repository, not omissions disguised as features.
+
+---
+
+# Recommended Reading Order for Technical Judges
+
+A judge who wants to understand the implementation quickly can inspect the repository in this order:
+
+```text
+1. packages/shared-types/src/index.ts
+2. apps/backend/src/services/composition.ts
+3. apps/backend/src/services/rescue-pipeline.service.ts
+4. apps/backend/src/services/ai/
+5. apps/backend/src/services/decision/
+6. apps/backend/src/services/meal-completion.service.ts
+7. apps/backend/src/services/common-table/
+8. apps/backend/tests/
+9. apps/mobile/src/navigation/
+10. apps/mobile/src/screens/
+```
+
+That path follows the actual architecture: **contracts → composition → product decision → AI boundary → deterministic safety → learning → household convergence → proof → client UX**.
+
+---
+
+# Contributing
+
+Before opening a change, understand which layer owns the behaviour.
+
+A typical feature should follow the repository’s boundaries:
+
+```text
+Shared contract
+      ↓
+Route / controller
+      ↓
+Domain service
+      ↓
+Deterministic rules / AI abstraction
+      ↓
+Persistence
+      ↓
+Mobile API client + screen/store
+      ↓
+Tests
+```
+
+When a behaviour changes, update the corresponding tests and shared contract rather than patching the client around a backend mismatch.
+
+---
+
+# License & Repository Status
+
+The current root package metadata marks the project as `UNLICENSED`. No open-source license is asserted by this repository snapshot.
+
+Do not assume that source code is reusable under an open-source license unless the project owner publishes one separately.
+
+---
+
+## Built Around One Principle
+
+> **A better meal does not always require a new meal.**
+
+Meal Rescue turns that idea into a full product loop:
+
+**see the meal → understand intent → model reality → generate a small set of feasible changes → rank the best move → let the user decide → learn from the outcome.**
+
+<div align="center">
+  <sub>Meal Rescue · AI meal optimization · deterministic-first decision infrastructure</sub>
+</div>
