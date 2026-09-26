@@ -1,4 +1,6 @@
 import type {
+  AiPlannerResponse,
+  MealEvent,
   MealMemoryConfirmRequest,
   MealMemoryConfirmResponse,
   MealMemoryCreateRuleRequest,
@@ -9,9 +11,9 @@ import type {
   MealMemoryIntentResponse,
   MealMemoryMealDetailResponse,
   MealMemoryMoveMealRequest,
+  MealMemoryRecentsResponse,
   MealMemoryRecordActualRequest,
   MealMemoryRecordActualResponse,
-  MealMemoryRecentsResponse,
   MealMemoryRememberRequest,
   MealMemoryRememberResponse,
   MealMemoryReuseWeekRequest,
@@ -19,11 +21,10 @@ import type {
   MealMemoryRulesResponse,
   MealMemoryUpdateMealRequest,
   MealMemoryWeekResponse,
-  MealEvent,
   MealRule,
-  PlanPreviewResponse,
   PlanConfirmRequest,
   PlanConfirmResponse,
+  PlanPreviewResponse,
   PlanWeekRequest,
   PlanWeekResponse,
 } from '@meal-rescue/shared-types';
@@ -37,7 +38,9 @@ import { api } from './api';
  * Meal Memory contract types.
  */
 
-export async function postIntent(input: MealMemoryIntentRequest): Promise<MealMemoryIntentResponse> {
+export async function postIntent(
+  input: MealMemoryIntentRequest,
+): Promise<MealMemoryIntentResponse> {
   const res = await api.post<MealMemoryIntentResponse>('/api/v1/meal-memory/intent', input);
   return res.data;
 }
@@ -54,7 +57,10 @@ export async function planWeek(input: PlanWeekRequest): Promise<PlanWeekResponse
   return res.data;
 }
 
-export async function getWeek(weekStart?: string, memberId?: string): Promise<MealMemoryWeekResponse> {
+export async function getWeek(
+  weekStart?: string,
+  memberId?: string,
+): Promise<MealMemoryWeekResponse> {
   const res = await api.get<MealMemoryWeekResponse>('/api/v1/meal-memory/week', {
     params: { weekStart, memberId },
   });
@@ -114,7 +120,9 @@ export async function recordActual(
   return res.data;
 }
 
-export async function remember(input: MealMemoryRememberRequest): Promise<MealMemoryRememberResponse> {
+export async function remember(
+  input: MealMemoryRememberRequest,
+): Promise<MealMemoryRememberResponse> {
   const res = await api.post<MealMemoryRememberResponse>('/api/v1/meal-memory/remember', input);
   return res.data;
 }
@@ -149,15 +157,27 @@ export async function getMealInstructions(
   ingredients?: string[],
   mealSlot?: string,
 ): Promise<{ cookingInstructions: string[]; ingredients: string[]; tips: string[] }> {
-  const res = await api.post<{ cookingInstructions: string[]; ingredients: string[]; tips: string[] }>(
-    `/api/v1/meal-memory/meals/${eventId}/instructions`,
-    { concept, ingredients, mealSlot },
-  );
+  const res = await api.post<{
+    cookingInstructions: string[];
+    ingredients: string[];
+    tips: string[];
+  }>(`/api/v1/meal-memory/meals/${eventId}/instructions`, { concept, ingredients, mealSlot });
   return res.data;
 }
 
 export async function postPlanPreview(text: string): Promise<PlanPreviewResponse> {
   const res = await api.post<PlanPreviewResponse>('/api/v1/meal-memory/plan-preview', { text });
+  return res.data;
+}
+
+export async function postAiPlan(input: {
+  text: string;
+  sessionId?: string | null;
+}): Promise<AiPlannerResponse> {
+  const res = await api.post<AiPlannerResponse>('/api/v1/meal-memory/ai-plan', {
+    text: input.text,
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+  });
   return res.data;
 }
 

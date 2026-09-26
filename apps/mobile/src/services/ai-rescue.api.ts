@@ -31,6 +31,8 @@ export async function generateAiRescue(params: {
   userMood?: string;
   kitchenItems?: Array<{ name: string; state: string; expiresSoon: boolean }>;
   mealId?: string;
+  timeMinutes?: number;
+  cookingAllowed?: boolean;
 }): Promise<AiRescueData> {
   const res = await api.post<AiRescueResponse>('/api/v1/ai-rescue/generate', params);
   return res.data.data;

@@ -7,25 +7,18 @@ import type {
   ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
 import { useEffect, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { AppImage } from '../components/AppImage';
-import { Text } from '../components/AppText';
-import { TextInput } from '../components/AppTextInput';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { MealAnalysisResponse } from '@meal-rescue/shared-types';
 
-import { WaveLoading } from '../components/WaveLoading';
+import { AppImage } from '../components/AppImage';
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { useDayPhase } from '../hooks/useDayPhase';
+import { WaveLoading } from '../components/WaveLoading';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { PickedImage, analyzeMeal } from '../services/rescue.api';
@@ -59,8 +52,7 @@ const SPEECH_AVAILABLE = speechModule != null && typeof speechModule.addListener
  */
 export function CaptureScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-  const { phase, tint } = useDayPhase();
-  const background = phase === 'night' ? colors.background : tint;
+  const background = colors.background;
   const [text, setText] = useState('');
   const [image, setImage] = useState<PickedImage | null>(null);
   const [busy, setBusy] = useState(false);
@@ -187,7 +179,7 @@ export function CaptureScreen() {
       // Photo captures get an editable review step (names, amounts, servings);
       // text captures skip straight to the rescue loop as before.
       if (viaPhoto) {
-        navigation.navigate('MealReview', { analysis });
+        navigation.navigate('MealReview', { analysis, imageUri: image?.uri });
         return;
       }
       // Extract foods and ingredients from the analysis
@@ -425,7 +417,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginVertical: spacing.md,
   },
-voiceButtonRecording: {
+  voiceButtonRecording: {
     backgroundColor: colors.errorSoft,
     borderColor: colors.error,
   },
@@ -446,4 +438,3 @@ voiceButtonRecording: {
     fontWeight: '500',
   },
 });
-

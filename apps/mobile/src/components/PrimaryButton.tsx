@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, ViewStyle } from 'react-native';
-import { Text } from './AppText';
+import { Pressable, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
+  FadeIn,
+  FadeOut,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -11,6 +12,8 @@ import Animated, {
 import { haptics } from '../services/haptics';
 import { colors, fonts, radius, spacing, touch } from '../theme';
 import { spring } from '../theme/motion';
+import { Text } from './AppText';
+import { WaveLoading } from './WaveLoading';
 
 interface PrimaryButtonProps {
   label: string;
@@ -19,6 +22,8 @@ interface PrimaryButtonProps {
   busy?: boolean;
   disabled?: boolean;
   style?: ViewStyle;
+  /** Optional element rendered to the left of the label (e.g. an outline icon). */
+  icon?: React.ReactNode;
 }
 
 const VARIANTS = {
@@ -37,6 +42,7 @@ export function PrimaryButton({
   busy = false,
   disabled = false,
   style,
+  icon,
 }: PrimaryButtonProps) {
   const palette = VARIANTS[variant];
   const pressed = useSharedValue(0);
@@ -48,6 +54,10 @@ export function PrimaryButton({
       },
     ],
     opacity: withTiming(pressed.value ? 0.9 : 1, { duration: 100 }),
+  }));
+
+  const disabledOpacity = useAnimatedStyle(() => ({
+    opacity: withTiming(disabled || busy ? 0.4 : 1, { duration: 200 }),
   }));
 
   return (
@@ -72,15 +82,29 @@ export function PrimaryButton({
           styles.base,
           { backgroundColor: palette.backgroundColor },
           OUTLINED_VARIANTS.has(variant) ? styles.outlined : null,
-          disabled || busy ? styles.disabled : null,
           animated,
+          disabledOpacity,
           style,
         ]}
       >
-        {busy ? (
-          <ActivityIndicator color={palette.textColor} />
-        ) : (
-          <Text style={[styles.label, { color: palette.textColor }]}>{label}</Text>
+        {busy && (
+          <Animated.View
+            style={styles.loadingWrap}
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(120)}
+          >
+            <WaveLoading />
+          </Animated.View>
+        )}
+        {!busy && (
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(120)}
+            style={styles.content}
+          >
+            {icon ? icon : null}
+            <Text style={[styles.label, { color: palette.textColor }]}>{label}</Text>
+          </Animated.View>
         )}
       </Animated.View>
     </Pressable>
@@ -100,12 +124,18 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.text,
   },
-  disabled: {
-    opacity: 0.4,
+  loadingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   label: {
     fontFamily: fonts.medium,
     fontSize: 16,
     fontWeight: '600',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
 });

@@ -1,14 +1,13 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 
-import { colors, fonts } from '../theme';
-
 import { AddPeopleScreen } from '../screens/common-table/AddPeopleScreen';
 import { CommonTableHomeScreen } from '../screens/common-table/CommonTableHomeScreen';
 import { HouseholdScreen } from '../screens/common-table/HouseholdScreen';
 import { HowDidItGoScreen } from '../screens/common-table/HowDidItGoScreen';
 import { IngredientsScreen } from '../screens/common-table/IngredientsScreen';
 import { PlanCookScreen } from '../screens/common-table/PlanCookScreen';
+import { colors, fonts } from '../theme';
 
 export type CommonTableStackParamList = {
   CommonTableHome: undefined;
@@ -38,6 +37,8 @@ export function CommonTableNavigator() {
         headerShadowVisible: false,
         headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: colors.background },
+        animation: 'slide_from_right',
+        animationDuration: 250,
       }}
     >
       <Stack.Screen
@@ -60,11 +61,7 @@ export function CommonTableNavigator() {
         component={IngredientsScreen}
         options={{ title: 'What Do We Have?' }}
       />
-      <Stack.Screen
-        name="PlanCook"
-        component={PlanCookScreen}
-        options={{ title: 'Plan & Cook' }}
-      />
+      <Stack.Screen name="PlanCook" component={PlanCookScreen} options={{ title: 'Plan & Cook' }} />
       <Stack.Screen
         name="HowDidItGo"
         component={HowDidItGoScreen}

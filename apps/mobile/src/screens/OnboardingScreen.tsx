@@ -2,23 +2,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Dimensions, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInLeft,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { CulinaryFamily } from '@meal-rescue/shared-types';
 
 import { Text } from '../components/AppText';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { ConfettiBurst } from '../components/effects/ConfettiBurst';
+import { FoodIcon } from '../components/icons/FoodIcon';
 import { FadeInView } from '../components/motion/FadeInView';
 import { Pressable } from '../components/motion/Pressable';
 import type { RootStackParamList } from '../navigation/AppNavigator';
+import { createHousehold, updateHouseholdMember } from '../services/common-table.api';
 import { haptics } from '../services/haptics';
 import {
   type OnboardingPreferences,
   submitCuisinePreferences,
   submitOnboardingPreferences,
 } from '../services/taste.api';
-import { createHousehold, updateHouseholdMember } from '../services/common-table.api';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
 
@@ -180,35 +193,85 @@ function StepProgress({
       contentContainerStyle={styles.stepProgressRow}
     >
       {steps.map((step, i) => {
-        const isCurrent = i === currentIndex;
-        const isDone = i < currentIndex;
-        const label = STEP_LABELS[step] ?? step;
-        const answer = isDone ? getStepAnswer(step, answerState) : null;
         return (
-          <View key={step} style={styles.stepBadgeWrap}>
-            <View
-              style={[
-                styles.stepBadge,
-                isCurrent && styles.stepBadgeCurrent,
-                isDone && styles.stepBadgeDone,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.stepBadgeLabel,
-                  isCurrent && styles.stepBadgeLabelCurrent,
-                  isDone && styles.stepBadgeLabelDone,
-                ]}
-              >
-                {isDone ? '✓ ' : ''}
-                {label}
-              </Text>
-            </View>
-            {answer && <Text style={styles.stepAnswer}>{answer}</Text>}
-          </View>
+          <AnimatedStepBadge
+            key={step}
+            step={step}
+            index={i}
+            currentIndex={currentIndex}
+            answerState={answerState}
+          />
         );
       })}
     </ScrollView>
+  );
+}
+
+function AnimatedStepBadge({
+  step,
+  index,
+  currentIndex,
+  answerState,
+}: {
+  step: string;
+  index: number;
+  currentIndex: number;
+  answerState: {
+    cuisineSelections: Set<CulinaryFamily>;
+    hardNoSelections: Set<string>;
+    flavorSelection: Set<string>;
+    textureSelections: Record<string, string>;
+    adventurousness: string | null;
+    rescueNeed: Set<string>;
+    priorities: Set<string>;
+    displayName: string;
+  };
+}) {
+  const isCurrent = index === currentIndex;
+  const isDone = index < currentIndex;
+  const label = STEP_LABELS[step] ?? step;
+  const answer = isDone ? getStepAnswer(step, answerState) : null;
+
+  const scale = useSharedValue(isCurrent ? 1 : 0.8);
+
+  React.useEffect(() => {
+    if (isCurrent) {
+      scale.value = withSequence(
+        withTiming(0.8, { duration: 80 }),
+        withTiming(1, { duration: 180 }),
+      );
+    } else {
+      scale.value = withTiming(0.8, { duration: 150 });
+    }
+  }, [isCurrent]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <View style={styles.stepBadgeWrap}>
+      <Animated.View
+        style={[
+          styles.stepBadge,
+          isCurrent && styles.stepBadgeCurrent,
+          isDone && styles.stepBadgeDone,
+          animatedStyle,
+        ]}
+      >
+        <Text
+          style={[
+            styles.stepBadgeLabel,
+            isCurrent && styles.stepBadgeLabelCurrent,
+            isDone && styles.stepBadgeLabelDone,
+          ]}
+        >
+          {isDone ? '✓ ' : ''}
+          {label}
+        </Text>
+      </Animated.View>
+      {answer && <Text style={styles.stepAnswer}>{answer}</Text>}
+    </View>
   );
 }
 
@@ -270,7 +333,7 @@ function CuisineGridScreen({
               key={cuisine.id}
               style={[styles.cuisineItem, isSelected && styles.cuisineItemSelected]}
               onPress={() => onToggle(cuisine.id)}
-              scaleTo={1}
+              scaleTo={0.95}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
             >
@@ -283,9 +346,9 @@ function CuisineGridScreen({
                 </Text>
               </View>
               {isSelected && (
-                <View style={styles.cuisineCheck}>
+                <Animated.View entering={FadeIn.duration(200)} style={styles.cuisineCheck}>
                   <Text style={styles.checkmark}>✓</Text>
-                </View>
+                </Animated.View>
               )}
             </Pressable>
           );
@@ -356,7 +419,7 @@ function HardNosScreen({
               <Pressable
                 style={[styles.chip, isSelected && styles.chipSelected]}
                 onPress={() => onToggle(opt.id)}
-                scaleTo={1}
+                scaleTo={0.96}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
               >
@@ -433,7 +496,7 @@ function SingleSelectScreen({
               key={opt.id}
               style={[styles.chip, isSelected && styles.chipSelected]}
               onPress={() => onSelect(opt.id)}
-              scaleTo={1}
+              scaleTo={0.96}
               accessibilityRole="radio"
               accessibilityState={{ checked: isSelected }}
             >
@@ -503,7 +566,7 @@ function MultiSelectScreen({
               key={opt.id}
               style={[styles.chip, isSelected && styles.chipSelected]}
               onPress={() => onToggle(opt.id)}
-              scaleTo={1}
+              scaleTo={0.96}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: isSelected }}
             >
@@ -572,7 +635,7 @@ function TexturePairsScreen({
                   selections[pair.a] === pair.a && styles.chipSelected,
                 ]}
                 onPress={() => onSelect(pair.a, pair.a)}
-                scaleTo={1}
+                scaleTo={0.96}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selections[pair.a] === pair.a }}
               >
@@ -592,7 +655,7 @@ function TexturePairsScreen({
                   selections[pair.a] === pair.b && styles.chipSelected,
                 ]}
                 onPress={() => onSelect(pair.a, pair.b)}
-                scaleTo={1}
+                scaleTo={0.96}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selections[pair.a] === pair.b }}
               >
@@ -648,9 +711,7 @@ function NameStep({
       </Pressable>
 
       <Text style={styles.stepTitle}>What should we call you?</Text>
-      <Text style={styles.stepSubtitle}>
-        This is how you'll appear in your household.
-      </Text>
+      <Text style={styles.stepSubtitle}>This is how you'll appear in your household.</Text>
 
       <TextInput
         style={styles.nameInput}
@@ -686,6 +747,7 @@ export function OnboardingScreen() {
   const setOnboardingCompleted = useAuthStore((state) => state.setOnboardingCompleted);
 
   const [stepIndex, setStepIndex] = useState(0);
+  const directionRef = useRef<'forward' | 'backward'>('forward');
   const [cuisineSelections, setCuisineSelections] = useState<Set<CulinaryFamily>>(new Set());
   const [hardNoSelections, setHardNoSelections] = useState<Set<string>>(new Set());
   const [hardNoTextInputs, setHardNoTextInputs] = useState<Record<string, string>>({});
@@ -696,11 +758,14 @@ export function OnboardingScreen() {
   const [priorities, setPriorities] = useState<Set<string>>(new Set());
   const [displayName, setDisplayName] = useState('');
   const [_submitting, setSubmitting] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [confettiTrigger, setConfettiTrigger] = useState(0);
 
   const currentStep = ALL_STEPS[stepIndex];
 
   function goNext() {
     haptics.medium();
+    directionRef.current = 'forward';
     if (stepIndex < ALL_STEPS.length - 1) {
       setStepIndex(stepIndex + 1);
     } else {
@@ -710,6 +775,7 @@ export function OnboardingScreen() {
 
   function goBack() {
     haptics.light();
+    directionRef.current = 'backward';
     if (stepIndex > 0) {
       setStepIndex(stepIndex - 1);
     }
@@ -875,8 +941,14 @@ export function OnboardingScreen() {
     } finally {
       setSubmitting(false);
       setOnboardingCompleted(true);
-      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+      haptics.success();
+      setCompleted(true);
+      setConfettiTrigger((t) => t + 1);
     }
+  }
+
+  function handleEnterApp() {
+    navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
   }
 
   // ------- Flavor personality options -------
@@ -926,117 +998,149 @@ export function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <FadeInView key={currentStep} style={styles.flex}>
-        {currentStep !== 'welcome' && currentStep !== 'cuisine' && currentStep !== 'done' && (
-          <StepProgress
-            steps={ALL_STEPS.filter((s) => s !== 'welcome' && s !== 'done')}
-            currentIndex={stepIndex - 1}
-            answerState={{
-              cuisineSelections,
-              hardNoSelections,
-              flavorSelection,
-              textureSelections,
-              adventurousness,
-              rescueNeed,
-              priorities,
-              displayName,
-            }}
-          />
-        )}
+      {completed ? (
+        <View style={styles.completionContainer}>
+          <ConfettiBurst trigger={confettiTrigger} />
+          <FadeInView rise={10} duration={400} style={styles.completionContent}>
+            <Image
+              source={require('../../assets/logo.png')}
+              style={styles.completionMascot}
+              contentFit="contain"
+              transition={200}
+              cachePolicy="memory-disk"
+              accessibilityLabel="Meal Rescue logo"
+            />
+            <Text style={styles.completionText}>Your leftovers don't stand a chance now.</Text>
+            <PrimaryButton
+              label="Rescue a meal"
+              icon={<FoodIcon size={18} color={colors.surface} />}
+              onPress={handleEnterApp}
+              style={styles.completionButton}
+            />
+          </FadeInView>
+        </View>
+      ) : (
+        <Animated.View
+          key={currentStep}
+          style={styles.flex}
+          entering={
+            directionRef.current === 'forward'
+              ? SlideInRight.duration(280)
+              : SlideInLeft.duration(280)
+          }
+          exiting={FadeOut.duration(120)}
+        >
+          {currentStep !== 'welcome' && currentStep !== 'cuisine' && currentStep !== 'done' && (
+            <StepProgress
+              steps={ALL_STEPS.filter((s) => s !== 'welcome' && s !== 'done')}
+              currentIndex={stepIndex - 1}
+              answerState={{
+                cuisineSelections,
+                hardNoSelections,
+                flavorSelection,
+                textureSelections,
+                adventurousness,
+                rescueNeed,
+                priorities,
+                displayName,
+              }}
+            />
+          )}
 
-        {currentStep === 'welcome' && <WelcomeScreen onContinue={goNext} />}
+          {currentStep === 'welcome' && <WelcomeScreen onContinue={goNext} />}
 
-        {currentStep === 'cuisine' && (
-          <CuisineGridScreen
-            selected={cuisineSelections}
-            onToggle={toggleCuisine}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
+          {currentStep === 'cuisine' && (
+            <CuisineGridScreen
+              selected={cuisineSelections}
+              onToggle={toggleCuisine}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
 
-        {currentStep === 'hardNos' && (
-          <HardNosScreen
-            selected={hardNoSelections}
-            textInputs={hardNoTextInputs}
-            onToggle={toggleHardNo}
-            onTextInput={(id, text) => setHardNoTextInputs((prev) => ({ ...prev, [id]: text }))}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
+          {currentStep === 'hardNos' && (
+            <HardNosScreen
+              selected={hardNoSelections}
+              textInputs={hardNoTextInputs}
+              onToggle={toggleHardNo}
+              onTextInput={(id, text) => setHardNoTextInputs((prev) => ({ ...prev, [id]: text }))}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
 
-        {currentStep === 'flavorPersonality' && (
-          <MultiSelectScreen
-            title="Let's find your flavor personality."
-            subtitle="Which direction usually wins? Pick up to 3."
-            options={flavorOptions}
-            selected={flavorSelection}
-            maxSelect={3}
-            onToggle={toggleFlavor}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
+          {currentStep === 'flavorPersonality' && (
+            <MultiSelectScreen
+              title="Let's find your flavor personality."
+              subtitle="Which direction usually wins? Pick up to 3."
+              options={flavorOptions}
+              selected={flavorSelection}
+              maxSelect={3}
+              onToggle={toggleFlavor}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
 
-        {currentStep === 'texturePairs' && (
-          <TexturePairsScreen
-            selections={textureSelections}
-            onSelect={selectTexture}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
+          {currentStep === 'texturePairs' && (
+            <TexturePairsScreen
+              selections={textureSelections}
+              onSelect={selectTexture}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
 
-        {currentStep === 'adventurousness' && (
-          <SingleSelectScreen
-            title="How adventurous should I be?"
-            subtitle="When I rescue your meal, I should usually..."
-            options={adventurousOptions}
-            selected={adventurousness}
-            onSelect={(id) => {
-              haptics.light();
-              setAdventurousness(id);
-            }}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
+          {currentStep === 'adventurousness' && (
+            <SingleSelectScreen
+              title="How adventurous should I be?"
+              subtitle="When I rescue your meal, I should usually..."
+              options={adventurousOptions}
+              selected={adventurousness}
+              onSelect={(id) => {
+                haptics.light();
+                setAdventurousness(id);
+              }}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
 
-        {currentStep === 'rescueNeed' && (
-          <MultiSelectScreen
-            title='What kind of "rescue" sounds most like you?'
-            subtitle="My meal usually needs... Pick up to 3."
-            options={rescueNeedOptions}
-            selected={rescueNeed}
-            maxSelect={3}
-            onToggle={toggleRescueNeed}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
+          {currentStep === 'rescueNeed' && (
+            <MultiSelectScreen
+              title='What kind of "rescue" sounds most like you?'
+              subtitle="My meal usually needs... Pick up to 3."
+              options={rescueNeedOptions}
+              selected={rescueNeed}
+              maxSelect={3}
+              onToggle={toggleRescueNeed}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
 
-        {currentStep === 'priorities' && (
-          <MultiSelectScreen
-            title="What should I prioritize when I suggest something?"
-            subtitle="Pick up to 3."
-            options={priorityOptions}
-            selected={priorities}
-            maxSelect={3}
-            onToggle={togglePriority}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
-        {currentStep === 'name' && (
-          <NameStep
-            displayName={displayName}
-            onChangeName={setDisplayName}
-            onContinue={goNext}
-            onBack={goBack}
-          />
-        )}
-      </FadeInView>
+          {currentStep === 'priorities' && (
+            <MultiSelectScreen
+              title="What should I prioritize when I suggest something?"
+              subtitle="Pick up to 3."
+              options={priorityOptions}
+              selected={priorities}
+              maxSelect={3}
+              onToggle={togglePriority}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
+          {currentStep === 'name' && (
+            <NameStep
+              displayName={displayName}
+              onChangeName={setDisplayName}
+              onContinue={goNext}
+              onBack={goBack}
+            />
+          )}
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1341,5 +1445,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 40,
+  },
+  completionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  completionContent: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  completionMascot: {
+    width: 200,
+    height: 200,
+  },
+  completionText: {
+    marginTop: spacing.md,
+    fontSize: 22,
+    fontWeight: '600',
+    lineHeight: 28,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    maxWidth: 300,
+  },
+  completionButton: {
+    alignSelf: 'stretch',
+    marginTop: spacing.xl,
   },
 });

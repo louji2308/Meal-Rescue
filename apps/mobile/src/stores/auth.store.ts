@@ -47,9 +47,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       return { user };
     });
   },
-  clearSession: () => {
+  clearSession: async () => {
     setAuthToken(null);
-    void AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    // Clear all app-specific AsyncStorage data
+    const keys = await AsyncStorage.getAllKeys();
+    const mealRescueKeys = keys.filter((k) => k.startsWith('meal-rescue/'));
+    if (mealRescueKeys.length > 0) {
+      await AsyncStorage.multiRemove(mealRescueKeys);
+    }
     set({ token: null, user: null });
     useCommonTableStore.getState().reset();
     useMealMemoryStore.getState().reset();

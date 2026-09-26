@@ -58,6 +58,11 @@ const envSchema = z.object({
   // Without OPENAI_API_KEY the pipeline runs on the deterministic heuristic
   // client - same contracts, no network calls. Production should always
   // set a key; dev/test/CI intentionally work without one.
+  // Groq for the paywall teaser (OpenAI-compatible, 70B+ models). Missing
+  // key degrades the teaser to deterministic copy — non-critical surface.
+  GROQ_API_KEY: z.string().optional(),
+  GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
+  GROQ_TEXT_MODEL: z.string().default('openai/gpt-oss-120b'),
   OPENAI_API_KEY: z.string().optional(),
   // OpenAI-compatible endpoint override (e.g. OpenRouter, Z.AI direct).
   OPENAI_BASE_URL: z.string().optional(),

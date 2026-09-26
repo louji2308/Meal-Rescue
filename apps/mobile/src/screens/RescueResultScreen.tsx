@@ -2,8 +2,12 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type {
@@ -13,11 +17,14 @@ import type {
   UserDecision,
 } from '@meal-rescue/shared-types';
 
+import { Text } from '../components/AppText';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SatisfactionCheckinSlot } from '../components/aftercare/slots';
 import { BestMoveCard } from '../components/decision/BestMoveCard';
 import { ReversibilityEditor } from '../components/decision/ReversibilityEditor';
 import { actionLine, costLine } from '../components/decision/copy';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { getAdEligibility } from '../services/ads.api';
@@ -26,7 +33,6 @@ import { ApiError } from '../services/api';
 import { commitDecisionSafe } from '../services/decision.api';
 import { useRescuesStore } from '../stores/rescues.store';
 import { colors, spacing } from '../theme';
-import { FadeInView } from '../components/motion/FadeInView';
 
 /**
  * RESCUE RESULT (V2 redesign, plan §9 / §13 / §35).
@@ -135,16 +141,18 @@ export function RescueResultScreen({
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <FadeInView rise={10}>
-          <BestMoveCard
-            action={action}
-            candidate={working}
-            foods={foods}
-            isPro={isPro}
-            onDoThis={handleDoThis}
-            busy={committing}
-            onKeepAsIs={handleKeepAsIs}
-          />
+        <FadeInView key={chosen.candidate.id} rise={10}>
+          <BestMoveEntrance candidateId={chosen.candidate.id}>
+            <BestMoveCard
+              action={action}
+              candidate={working}
+              foods={foods}
+              isPro={isPro}
+              onDoThis={handleDoThis}
+              busy={committing}
+              onKeepAsIs={handleKeepAsIs}
+            />
+          </BestMoveEntrance>
         </FadeInView>
 
         <ErrorBanner error={commitError} />
@@ -157,49 +165,30 @@ export function RescueResultScreen({
 
         {initial.alternatives.length > 0 && (
           <FadeInView delay={140}>
-          <View style={styles.alternatives}>
-            <Text style={styles.alternativesTitle}>Or switch it up</Text>
-            {initial.alternatives.slice(0, showMore ? undefined : 3).map((alternative) => {
-              const isActive = alternative.candidate.id === chosen.candidate.id;
-              return (
-                <Pressable
+            <View style={styles.alternatives}>
+              <Text style={styles.alternativesTitle}>Or switch it up</Text>
+              {initial.alternatives.slice(0, showMore ? undefined : 3).map((alternative) => (
+                <AnimatedAltCard
                   key={alternative.candidate.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${alternative.candidate.additions
-                    .map((a) => a.name)
-                    .join(' + ')} instead`}
-                  style={[styles.altCard, isActive ? styles.altCardActive : null]}
+                  alternative={alternative}
+                  isActive={alternative.candidate.id === chosen.candidate.id}
                   onPress={() => {
                     const next = alternative;
                     setChosen(next);
                     setAdditions(next.candidate.additions.map((a) => a.name));
                   }}
+                />
+              ))}
+              {initial.alternatives.length > 3 && !showMore && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setShowMore(true)}
+                  style={styles.more}
                 >
-                  <Text style={styles.altTitle}>
-                    {actionLine(
-                      alternative.candidate.actionType,
-                      alternative.candidate.additions.map((a) => a.name),
-                    )}
-                  </Text>
-                  <Text style={styles.altMeta}>
-                    {costLine(
-                      alternative.candidate.estimatedMinutes,
-                      alternative.candidate.estimatedCostLevel,
-                    )}
-                  </Text>
+                  <Text style={styles.moreText}>Show a few more</Text>
                 </Pressable>
-              );
-            })}
-            {initial.alternatives.length > 3 && !showMore && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setShowMore(true)}
-                style={styles.more}
-              >
-                <Text style={styles.moreText}>Show a few more</Text>
-              </Pressable>
-            )}
-          </View>
+              )}
+            </View>
           </FadeInView>
         )}
 
@@ -211,6 +200,77 @@ export function RescueResultScreen({
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function BestMoveEntrance({
+  candidateId,
+  children,
+}: {
+  candidateId: string;
+  children: React.ReactNode;
+}) {
+  const scale = useSharedValue(0.92);
+  const translateX = useSharedValue(40);
+  const opacity = useSharedValue(0);
+
+  React.useEffect(() => {
+    scale.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) });
+    translateX.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) });
+    opacity.value = withTiming(1, { duration: 320 });
+  }, [candidateId]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }, { scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+}
+
+function AnimatedAltCard({
+  alternative,
+  isActive,
+  onPress,
+}: {
+  alternative: { candidate: RescueCandidate };
+  isActive: boolean;
+  onPress: () => void;
+}) {
+  const progress = useSharedValue(isActive ? 1 : 0);
+
+  React.useEffect(() => {
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 220 });
+  }, [isActive]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: isActive ? colors.homeTintNeutral : colors.surface,
+    borderColor: isActive ? colors.borderStrong : colors.border,
+  }));
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Use ${alternative.candidate.additions
+        .map((a) => a.name)
+        .join(' + ')} instead`}
+      onPress={onPress}
+    >
+      <Animated.View style={[styles.altCard, animatedStyle]}>
+        <Text style={styles.altTitle}>
+          {actionLine(
+            alternative.candidate.actionType,
+            alternative.candidate.additions.map((a) => a.name),
+          )}
+        </Text>
+        <Text style={styles.altMeta}>
+          {costLine(
+            alternative.candidate.estimatedMinutes,
+            alternative.candidate.estimatedCostLevel,
+          )}
+        </Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -240,10 +300,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
-  },
-  altCardActive: {
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.homeTintNeutral,
   },
   altTitle: {
     fontSize: 15,

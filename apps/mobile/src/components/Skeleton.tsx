@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, type ViewStyle, type DimensionValue } from 'react-native';
+import { type DimensionValue, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,39 +17,54 @@ type SkeletonProps = {
   style?: ViewStyle;
 };
 
-function SkeletonBlock({ width = '100%', height = 16, borderRadius = radius.sm, style }: SkeletonProps) {
-  const opacity = useSharedValue(0.45);
+const SHIMMER_WIDTH = 120;
+
+function SkeletonBlock({
+  width = '100%',
+  height = 16,
+  borderRadius = radius.sm,
+  style,
+}: SkeletonProps) {
+  const translateX = useSharedValue(-SHIMMER_WIDTH);
 
   useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(0.9, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+    translateX.value = withRepeat(
+      withTiming(SHIMMER_WIDTH + 400, {
+        duration: 1000,
+        easing: Easing.inOut(Easing.quad),
+      }),
       -1,
-      true,
+      false,
     );
-  }, [opacity]);
+  }, [translateX]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
   }));
 
   return (
-    <Animated.View
+    <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[
-        styles.block,
-        { width, height, borderRadius },
-        animatedStyle,
-        style,
-      ]}
-    />
+      style={[styles.block, { width, height, borderRadius }, style, { overflow: 'hidden' }]}
+    >
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.border }]} />
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            width: SHIMMER_WIDTH,
+            backgroundColor: 'rgba(255,255,255,0.35)',
+            borderRadius,
+          },
+          shimmerStyle,
+        ]}
+      />
+    </View>
   );
 }
 
-export function Skeleton({
-  lines,
-  ...blockProps
-}: SkeletonProps & { lines?: number }) {
+export function Skeleton({ lines, ...blockProps }: SkeletonProps & { lines?: number }) {
   const rows = lines ?? 1;
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

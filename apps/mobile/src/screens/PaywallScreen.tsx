@@ -1,16 +1,18 @@
 import { useNavigation } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Text } from '../components/AppText';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { usePaywallNudge } from '../hooks/usePaywallNudge';
+import { usePaywallTeaser } from '../hooks/usePaywallTeaser';
 import { claimProPass } from '../services/ads.api';
 import { syncSubscription } from '../services/ads.api';
 import { hasAdMobAppId, showRewardedAd } from '../services/ads.service';
@@ -23,13 +25,6 @@ import {
 } from '../services/revenuecat.service';
 import { useMonetization } from '../stores/monetization.store';
 import { colors, spacing, typography } from '../theme';
-
-const VALUE_PROPS = [
-  'Unlimited daily meal rescues per day',
-  'Smart AI picks what you actually want to eat',
-  'Ad-free experience — zero interruptions',
-  'Personalized taste memory that gets smarter over time',
-];
 
 const STATIC_PRICING = [
   { id: 'monthly', title: 'Monthly', price: '$4.99 / month' },
@@ -54,6 +49,7 @@ export function PaywallScreen() {
   const navigation = useNavigation();
   const { refresh: refreshEntitlement } = useEntitlement();
   const nudge = usePaywallNudge();
+  const { teaser, hasMove } = usePaywallTeaser();
   const isPro = useMonetization((state) => state.isPro);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [packagesLoading, setPackagesLoading] = useState(true);
@@ -152,123 +148,120 @@ export function PaywallScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <FadeInView rise={16} duration={320}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close paywall"
-          onPress={() => navigation.goBack()}
-          style={styles.closeButton}
-        >
-          <Text style={styles.closeText}>Close</Text>
-        </Pressable>
-
-        <Text style={[typography.title, styles.headline]}>Meal Rescue Pro</Text>
-        <Text style={[typography.body, styles.tagline]}>Rescue every meal, skip every ad.</Text>
-        <View style={styles.catFrame}>
-          <Image
-            source={require('../../assets/pro-cat.png')}
-            style={styles.cat}
-            resizeMode="contain"
-            accessible
-            accessibilityLabel="Scraps the pro rescue cat"
-          />
-        </View>
-        {nudge ? <Text style={styles.nudge}>{nudge}</Text> : null}
-
-        <View style={styles.propsCard}>
-          {VALUE_PROPS.map((prop, i) => (
-            <FadeInView key={prop} delay={120 + i * 60} rise={8}>
-            <View style={styles.propRow}>
-              <Text style={styles.propCheck}>{'✓'}</Text>
-              <Text style={styles.propText}>{prop}</Text>
-            </View>
-            </FadeInView>
-          ))}
-        </View>
-
-        <FadeInView delay={400} rise={10}>
-        <Text style={styles.feedTheCat}>Feed the cat — pick a plan below</Text>
-        </FadeInView>
-
-        {packagesLoading ? (
-          <>
-            <View style={styles.planCard}>
-              <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
-              <Skeleton.Block width="30%" height={14} />
-            </View>
-            <View style={styles.planCard}>
-              <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
-              <Skeleton.Block width="30%" height={14} />
-            </View>
-            <View style={styles.planCard}>
-              <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
-              <Skeleton.Block width="30%" height={14} />
-            </View>
-          </>
-        ) : (packages.length > 0 ? packages : STATIC_PRICING).map((item, i) => {
-          const pkg = item as PurchasesPackage;
-          const id = pkg.identifier ?? (item as { id: string }).id;
-          const rawTitle = pkg.product?.title ?? (item as { title: string }).title;
-          const title = TITLE_OVERRIDES[id]
-            ?? TITLE_OVERRIDES[rawTitle.toLowerCase()]
-            ?? rawTitle;
-          const price = pkg.product?.priceString ?? (item as { price: string }).price;
-          const recommended = /annual|year/i.test(title) || id === 'annual';
-          return (
-            <FadeInView key={id} delay={500 + i * 100} rise={12}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Choose ${title} plan`}
-              style={[styles.planCard, recommended && styles.planCardRecommended]}
-              disabled={busy || isPro || !hasRevenueCatKeys()}
-              onPress={() => void handlePurchase(pkg, id)}
-            >
-              {recommended && (
-                <View style={styles.recommendedBadge}>
-                  <Text style={styles.recommendedBadgeText}>Best value</Text>
-                </View>
-              )}
-              <Text style={styles.planTitle}>{title}</Text>
-              <Text style={styles.planPrice}>{price}</Text>
-            </Pressable>
-            </FadeInView>
-          );
-        })}
-
-        {passNote ? <Text style={styles.passNote}>{passNote}</Text> : null}
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Try Pro free for 1 hour"
-          onPress={() => void handleFreeProHour()}
-          disabled={passBusy || isPro}
-          style={styles.passButton}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close paywall"
+            onPress={() => navigation.goBack()}
+            style={styles.closeButton}
           >
-          <Text style={styles.passText}>
-            {isPro
-              ? 'You have Pro right now'
-              : passBusy
-                ? 'Loading…'
-                : 'Not sure yet? Taste it free for 1 hour'}
-          </Text>
-        </Pressable>
+            <Text style={styles.closeText}>Close</Text>
+          </Pressable>
 
-        {!hasRevenueCatKeys() && (
-          <Text style={styles.devNote}>Configure RevenueCat keys to enable purchases.</Text>
-        )}
-        {isPro && <Text style={styles.devNote}>You are already Pro.</Text>}
+          <Text style={[typography.title, styles.headline]}>Meal Rescue Pro</Text>
+          <Text style={[typography.body, styles.tagline]}>Never settle for an unfinished meal</Text>
+          <View style={styles.catFrame}>
+            <Image
+              source={require('../../assets/pro-cat.png')}
+              style={styles.cat}
+              contentFit="contain"
+              transition={200}
+              accessible
+              accessibilityLabel="Scraps the pro rescue cat"
+            />
+          </View>
+          {nudge ? <Text style={styles.nudge}>{nudge}</Text> : null}
 
-        <ErrorBanner error={error} />
-        {restoredNote ? <Text style={styles.restoredNote}>{restoredNote}</Text> : null}
+          <FadeInView key={teaser.opener} rise={10} duration={320}>
+            <View style={styles.teaserCard}>
+              <Text style={styles.teaserEyebrow}>
+                {hasMove ? 'From your last rescue' : 'A taste of Pro'}
+              </Text>
+              <Text style={styles.teaserOpener}>{teaser.opener}</Text>
+              <Text style={styles.teaserHook}>{teaser.hook}</Text>
+            </View>
+          </FadeInView>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Restore purchases"
-          onPress={() => void handleRestore()}
-          disabled={busy}
-          style={styles.restoreButton}
-        >
-          <Text style={styles.restoreText}>Restore purchases</Text>
-        </Pressable>
+          {packagesLoading ? (
+            <>
+              <View style={styles.planCard}>
+                <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
+                <Skeleton.Block width="30%" height={14} />
+              </View>
+              <View style={styles.planCard}>
+                <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
+                <Skeleton.Block width="30%" height={14} />
+              </View>
+              <View style={styles.planCard}>
+                <Skeleton.Block width="40%" height={16} style={{ marginBottom: 6 }} />
+                <Skeleton.Block width="30%" height={14} />
+              </View>
+            </>
+          ) : (
+            (packages.length > 0 ? packages : STATIC_PRICING).map((item, i) => {
+              const pkg = item as PurchasesPackage;
+              const id = pkg.identifier ?? (item as { id: string }).id;
+              const rawTitle = pkg.product?.title ?? (item as { title: string }).title;
+              const title =
+                TITLE_OVERRIDES[id] ?? TITLE_OVERRIDES[rawTitle.toLowerCase()] ?? rawTitle;
+              const price = pkg.product?.priceString ?? (item as { price: string }).price;
+              const recommended = /annual|year/i.test(title) || id === 'annual';
+              return (
+                <FadeInView key={id} delay={500 + i * 100} rise={12}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Choose ${title} plan`}
+                    style={[styles.planCard, recommended && styles.planCardRecommended]}
+                    disabled={busy || isPro || !hasRevenueCatKeys()}
+                    onPress={() => void handlePurchase(pkg, id)}
+                  >
+                    {recommended && (
+                      <View style={styles.recommendedBadge}>
+                        <Text style={styles.recommendedBadgeText}>Best value</Text>
+                      </View>
+                    )}
+                    <Text style={styles.planTitle}>{title}</Text>
+                    <Text style={styles.planPrice}>{price}</Text>
+                  </Pressable>
+                </FadeInView>
+              );
+            })
+          )}
+
+          {passNote ? <Text style={styles.passNote}>{passNote}</Text> : null}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Try Pro free for 1 hour"
+            onPress={() => void handleFreeProHour()}
+            disabled={passBusy || isPro}
+            style={styles.passButton}
+          >
+            <Text style={styles.passText}>
+              {isPro
+                ? 'You have Pro right now'
+                : passBusy
+                  ? 'Loading…'
+                  : 'Not sure yet? Taste it free for 1 hour'}
+            </Text>
+          </Pressable>
+
+          {!hasRevenueCatKeys() && (
+            <Text style={styles.devNote}>Configure RevenueCat keys to enable purchases.</Text>
+          )}
+          {isPro && <Text style={styles.devNote}>You are already Pro.</Text>}
+
+          <ErrorBanner error={error} />
+          {restoredNote ? <Text style={styles.restoredNote}>{restoredNote}</Text> : null}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Restore purchases"
+            onPress={() => void handleRestore()}
+            disabled={busy}
+            style={styles.restoreButton}
+          >
+            <Text style={styles.restoreText}>Restore purchases</Text>
+          </Pressable>
         </FadeInView>
       </ScrollView>
     </SafeAreaView>
@@ -320,36 +313,32 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     marginTop: -spacing.sm,
   },
-  propsCard: {
+  teaserCard: {
     backgroundColor: colors.primaryLight,
     borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.lg,
-    gap: spacing.sm,
   },
-  propRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  propCheck: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  propText: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
-  },
-  feedTheCat: {
-    textAlign: 'center',
+  teaserEyebrow: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+  },
+  teaserOpener: {
+    fontSize: 17,
+    lineHeight: 24,
+    color: colors.textSecondary,
     fontStyle: 'italic',
-    marginBottom: spacing.md,
+  },
+  teaserHook: {
+    fontSize: 20,
+    lineHeight: 27,
+    color: colors.text,
+    fontWeight: '700',
+    marginTop: spacing.xs,
   },
   planCard: {
     borderWidth: 1,

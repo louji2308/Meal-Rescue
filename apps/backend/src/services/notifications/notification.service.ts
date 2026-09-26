@@ -26,10 +26,7 @@ const QUIET_DEFAULT_START = 22;
 const QUIET_DEFAULT_END = 8;
 const ONESIGNAL_ENDPOINT = 'https://api.onesignal.com/notifications';
 
-export const NOTIFICATION_KINDS = [
-  'spoiler_alert',
-  'generic',
-] as const;
+export const NOTIFICATION_KINDS = ['spoiler_alert', 'generic', 'aftercare'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export interface PushButton {
@@ -109,6 +106,8 @@ export interface SendPushInput {
   body: string;
   deepLink?: string;
   buttons?: PushButton[];
+  /** Extra client-read keys, e.g. rescueId for action-button feedback. */
+  data?: Record<string, unknown>;
 }
 
 function logLine(level: 'info' | 'warn' | 'error', payload: Record<string, unknown>): void {
@@ -131,7 +130,7 @@ function logLine(level: 'info' | 'warn' | 'error', payload: Record<string, unkno
  * can still fire after quiet hours end... once per local day max.
  */
 export async function sendToUser(input: SendPushInput): Promise<PushOutcome> {
-  const { user, kind, title, body, deepLink, buttons } = input;
+  const { user, kind, title, body, deepLink, buttons, data } = input;
   const tz = user.tzOffsetMinutes ?? 0;
   const dayKey = localDayKey(tz);
 
@@ -151,8 +150,10 @@ export async function sendToUser(input: SendPushInput): Promise<PushOutcome> {
       target_channel: 'push',
       headings: { en: title },
       contents: { en: body },
+      android_small_icon: 'ic_stat_meal_rescue',
       data: {
         ...(deepLink ? { deepLink } : {}),
+        ...data,
         kind,
       },
     };
@@ -232,15 +233,12 @@ export async function validateOneSignalCredentials(): Promise<{ valid: boolean; 
   }
 
   try {
-    const response = await fetch(
-      `https://onesignal.com/api/v1/apps/${env.ONESIGNAL_APP_ID}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Basic ${env.ONESIGNAL_REST_KEY}`,
-        },
+    const response = await fetch(`https://onesignal.com/api/v1/apps/${env.ONESIGNAL_APP_ID}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Basic ${env.ONESIGNAL_REST_KEY}`,
       },
-    );
+    });
 
     if (response.ok) {
       return { valid: true };

@@ -1,9 +1,10 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text } from './AppText';
+import { StyleSheet } from 'react-native';
+import Animated, { FadeOut, SlideInRight } from 'react-native-reanimated';
 
 import type { ApiError } from '../services/api';
 import { colors, spacing } from '../theme';
+import { Text } from './AppText';
 
 interface ErrorBannerProps {
   error: ApiError | null;
@@ -20,12 +21,17 @@ export function ErrorBanner({ error }: ErrorBannerProps) {
   }
 
   return (
-    <View accessibilityRole="alert" style={styles.banner}>
+    <Animated.View
+      entering={SlideInRight.duration(280)}
+      exiting={FadeOut.duration(160)}
+      accessibilityRole="alert"
+      style={styles.banner}
+    >
       <Text style={styles.message}>{error.message}</Text>
       {error.suggestedAction ? (
         <Text style={styles.suggestion}>{error.suggestedAction}</Text>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

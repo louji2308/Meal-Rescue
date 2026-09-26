@@ -2,6 +2,7 @@
   "name": "@meal-rescue/ai-pipeline",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "AI processing pipeline for Meal Rescue (vision, constraints, ranking)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

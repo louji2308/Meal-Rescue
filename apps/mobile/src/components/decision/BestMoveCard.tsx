@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Pressable } from '../motion/Pressable';
-import { Text } from '../AppText';
+import Animated, { SlideInRight } from 'react-native-reanimated';
 
 import type { DecisionAction, RescueCandidate } from '@meal-rescue/shared-types';
 
 import { colors, spacing, typography } from '../../theme';
+import { Text } from '../AppText';
 import { PrimaryButton } from '../PrimaryButton';
 import { PawStamp } from '../mascot/PawStamp';
+import { Pressable } from '../motion/Pressable';
 import { actionLine, costLine, whyLine } from './copy';
 
 /**
@@ -48,45 +49,49 @@ export function BestMoveCard({
 
   if (isKeepAsIs) {
     return (
-      <View style={[styles.card, styles.keepCard]}>
-        <View style={styles.keepHead}>
-          <Ionicons name="checkmark-circle" size={28} color={colors.rescueAccent} />
-          <View style={styles.keepTextWrap}>
-            <Text style={[typography.heading, styles.keepTitle]}>You’re done.</Text>
-            <Text style={styles.keepBody}>
-              Your plate already fits what you want tonight. No changes needed — enjoy it.
-            </Text>
+      <Animated.View entering={SlideInRight.duration(280)}>
+        <View style={[styles.card, styles.keepCard]}>
+          <View style={styles.keepHead}>
+            <Ionicons name="checkmark-circle" size={28} color={colors.rescueAccent} />
+            <View style={styles.keepTextWrap}>
+              <Text style={[typography.heading, styles.keepTitle]}>You're done.</Text>
+              <Text style={styles.keepBody}>
+                Your plate already fits what you want tonight. No changes needed — enjoy it.
+              </Text>
+            </View>
           </View>
+          {onKeepAsIs && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="That's it — I'm keeping it as is"
+              onPress={onKeepAsIs}
+              disabled={busy}
+              style={styles.keepCta}
+            >
+              <Text style={styles.keepCtaText}>That's it — done</Text>
+            </Pressable>
+          )}
         </View>
-        {onKeepAsIs && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="That’s it — I’m keeping it as is"
-            onPress={onKeepAsIs}
-            disabled={busy}
-            style={styles.keepCta}
-          >
-            <Text style={styles.keepCtaText}>That’s it — done</Text>
-          </Pressable>
-        )}
-      </View>
+      </Animated.View>
     );
   }
 
   return (
-    <View style={[styles.card, isPro && styles.pawCard]}>
-      {isPro && <PawStamp size={28} rotation={-12} opacity={0.85} style={styles.cardStamp} />}
-      <Text style={[typography.caption, styles.eyebrow]}>YOUR BEST MOVE</Text>
-      <Text style={[typography.heading, styles.action]}>{actionLine(action, additions)}</Text>
-      <Text style={styles.why}>{whyLine(action, candidate, foods)}</Text>
-      <View style={styles.costRow}>
-        <Ionicons name="time-outline" size={16} color={colors.rescueAccent} />
-        <Text style={styles.cost}>
-          {costLine(candidate.estimatedMinutes, candidate.estimatedCostLevel)}
-        </Text>
+    <Animated.View entering={SlideInRight.duration(280)}>
+      <View style={[styles.card, isPro && styles.pawCard]}>
+        {isPro && <PawStamp size={28} rotation={-12} opacity={0.85} style={styles.cardStamp} />}
+        <Text style={[typography.caption, styles.eyebrow]}>YOUR BEST MOVE</Text>
+        <Text style={[typography.heading, styles.action]}>{actionLine(action, additions)}</Text>
+        <Text style={styles.why}>{whyLine(action, candidate, foods)}</Text>
+        <View style={styles.costRow}>
+          <Ionicons name="time-outline" size={16} color={colors.rescueAccent} />
+          <Text style={styles.cost}>
+            {costLine(candidate.estimatedMinutes, candidate.estimatedCostLevel)}
+          </Text>
+        </View>
+        <PrimaryButton label="Do this" onPress={onDoThis} busy={busy} style={styles.cta} />
       </View>
-      <PrimaryButton label="Do this" onPress={onDoThis} busy={busy} style={styles.cta} />
-    </View>
+    </Animated.View>
   );
 }
 
@@ -136,7 +141,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cta: {},
-keepCard: {
+  keepCard: {
     borderColor: colors.success,
     backgroundColor: colors.successSoft,
   },
@@ -170,4 +175,3 @@ keepCard: {
     fontWeight: '700',
   },
 });
-

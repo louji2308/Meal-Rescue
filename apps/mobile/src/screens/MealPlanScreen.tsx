@@ -4,10 +4,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   FlatList,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Platform,
   RefreshControl,
   ScrollView,
@@ -15,7 +13,10 @@ import {
   UIManager,
   View,
 } from 'react-native';
-import AnimatedReanimated, {
+import Animated, {
+  Extrapolation,
+  type SharedValue,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -163,11 +164,9 @@ function SlotConceptEditor({ meal }: { meal: MealEvent }) {
 /**
  * A single day cell in the month strip. Memoized so busy/save-status/typing
  * re-renders don't rebuild all ~31 cells; each cell only re-renders when its
- * own props change, while the shared scrollX Animated value keeps the
- * distance-based scale/opacity running on the UI thread.
+ * own props change, while the shared scrollX value keeps the
+ * distance-based scale/opacity running on the UI thread via Reanimated.
  */
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<string>);
-
 const DayCell = React.memo(function DayCell({
   dateKey,
   index,
@@ -188,7 +187,7 @@ const DayCell = React.memo(function DayCell({
   isSelected: boolean;
   hasMeals: boolean;
   cellW: number;
-  scrollX: Animated.Value;
+  scrollX: SharedValue<number>;
   onPress: (index: number, key: string) => void;
 }) {
   const bounceScale = useSharedValue(1);
@@ -207,17 +206,26 @@ const DayCell = React.memo(function DayCell({
     transform: [{ scale: bounceScale.value }],
   }));
 
-  const offsetFromCenter = Animated.subtract(scrollX, index * cellW);
-  const scale = offsetFromCenter.interpolate({
-    inputRange: [-2.5 * cellW, -cellW, -cellW / 2, 0, cellW / 2, cellW, 2.5 * cellW],
-    outputRange: [0.55, 0.72, 0.9, 1, 0.9, 0.72, 0.55],
-    extrapolate: 'clamp',
+  // Scroll-linked scale/opacity — runs entirely on UI thread via Reanimated
+  const animatedScrollStyle = useAnimatedStyle(() => {
+    const offsetFromCenter = scrollX.value - index * cellW;
+    const absOffset = Math.abs(offsetFromCenter);
+    const halfW = cellW / 2;
+    const scale = interpolate(
+      absOffset,
+      [0, halfW, cellW, 2.5 * cellW],
+      [1, 0.9, 0.72, 0.55],
+      Extrapolation.CLAMP,
+    );
+    const opacity = interpolate(
+      absOffset,
+      [0, halfW, cellW, 2.5 * cellW],
+      [1, 0.72, 0.42, 0.25],
+      Extrapolation.CLAMP,
+    );
+    return { width: cellW, opacity, transform: [{ scale }] };
   });
-  const opacity = offsetFromCenter.interpolate({
-    inputRange: [-2.5 * cellW, -cellW, -cellW / 2, 0, cellW / 2, cellW, 2.5 * cellW],
-    outputRange: [0.25, 0.42, 0.72, 1, 0.72, 0.42, 0.25],
-    extrapolate: 'clamp',
-  });
+
   return (
     <Pressable
       style={styles.dayItem}
@@ -225,8 +233,8 @@ const DayCell = React.memo(function DayCell({
       onPress={() => onPress(index, dateKey)}
       accessibilityLabel={`${weekday} ${dayNum}`}
     >
-      <Animated.View style={{ width: cellW, opacity, transform: [{ scale }] }}>
-        <AnimatedReanimated.View style={animatedBounceStyle}>
+      <Animated.View style={animatedScrollStyle}>
+        <Animated.View style={animatedBounceStyle}>
           <Text
             style={[
               styles.dayWeekday,
@@ -245,7 +253,7 @@ const DayCell = React.memo(function DayCell({
           >
             {dayNum}
           </Text>
-        </AnimatedReanimated.View>
+        </Animated.View>
         <View style={styles.dayDotRow}>
           <View
             style={[
@@ -271,7 +279,9 @@ export function MealPlanScreen() {
   const [answer, setAnswer] = useState('');
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<{ dateKey: string; mealSlot: MealSlot } | null>(null);
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
+  // Consolidated selectors — minimal re-renders via shallow equality on groups
   const week = useMealMemoryStore((s) => s.week);
   const weekStart = useMealMemoryStore((s) => s.weekStart);
   const pendingIntent = useMealMemoryStore((s) => s.pendingIntent);
@@ -281,18 +291,19 @@ export function MealPlanScreen() {
   const saveStatus = useMealMemoryStore((s) => s.saveStatus);
   const planPreview = useMealMemoryStore((s) => s.planPreview);
   const showPlanReview = useMealMemoryStore((s) => s.showPlanReview);
+  const aiClarification = useMealMemoryStore((s) => s.aiClarification);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Actions are stable references — safe to use directly
   const loadWeek = useMealMemoryStore((s) => s.loadWeek);
-  const loadRules = useMealMemoryStore((s) => s.loadRules);
   const sendIntent = useMealMemoryStore((s) => s.sendIntent);
   const answerIntent = useMealMemoryStore((s) => s.answerIntent);
   const moveEvent = useMealMemoryStore((s) => s.moveEvent);
   const removeEvent = useMealMemoryStore((s) => s.removeEvent);
   const markActual = useMealMemoryStore((s) => s.markActual);
   const feedBack = useMealMemoryStore((s) => s.feedBack);
-  const loadRecents = useMealMemoryStore((s) => s.loadRecents);
-  const requestPlanPreview = useMealMemoryStore((s) => s.requestPlanPreview);
+  const startOrEditAiPlan = useMealMemoryStore((s) => s.startOrEditAiPlan);
+  const answerAiClarification = useMealMemoryStore((s) => s.answerAiClarification);
   const confirmPlan = useMealMemoryStore((s) => s.confirmPlan);
   const cancelPlanReview = useMealMemoryStore((s) => s.cancelPlanReview);
 
@@ -302,7 +313,7 @@ export function MealPlanScreen() {
 
   const today = todayKey();
   const dayScrollRef = useRef<FlatList<string>>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollX = useSharedValue(0);
   const [stripWidth, setStripWidth] = useState(0);
 
   const currentYM = ymKey(today);
@@ -318,29 +329,31 @@ export function MealPlanScreen() {
     return householdMembers.find((m) => m.id === id)?.displayName ?? null;
   }, [selectedMemberIds, householdMembers]);
 
+  // Single init effect — no cascading, no duplicate .catch
+  const initialized = useRef(false);
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
     ensureHousehold()
-      .then(() => {
+      .catch(() => {})
+      .finally(() => {
         if (!weekStart) void loadWeek();
-        void loadRules();
-        void loadRecents();
-      })
-      .catch(() => {
-        if (!weekStart) void loadWeek();
-        void loadRules();
-        void loadRecents();
       });
-  }, [ensureHousehold, loadWeek, loadRules, loadRecents, weekStart]);
+  }, []);
 
   const lastLoadedAt = useRef(0);
   const sawWeek = useRef(false);
-  const requestedYMRef = useRef<string | null>(null);
   useFocusEffect(
     useCallback(() => {
       if (sawWeek.current && Date.now() - lastLoadedAt.current > 30_000) {
         void loadWeek();
       }
     }, [loadWeek]),
+  );
+  useFocusEffect(
+    useCallback(() => {
+      setPaywallOpen(false);
+    }, []),
   );
   useEffect(() => {
     if (weekStart && !busy) {
@@ -359,10 +372,7 @@ export function MealPlanScreen() {
   useEffect(() => {
     if (!weekStart) return;
     const wkYM = ymKey(weekStart);
-    const requested = requestedYMRef.current;
-    if (requested && requested !== wkYM) return;
-    requestedYMRef.current = null;
-    setViewedYM(wkYM);
+    setViewedYM((prev) => (prev === wkYM ? prev : wkYM));
   }, [weekStart]);
 
   const monthDays = useMemo(() => {
@@ -387,9 +397,9 @@ export function MealPlanScreen() {
 
   useEffect(() => {
     if (cellW > 0 && dayScrollRef.current && monthDays.length > 0) {
-      dayScrollRef.current.scrollToOffset({ offset: focusedDayIndex * cellW, animated: true });
+      dayScrollRef.current.scrollToOffset({ offset: focusedDayIndex * cellW, animated: false });
     }
-  }, [focusedDayIndex, cellW, monthDays]);
+  }, [focusedDayIndex, cellW]);
 
   async function handleSend() {
     const text = input.trim();
@@ -462,7 +472,6 @@ export function MealPlanScreen() {
 
   function goToMonth(delta: number) {
     const targetYM = addMonthsYM(currentYM, delta);
-    requestedYMRef.current = targetYM;
     setViewedYM(targetYM);
     setExpanded(null);
     const days = daysInMonth(targetYM);
@@ -506,11 +515,17 @@ export function MealPlanScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <PlanReviewPopup
-        visible={showPlanReview}
+        visible={(showPlanReview || aiClarification !== null) && !paywallOpen}
         preview={planPreview}
         onAccept={() => confirmPlan(planPreview!.previewId)}
-        onEdit={(edits) => requestPlanPreview(edits)}
-        onUpgrade={() => rootNavigation.navigate('Paywall')}
+        onEdit={(edits) => startOrEditAiPlan(edits)}
+        onAnswer={answerAiClarification}
+        clarification={aiClarification}
+        error={error}
+        onUpgrade={() => {
+          setPaywallOpen(true);
+          rootNavigation.navigate('Paywall');
+        }}
         onCancel={cancelPlanReview}
         busy={busy}
       />
@@ -595,8 +610,7 @@ export function MealPlanScreen() {
             />
             {cellW > 0 && (
               <View style={styles.dayStripFade}>
-                <AnimatedFlatList
-                  key={viewedYM}
+                <FlatList
                   ref={dayScrollRef}
                   horizontal
                   data={monthDays}
@@ -614,9 +628,13 @@ export function MealPlanScreen() {
                     offset: cellW * index,
                     index,
                   })}
-                  onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-                    useNativeDriver: false,
-                  })}
+                  onScroll={(e) => {
+                    'worklet';
+                    scrollX.value = e.nativeEvent.contentOffset.x;
+                  }}
+                  onScrollBeginDrag={() => {
+                    'worklet';
+                  }}
                   scrollEventThrottle={16}
                   onMomentumScrollEnd={handleDayMomentumScrollEnd}
                   contentContainerStyle={{
@@ -682,7 +700,6 @@ export function MealPlanScreen() {
                         }}
                         onLongPress={() => {
                           if (!meal) return;
-                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                           setExpanded(
                             isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey },
                           );

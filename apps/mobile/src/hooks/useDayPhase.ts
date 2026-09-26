@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { colors } from '../theme';
+
 export type DayPhase = 'morning' | 'afternoon' | 'evening' | 'night';
 
 /** Morning 5–11, afternoon 11–17, evening 17–21, night otherwise. */
@@ -11,9 +13,9 @@ export function resolveDayPhase(hour: number): DayPhase {
 }
 
 export const PHASE_TINTS: Record<DayPhase, string> = {
-  morning: '#F8F8F0',
-  afternoon: '#F8F8F0',
-  evening: '#F5F4EA',
+  morning: colors.background,
+  afternoon: colors.background,
+  evening: colors.background,
   night: '#17171A',
 };
 

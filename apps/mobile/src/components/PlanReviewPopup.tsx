@@ -1,27 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { Keyboard, Modal, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
-import type { PlanPreviewResponse } from '@meal-rescue/shared-types';
+import type { AiPlannerQuestion, PlanPreviewResponse } from '@meal-rescue/shared-types';
 
-import { colors, fonts, radius, spacing, typography } from '../theme';
+import { colors, spacing, typography } from '../theme';
 import { spring } from '../theme/motion';
 import { Text } from './AppText';
 import { PrimaryButton } from './PrimaryButton';
 import { XIcon } from './icons';
-import { Pressable } from './motion/Pressable';
 
 interface PlanReviewPopupProps {
   visible: boolean;
   preview: PlanPreviewResponse | null;
+  clarification: { message: string; questions: AiPlannerQuestion[] } | null;
   onAccept: () => void;
   onEdit: (edits: string) => void;
+  onAnswer: (answer: string) => void;
   onUpgrade: () => void;
   onCancel: () => void;
   busy?: boolean;
@@ -30,15 +30,16 @@ interface PlanReviewPopupProps {
 export function PlanReviewPopup({
   visible,
   preview,
+  clarification,
   onAccept,
   onEdit,
+  onAnswer,
   onUpgrade,
   onCancel,
   busy = false,
 }: PlanReviewPopupProps) {
   const scale = useSharedValue(0.8);
   const overlayOpacity = useSharedValue(0);
-  const isEditMode = useSharedValue(0);
   const [editText, setEditText] = useState('');
 
   useEffect(() => {
@@ -48,28 +49,25 @@ export function PlanReviewPopup({
     } else {
       scale.value = withSpring(0.8, spring.gentle);
       overlayOpacity.value = withTiming(0, { duration: 150 });
-    }
-  }, [visible]);
-
-  useEffect(() => {
-    if (!visible) {
-      isEditMode.value = withSpring(0, spring.gentle);
       setEditText('');
     }
   }, [visible]);
 
-  const handleEditPress = () => {
-    isEditMode.value = withSpring(1, spring.gentle);
-    runOnJS(() => Keyboard.dismiss())();
+  const handleSend = () => {
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    Keyboard.dismiss();
+    setEditText('');
+    if (clarification) {
+      onAnswer(trimmed);
+    } else {
+      onEdit(trimmed);
+    }
   };
 
-  const handleApplyEdit = () => {
-    if (editText.trim()) {
-      isEditMode.value = withSpring(0, spring.gentle);
-      runOnJS(() => Keyboard.dismiss())();
-      onEdit(editText.trim());
-      setEditText('');
-    }
+  const handleAnswerOption = (option: string) => {
+    Keyboard.dismiss();
+    onAnswer(option);
   };
 
   const handleAccept = () => {
@@ -84,8 +82,6 @@ export function PlanReviewPopup({
     return slot.charAt(0).toUpperCase() + slot.slice(1);
   };
 
-  if (!preview) return null;
-
   const animatedOverlay = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
   }));
@@ -94,103 +90,144 @@ export function PlanReviewPopup({
     transform: [{ scale: scale.value }],
   }));
 
-  const editModeOpacity = useAnimatedStyle(() => ({
-    opacity: isEditMode.value,
-    height: isEditMode.value,
-  }));
-
-  const normalModeOpacity = useAnimatedStyle(() => ({
-    opacity: withSpring(1 - isEditMode.value, spring.gentle),
-    height: withSpring(1 - isEditMode.value, spring.gentle),
-  }));
+  const showingClarification = visible && clarification !== null;
+  const showingPreview = visible && preview !== null;
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onCancel}>
       <Animated.View style={[styles.backdrop, animatedOverlay]}>
         <Animated.View style={[styles.cardContainer, animatedCard]}>
+          <View style={styles.header}>
+            <Text style={styles.title}>
+              {showingClarification ? 'One Quick Question' : 'Review Your Plan'}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              onPress={onCancel}
+              disabled={busy}
+              style={styles.closeButton}
+            >
+              <XIcon size={22} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
           <ScrollView
             contentContainerStyle={styles.cardContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Review Your Plan</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                onPress={onCancel}
-                disabled={busy}
-                style={styles.closeButton}
-              >
-                <XIcon size={22} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-
-            <Text style={styles.message}>{preview.message}</Text>
-
-            {preview.daysUsed > 0 && (
-              <View style={styles.daysCounter}>
-                <Text style={styles.daysCounterLabel}>Days used this month</Text>
-                <Text style={styles.daysCounterValue}>
-                  {preview.daysUsed} of {preview.daysUsed + preview.daysRemaining}
-                </Text>
+            {showingClarification ? (
+              <View style={styles.clarificationSection}>
+                <Text style={styles.clarificationMessage}>{clarification.message}</Text>
+                {clarification.questions.map((question, qIndex) => (
+                  <View key={question.id ?? `q-${qIndex}`} style={styles.questionCard}>
+                    <Text style={styles.questionText}>{question.question}</Text>
+                    {question.options && question.options.length > 0 && (
+                      <View style={styles.optionRow}>
+                        {question.options.map((option) => (
+                          <Pressable
+                            key={option}
+                            accessibilityRole="button"
+                            accessibilityLabel={option}
+                            onPress={() => handleAnswerOption(option)}
+                            disabled={busy}
+                            style={styles.optionChip}
+                          >
+                            <Text style={styles.optionChipText}>{option}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))}
               </View>
-            )}
+            ) : null}
 
-            <Animated.View style={[styles.mealsSection, normalModeOpacity]}>
-              {preview.days.map((day, _dayIndex) => (
-                <View key={day.dateKey} style={styles.dayCard}>
-                  <Text style={styles.dayHeader}>
-                    {new Date(day.dateKey).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                  {day.meals.map((meal, _mealIndex) => (
-                    <View key={meal.id} style={styles.mealRow}>
-                      <View style={styles.mealSlot}>
-                        <Text style={styles.mealSlotLabel}>{formatSlot(meal.mealSlot)}</Text>
-                      </View>
-                      <View style={styles.mealInfo}>
-                        <Text style={styles.mealConcept}>{meal.name || meal.recipeName}</Text>
-                        {meal.ingredients && meal.ingredients.length > 0 && (
-                          <Text style={styles.mealReason}>
-                            {meal.ingredients.slice(0, 3).join(', ')}
-                            {meal.ingredients.length > 3 ? '...' : ''}
-                          </Text>
-                        )}
-                      </View>
+            {showingPreview && preview ? (
+              <>
+                <Text style={styles.message}>{preview.message}</Text>
+
+                {preview.daysUsed > 0 && (
+                  <View style={styles.daysCounter}>
+                    <Text style={styles.daysCounterLabel}>Days used this month</Text>
+                    <Text style={styles.daysCounterValue}>
+                      {preview.daysUsed} of {preview.daysUsed + preview.daysRemaining}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.mealsSection}>
+                  {preview.days.map((day) => (
+                    <View key={day.dateKey} style={styles.dayCard}>
+                      <Text style={styles.dayHeader}>
+                        {new Date(day.dateKey).toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                      {day.meals.map((meal) => (
+                        <View key={meal.id} style={styles.mealRow}>
+                          <View style={styles.mealSlot}>
+                            <Text style={styles.mealSlotLabel}>{formatSlot(meal.mealSlot)}</Text>
+                          </View>
+                          <View style={styles.mealInfo}>
+                            <Text style={styles.mealConcept}>{meal.name || meal.recipeName}</Text>
+                            {meal.ingredients && meal.ingredients.length > 0 && (
+                              <Text style={styles.mealReason}>
+                                {meal.ingredients.slice(0, 3).join(', ')}
+                                {meal.ingredients.length > 3 ? '...' : ''}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      ))}
                     </View>
                   ))}
                 </View>
-              ))}
-            </Animated.View>
+              </>
+            ) : null}
 
-            <Animated.View style={[styles.editSection, editModeOpacity]}>
-              <Text style={styles.editLabel}>What would you like to change?</Text>
-              <TextInput
-                style={styles.editInput}
-                placeholder="Tell me what to change..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                value={editText}
-                onChangeText={setEditText}
-                autoFocus
-                returnKeyType="done"
-                blurOnSubmit={false}
-              />
-              <PrimaryButton
-                label="Apply Changes"
-                onPress={handleApplyEdit}
-                variant="primary"
-                busy={busy}
-                disabled={busy || !editText.trim()}
-              />
-            </Animated.View>
+            <View style={styles.promptSection}>
+              <Text style={styles.promptLabel}>
+                {showingClarification ? 'Type your answer' : 'Ask to adjust the plan'}
+              </Text>
+              <View style={styles.promptRow}>
+                <TextInput
+                  style={styles.promptInput}
+                  placeholder={
+                    showingClarification ? 'Type your answer…' : 'e.g. add dinner for Friday'
+                  }
+                  placeholderTextColor={colors.textSecondary}
+                  value={editText}
+                  onChangeText={setEditText}
+                  returnKeyType="send"
+                  onSubmitEditing={handleSend}
+                  blurOnSubmit
+                  editable={!busy}
+                />
+                <PrimaryButton
+                  label="Send"
+                  onPress={handleSend}
+                  variant="primary"
+                  busy={busy}
+                  disabled={busy || !editText.trim()}
+                  style={styles.sendButton}
+                />
+              </View>
+            </View>
 
             <View style={styles.buttonRow}>
-              {preview.requiresPayment ? (
+              {showingClarification ? (
+                <PrimaryButton
+                  label="Cancel"
+                  onPress={onCancel}
+                  variant="secondary"
+                  disabled={busy}
+                  style={styles.actionButton}
+                />
+              ) : preview?.requiresPayment ? (
                 <PrimaryButton
                   label="Upgrade to Pro"
                   onPress={handleAccept}
@@ -200,23 +237,14 @@ export function PlanReviewPopup({
                   style={styles.actionButton}
                 />
               ) : (
-                <>
-                  <PrimaryButton
-                    label="Accept Plan"
-                    onPress={handleAccept}
-                    variant="primary"
-                    busy={busy}
-                    disabled={busy}
-                    style={styles.actionButton}
-                  />
-                  <PrimaryButton
-                    label="Edit"
-                    onPress={handleEditPress}
-                    variant="secondary"
-                    disabled={busy}
-                    style={styles.editButton}
-                  />
-                </>
+                <PrimaryButton
+                  label="Accept Plan"
+                  onPress={handleAccept}
+                  variant="primary"
+                  busy={busy}
+                  disabled={busy || !preview}
+                  style={styles.actionButton}
+                />
               )}
             </View>
 
@@ -242,13 +270,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   cardContainer: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 440,
+    maxHeight: '86%',
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: 24,
     overflow: 'hidden',
     shadowColor: colors.text,
     shadowOffset: { width: 0, height: 8 },
@@ -263,7 +292,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   title: {
     ...typography.heading,
@@ -282,12 +313,49 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     lineHeight: 22,
   },
+  clarificationSection: {
+    marginBottom: spacing.md,
+  },
+  clarificationMessage: {
+    ...typography.body,
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+    lineHeight: 22,
+  },
+  questionCard: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  questionText: {
+    ...typography.subhead,
+    color: colors.mealPlanInk,
+    marginBottom: spacing.sm,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  optionChip: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.mealPlanSage,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  optionChipText: {
+    ...typography.callout,
+    color: colors.mealPlanInk,
+  },
   daysCounter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.mealPlanSage,
-    borderRadius: radius.md,
+    borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
@@ -303,7 +371,7 @@ const styles = StyleSheet.create({
   mealsSection: {},
   dayCard: {
     backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
+    borderRadius: 12,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -340,26 +408,35 @@ const styles = StyleSheet.create({
     color: colors.mealPlanSecondary,
     marginTop: spacing.xs,
   },
-  editSection: {
+  promptSection: {
     marginTop: spacing.lg,
     paddingTop: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  editLabel: {
+  promptLabel: {
     ...typography.caption,
     color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  editInput: {
+  promptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  promptInput: {
+    flex: 1,
     backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
     fontSize: 16,
-    fontFamily: fonts.regular,
+    fontFamily: 'System',
     color: colors.textPrimary,
-    minHeight: 100,
-    textAlignVertical: 'top',
+    minHeight: 44,
+  },
+  sendButton: {
+    minWidth: 88,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -367,9 +444,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   actionButton: {
-    flex: 1,
-  },
-  editButton: {
     flex: 1,
   },
   cancelButton: {

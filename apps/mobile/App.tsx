@@ -1,16 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useFonts } from 'expo-font';
-import * as WebBrowser from 'expo-web-browser';
-import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
-
-// Must run at root level so the auth-session callback is intercepted on cold start
-WebBrowser.maybeCompleteAuthSession();
-import { Animated, LogBox, StyleSheet, View } from 'react-native';
-import { Text } from './src/components/AppText';
-import { Image } from 'expo-image';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-
+import {
+  BricolageGrotesque_600SemiBold,
+  BricolageGrotesque_700Bold,
+} from '@expo-google-fonts/bricolage-grotesque';
+import { DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -18,7 +10,6 @@ import {
   Inter_700Bold,
   Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
-import { DMSerifDisplay_400Regular } from '@expo-google-fonts/dm-serif-display';
 import {
   Raleway_400Regular,
   Raleway_500Medium,
@@ -26,7 +17,43 @@ import {
   Raleway_700Bold,
   Raleway_800ExtraBold,
 } from '@expo-google-fonts/raleway';
-import { BricolageGrotesque_700Bold } from '@expo-google-fonts/bricolage-grotesque';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
+import { Image } from 'expo-image';
+import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
+import React, { useEffect } from 'react';
+import { Animated, LogBox, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { Text } from './src/components/AppText';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { navigationRef } from './src/components/aftercare/navigation';
+import { AppNavigator } from './src/navigation/AppNavigator';
+import { initializeAdsIfConfigured } from './src/services/ads.service';
+import type { AftercareNotificationPayload } from './src/services/onesignal.service';
+import {
+  initializeOneSignalIfConfigured,
+  logInToOneSignal,
+  logOutFromOneSignal,
+  onActionButtonClick,
+  onAftercareNotificationClick,
+  onIncomingPush,
+  onNotificationClick,
+  parseDeepLink,
+  registerPushSubscriptionVerifier,
+} from './src/services/onesignal.service';
+import {
+  configurePurchasesIfReady,
+  logInToRevenueCat,
+  logOutFromRevenueCat,
+} from './src/services/revenuecat.service';
+import { useAuthStore } from './src/stores/auth.store';
+import { InAppNotificationKind, useNotificationsStore } from './src/stores/notifications.store';
+import { colors } from './src/theme';
+
+// Must run at root level so the auth-session callback is intercepted on cold start
+WebBrowser.maybeCompleteAuthSession();
 
 // The RevenueCat SDK logs every network failure (offline/emulator without
 // internet) via console.error, which LogBox surfaces as red banners that also
@@ -37,32 +64,6 @@ LogBox.ignoreLogs([
   "TurboModuleRegistry.getEnforcing(...): 'OneSignal'",
   "TurboModuleRegistry.getEnforcing(...): 'RNGoogleMobileAdsModule'",
 ]);
-
-import { navigationRef } from './src/components/aftercare/navigation';
-import { colors } from './src/theme';
-import { AppNavigator } from './src/navigation/AppNavigator';
-import { ErrorBoundary } from './src/components/ErrorBoundary';
-import { initializeAdsIfConfigured } from './src/services/ads.service';
-import type { AftercareNotificationPayload } from './src/services/onesignal.service';
-import {
-  initializeOneSignalIfConfigured,
-  logInToOneSignal,
-  logOutFromOneSignal,
-  onAftercareNotificationClick,
-  onActionButtonClick,
-  onIncomingPush,
-  onNotificationClick,
-  parseDeepLink,
-  registerPushSubscriptionVerifier,
-} from './src/services/onesignal.service';
-import { dismissTonight } from './src/services/notifications.api';
-import {
-  configurePurchasesIfReady,
-  logInToRevenueCat,
-  logOutFromRevenueCat,
-} from './src/services/revenuecat.service';
-import { useAuthStore } from './src/stores/auth.store';
-import { InAppNotificationKind, useNotificationsStore } from './src/stores/notifications.store';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,7 +106,11 @@ function BootScreen() {
   return (
     <View style={styles.boot}>
       <Animated.View style={{ transform: [{ scale: pulse }] }}>
-        <Image source={require('./assets/mascot.png')} style={styles.bootImage} contentFit="contain" />
+        <Image
+          source={require('./assets/logo.png')}
+          style={styles.bootImage}
+          contentFit="contain"
+        />
       </Animated.View>
       <Text style={styles.bootText}>Warming up the kitchen</Text>
       <View style={styles.dotsRow}>
@@ -153,6 +158,7 @@ export default function App() {
     Raleway_700Bold,
     Raleway_800ExtraBold,
     BricolageGrotesque_700Bold,
+    BricolageGrotesque_600SemiBold,
   });
 
   useEffect(() => {
@@ -186,27 +192,62 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // Handle notification action button clicks (Make it, Later, Not tonight)
+  // Handle notification action button clicks
   useEffect(() => {
     const unsubscribe = onActionButtonClick((payload) => {
-      switch (payload.actionId) {
-        case 'make_it': {
-          // Deep link to rescue screen - navigate to home tab
-          if (navigationRef.isReady()) {
-            navigationRef.resetRoot({ index: 0, routes: [{ name: 'Tabs' }] });
+      const { actionId } = payload;
+      const navigateToDeepLink = () => {
+        if (payload.deepLink && navigationRef.isReady()) {
+          const parsed = parseDeepLink(payload.deepLink);
+          if (parsed) {
+            navigationRef.resetRoot({ index: 0, routes: [{ name: parsed.route }] });
           }
+        }
+      };
+
+      switch (actionId) {
+        // ---- Spoiler Alert buttons ----
+        case 'make_it': {
+          navigateToDeepLink();
           break;
         }
         case 'later': {
-          // Snooze rescue window for 4 hours
+          // Snooze the spoiler alert for 4 hours (backend /snooze).
           void import('./src/services/notifications.api').then(({ requestNotificationSnooze }) =>
-            requestNotificationSnooze('rescue_window', 4).catch(() => {}),
+            requestNotificationSnooze('spoiler_alert', 4).catch(() => {}),
           );
           break;
         }
         case 'not_tonight': {
-          // Record dismissal signal and suppress for rest of evening
-          void dismissTonight().catch(() => {});
+          // Dismiss for the rest of the day (max snooze window: 24h).
+          void import('./src/services/notifications.api').then(({ requestNotificationSnooze }) =>
+            requestNotificationSnooze('spoiler_alert', 24).catch(() => {}),
+          );
+          break;
+        }
+
+        // ---- Aftercare buttons ----
+        // The answer IS the interaction - record it, don't reopen the
+        // check-in screen (which would ask the same thing again).
+        case 'loved_it':
+        case 'was_ok':
+        case 'not_great': {
+          // Record the user's satisfaction so recommendations learn from it.
+          if (payload.rescueId) {
+            void import('./src/services/notifications.api').then(({ submitAftercareFeedback }) =>
+              submitAftercareFeedback(payload.rescueId as string, actionId).catch(() => {}),
+            );
+          }
+          break;
+        }
+
+        // ---- Generic buttons ----
+        case 'open_app': {
+          navigateToDeepLink();
+          break;
+        }
+        case 'dismiss': {
+          // Nothing to do - user chose to ignore.
           break;
         }
       }
@@ -232,7 +273,6 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onIncomingPush((push) => {
       const kind: InAppNotificationKind =
-        push.kind === 'rescue_window' ||
         push.kind === 'spoiler_alert' ||
         push.kind === 'aftercare' ||
         push.kind === 'promo' ||

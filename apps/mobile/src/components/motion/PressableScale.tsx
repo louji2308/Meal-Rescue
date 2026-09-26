@@ -1,5 +1,18 @@
-import React, { useRef } from 'react';
-import { Animated, Pressable, PressableProps, StyleSheet, ViewStyle } from 'react-native';
+import React from 'react';
+import {
+  type PressableProps,
+  Pressable as RNPressable,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+
+import { spring } from '../../theme/motion';
 
 interface PressableScaleProps extends Omit<PressableProps, 'style'> {
   /** Scale applied while pressed (default 0.98). */
@@ -7,7 +20,7 @@ interface PressableScaleProps extends Omit<PressableProps, 'style'> {
   /** A tint overlay shown while pressed (opacity of a color wash). */
   pressedTintOpacity?: number;
   pressedTintColor?: string;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }
 
@@ -29,22 +42,24 @@ export function PressableScale({
   disabled,
   ...rest
 }: PressableScaleProps) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const tint = useRef(new Animated.Value(0)).current;
+  const pressed = useSharedValue(0);
 
-  const animateIn = () => {
-    Animated.parallel([
-      Animated.timing(scale, { toValue: scaleTo, duration: 120, useNativeDriver: true }),
-      Animated.timing(tint, { toValue: 1, duration: 120, useNativeDriver: true }),
-    ]).start();
-  };
+  const animated = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: withSpring(
+          pressed.value ? scaleTo : 1,
+          pressed.value ? { damping: 18, stiffness: 180, mass: 1 } : spring.gentle,
+        ),
+      },
+    ],
+  }));
 
-  const animateOut = () => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 4 }),
-      Animated.timing(tint, { toValue: 0, duration: 140, useNativeDriver: true }),
-    ]).start();
-  };
+  const tintStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(pressed.value ? pressedTintOpacity : 0, {
+      duration: pressed.value ? 120 : 140,
+    }),
+  }));
 
   return (
     <AnimatedPressable
@@ -52,28 +67,26 @@ export function PressableScale({
       disabled={disabled}
       onPressIn={(e) => {
         if (disabled) return;
-        animateIn();
+        pressed.value = 1;
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        animateOut();
+        pressed.value = 0;
         onPressOut?.(e);
       }}
-      style={[{ transform: [{ scale }] } as ViewStyle, style]}
+      style={[style, animated] as any}
     >
       {pressedTintOpacity > 0 ? (
         <Animated.View
           pointerEvents="none"
           style={[
-            StyleSheet.absoluteFill,
             {
+              position: 'absolute',
+              inset: 0,
               backgroundColor: pressedTintColor,
-              opacity: tint.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, pressedTintOpacity],
-              }),
               borderRadius: 999,
             },
+            tintStyle,
           ]}
         />
       ) : null}
@@ -82,4 +95,4 @@ export function PressableScale({
   );
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);

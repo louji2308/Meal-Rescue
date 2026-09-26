@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from '../AppText';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -12,6 +11,8 @@ import Animated, {
 import { haptics } from '../../services/haptics';
 import { colors, spacing } from '../../theme';
 import { spring } from '../../theme/motion';
+import { Text } from '../AppText';
+import { FadeInView } from '../motion/FadeInView';
 
 /** Time until the addition chip lands; siblings delay entrances past this. */
 export const PLATE_DIFF_LAND_MS = 1050;
@@ -54,31 +55,36 @@ export function PlateDiffReveal({ foods, additionLabel }: PlateDiffRevealProps) 
   }));
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.mealLine}>Your meal</Text>
-      <View style={styles.foodsRow}>
-        {foods.slice(0, 6).map((food) => (
-          <Animated.View key={food} style={[styles.foodChip, foodStyle]}>
-            <Text style={styles.foodText}>{food}</Text>
+    <FadeInView duration={260} style={styles.reveal}>
+      <View style={styles.wrap}>
+        <Text style={styles.mealLine}>Your meal</Text>
+        <View style={styles.foodsRow}>
+          {foods.slice(0, 6).map((food) => (
+            <Animated.View key={food} style={[styles.foodChip, foodStyle]}>
+              <Text style={styles.foodText}>{food}</Text>
+            </Animated.View>
+          ))}
+          {foods.length > 6 ? (
+            <Animated.View style={[styles.foodChip, foodStyle]}>
+              <Text style={styles.foodText}>+{foods.length - 6}</Text>
+            </Animated.View>
+          ) : null}
+        </View>
+        <View style={styles.additionSlot}>
+          <Animated.View style={[styles.ring, ringStyle]} pointerEvents="none" />
+          <Animated.View style={[styles.additionChip, dropStyle]}>
+            <Text style={styles.additionText}>{additionLabel}</Text>
           </Animated.View>
-        ))}
-        {foods.length > 6 ? (
-          <Animated.View style={[styles.foodChip, foodStyle]}>
-            <Text style={styles.foodText}>+{foods.length - 6}</Text>
-          </Animated.View>
-        ) : null}
+        </View>
       </View>
-      <View style={styles.additionSlot}>
-        <Animated.View style={[styles.ring, ringStyle]} pointerEvents="none" />
-        <Animated.View style={[styles.additionChip, dropStyle]}>
-          <Text style={styles.additionText}>{additionLabel}</Text>
-        </Animated.View>
-      </View>
-    </View>
+    </FadeInView>
   );
 }
 
 const styles = StyleSheet.create({
+  reveal: {
+    transform: [{ scale: 1.03 }],
+  },
   wrap: {
     marginBottom: spacing.md,
   },

@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 import type {
   AdEventType as GmaAdEventType,
   InterstitialAd as GmaInterstitialAd,
@@ -48,6 +48,15 @@ function getAdMob(): GmaModule | null {
   if (_gmaModule !== undefined) return _gmaModule;
   if (_gmaLoadError) return null;
   try {
+    // The package entry modules call TurboModuleRegistry.getEnforcing at
+    // import time, which Metro/LogBox reports as a red console error before
+    // the throw reaches this catch when the native SDK isn't in the binary.
+    // Probe quietly first so unlinked builds never evaluate the package.
+    if (TurboModuleRegistry.get('RNGoogleMobileAdsModule') == null) {
+      _gmaLoadError = true;
+      _gmaModule = null;
+      return null;
+    }
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     _gmaModule = require('react-native-google-mobile-ads');
     if (!_gmaModule) _gmaModule = null;

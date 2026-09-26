@@ -1,8 +1,9 @@
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 
-import { api } from './api';
 import type { AuthTokens } from '@meal-rescue/shared-types';
+
+import { api } from './api';
 
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
 
@@ -36,11 +37,17 @@ export async function signInWithGoogle(): Promise<AuthTokens | null> {
     redirectUri: GOOGLE_REDIRECT_URI,
     scopes: ['openid', 'profile', 'email'],
     responseType: AuthSession.ResponseType.Code,
+    extraParams: { prompt: 'consent' },
   });
 
   const authUrl = await request.makeAuthUrlAsync(discovery);
   console.log('[google-auth] authUrl =', authUrl);
-  console.log('[google-auth] state =', request.state, 'codeVerifier set =', Boolean(request.codeVerifier));
+  console.log(
+    '[google-auth] state =',
+    request.state,
+    'codeVerifier set =',
+    Boolean(request.codeVerifier),
+  );
 
   // Route the auth request through the Expo proxy start URL so Google only
   // ever sees the https:// redirect URI it was configured with.
@@ -50,6 +57,7 @@ export async function signInWithGoogle(): Promise<AuthTokens | null> {
   })}`;
   console.log('[google-auth] startUrl =', startUrl);
 
+  await WebBrowser.coolDownAsync();
   const result = await WebBrowser.openAuthSessionAsync(startUrl, LOCAL_RETURN_URL);
   console.log('[google-auth] openAuthSessionAsync result =', JSON.stringify(result));
 
@@ -83,10 +91,7 @@ export async function signInWithGoogle(): Promise<AuthTokens | null> {
   return null;
 }
 
-async function exchangeGoogleCode(
-  code: string,
-  codeVerifier?: string,
-): Promise<AuthTokens> {
+async function exchangeGoogleCode(code: string, codeVerifier?: string): Promise<AuthTokens> {
   const res = await api.post<AuthTokens>('/api/v1/auth/google', {
     code,
     redirectUri: GOOGLE_REDIRECT_URI,

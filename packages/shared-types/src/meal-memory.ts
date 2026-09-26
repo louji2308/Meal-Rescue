@@ -7,7 +7,7 @@
  * request is classified into a structured intent, validated server-side,
  * and only HIGH-confident, low-risk mutations act without confirmation.
  */
-import type { DietaryRestriction, EffortLevel, ISO8601, UUID, SubscriptionTier } from './index';
+import type { DietaryRestriction, EffortLevel, ISO8601, SubscriptionTier, UUID } from './index';
 
 // ---------------------------------------------------------------------------
 // Calendar primitives
@@ -616,13 +616,7 @@ export interface PlanConfirmResponse {
 export type MealSuggestionMatchGrade = 'high' | 'medium' | 'low';
 
 export type MealSuggestionReasonKind =
-  | 'affinity'
-  | 'expiry'
-  | 'leftover'
-  | 'effort'
-  | 'favorite'
-  | 'variety'
-  | 'exposure';
+  'affinity' | 'expiry' | 'leftover' | 'effort' | 'favorite' | 'variety' | 'exposure';
 
 export interface MealSuggestionReason {
   kind: MealSuggestionReasonKind;
@@ -740,4 +734,60 @@ export interface MealMemorySummaryResponse {
   /** The top suggestion for the week, if any exists. */
   highlight: { concept: string; message: string } | null;
   engagement: { recordedMeals: number; plannedMeals: number; recordRatio: number };
+}
+
+// ---------------------------------------------------------------------------
+// AI Planner — human-like conversational meal planning
+// ---------------------------------------------------------------------------
+//
+// A conversational endpoint (POST /ai-plan) that plans meals like a thoughtful
+// human would: it reads the full message, leans on taste memory and the last
+// two weeks of rescues, treats the kitchen as context (never a cage), asks a
+// question only when it truly matters (which day, which slots, base meal vs
+// varied), and keeps a session so a follow-up edit reuses the previous output
+// instead of restarting.
+
+export type AiPlannerStatus = 'ready' | 'clarification';
+
+export interface AiPlannerQuestion {
+  id: string;
+  question: string;
+  /** Tap-ready answers the UI can offer instead of a free-text field. */
+  options?: string[];
+  /** When true, the user may also type their own answer. */
+  freeText?: boolean;
+}
+
+export interface AiPlannerMeal {
+  dateKey: string; // YYYY-MM-DD
+  mealSlot: MealSlot;
+  concept: string;
+  ingredients: string[];
+  effort: EffortLevel | null;
+  /** True when the meal is the shared "base meal" of the day/plan. */
+  baseMeal: boolean;
+  usesLeftover: boolean;
+  note: string | null;
+}
+
+export interface AiPlannerStartRequest {
+  text: string;
+}
+
+export interface AiPlannerReplyRequest {
+  text: string;
+}
+
+export interface AiPlannerResponse {
+  sessionId: UUID;
+  status: AiPlannerStatus;
+  message: string;
+  /** Only present when status === 'clarification'. */
+  questions: AiPlannerQuestion[];
+  /**
+   * Only present when status === 'ready'. Mirrors the deterministic
+   * PlanPreviewResponse contract (incl `previewId`) so the existing
+   * POST /plan-confirm persistence path works unchanged.
+   */
+  preview: PlanPreviewResponse | null;
 }

@@ -73,23 +73,21 @@ export const colors = {
   softYellow: '#C4982A',
   /** Soft purple — signal color for unused items. */
   softPurple: '#8B6DAF',
-  /** Soft peach — warm accent for kitchen actions. */
-  softPeach: '#D4956A',
   /** Soft violet — fallback signal color. */
   softViolet: '#7E6AAF',
   /**
    * Home / Rescue tab — premium editorial palette.
-   * Warm white foundation, restrained blush/sage/peach tints, charcoal ink.
+   * Pure white foundation, light neutral grey tints, charcoal ink.
    * The cat is no longer the hero; the rescue action is.
    */
-  /** Page background — warm white, never clinical white. */
-  homeBackground: '#F8F8F0',
-  /** Soft warm parchment — main "What's on your plate?" hero. Same warm-paper family as the background, no pink. */
-  homeCardBlush: '#F1EDDF',
-  /** Soft warm sand — Scan leftovers quick rescue card. Warm-neutral, no green. */
-  homeCardSage: '#F4F1E7',
-  /** Soft desaturated cream — Use pantry quick rescue card. */
-  homeCardPeach: '#F9ECE7',
+  /** Page background — pure white, no warm tones. */
+  homeBackground: '#FFFFFF',
+  /** Soft neutral grey — main "What's on your plate?" hero. Same grey family as primaryLight, no pink. */
+  homeCardBlush: '#F4F4F6',
+  /** Soft neutral grey — Scan leftovers quick rescue card. No green. */
+  homeCardSage: '#F4F4F6',
+  /** Soft neutral grey — Use pantry quick rescue card. */
+  homeCardPeach: '#F4F4F6',
   /** White surface — image cards, small controls, needs-rescuing cards. */
   homeSurface: '#FFFFFF',
   /** Charcoal ink — primary text, reinforces the quiet editorial look. */
@@ -112,16 +110,16 @@ export const colors = {
   homeAlert: '#D95C54',
   /** Unselected bottom-navigation icon/label tone. */
   homeNavInactive: '#8C8C87',
-  /** Warm neutral fill for chips/selected pills in the rescue flow. */
-  homeTintNeutral: '#F1EFE6',
+  /** Neutral grey fill for chips/selected pills in the rescue flow. */
+  homeTintNeutral: '#F4F4F6',
   /** Charcoal accent for the deeper rescue-flow screens (buttons, links, icons). */
   rescueAccent: '#182028',
 
   // ─────────────────────────────────────────────────────
   // Kitchen tab — inherits Home palette, no new dominant color.
   // ─────────────────────────────────────────────────────
-  /** Kitchen page background — warm white (#F8F8F0), same as Home. */
-  kitchenBackground: '#F8F8F0',
+  /** Kitchen page background — pure white, no warm tones. */
+  kitchenBackground: '#FFFFFF',
   /** Kitchen surface — ingredient cards, search bar. */
   kitchenSurface: '#FFFFFF',
   /** Kitchen charcoal ink — primary text, same as Home. */
@@ -140,20 +138,20 @@ export const colors = {
   kitchenPillActive: '#182028',
   /** Kitchen pill unselected background. */
   kitchenPillBg: 'rgba(255,255,255,0.70)',
-  /** Kitchen attention card background — soft blush. */
-  kitchenAttention: '#F8F0F0',
+  /** Kitchen attention card background — neutral grey. */
+  kitchenAttention: '#F4F4F6',
   /** Kitchen attention text — expiry alert. */
   kitchenAlert: '#D95C54',
-  /** Kitchen sage tint — fresh items. */
-  kitchenSage: '#EEF4EC',
+  /** Kitchen neutral tint — fresh items. */
+  kitchenSage: '#F4F4F6',
   /** Kitchen success — fresh state. */
   kitchenFresh: '#5C7A4B',
 
   // ─────────────────────────────────────────────────────
   // Meal Plan tab — editorial palette per design spec.
   // ─────────────────────────────────────────────────────
-  /** Meal Plan page background — warm white (#F8F8F0). */
-  mealPlanBackground: '#F8F8F0',
+  /** Meal Plan page background — pure white. */
+  mealPlanBackground: '#FFFFFF',
   /** Meal Plan surface — cards, white areas. */
   mealPlanSurface: '#FFFFFF',
   /** Meal Plan primary ink — charcoal (#161616). */
@@ -162,14 +160,14 @@ export const colors = {
   mealPlanSecondary: '#6F6F6F',
   /** Meal Plan charcoal — buttons, active elements (#182028). */
   mealPlanCharcoal: '#182028',
-  /** Meal Plan soft sage — planned meals pill bg (#EEF4EC). */
-  mealPlanSage: '#EEF4EC',
+  /** Meal Plan neutral grey — planned meals pill bg. */
+  mealPlanSage: '#F4F4F6',
   /** Meal Plan sage text — planned pill text (#36523A). */
-  mealPlanSageText: '#36523A',
-  /** Meal Plan soft blush — suggested meals pill bg (#F8F0F0). */
-  mealPlanBlush: '#F8F0F0',
+  mealPlanSageText: '#161616',
+  /** Meal Plan soft grey — suggested meals pill bg. */
+  mealPlanBlush: '#F4F4F6',
   /** Meal Plan blush text — suggested pill text (#6A4B4B). */
-  mealPlanBlushText: '#6A4B4B',
+  mealPlanBlushText: '#555550',
   /** Meal Plan alert — expiry, attention (#D95C54). */
   mealPlanAlert: '#D95C54',
   /** Meal Plan divider — subtle separator. */
@@ -202,6 +200,10 @@ export const fonts = {
   serif: 'Raleway_400Regular',
   /** Display headings on the Home tab — Bricolage Grotesque bold. */
   display: 'BricolageGrotesque_700Bold',
+  /** Slightly lighter display weight — Bricolage Grotesque semibold. */
+  displaySemibold: 'BricolageGrotesque_600SemiBold',
+  /** Editorial serif — DM Serif Display 400 (loaded in App.tsx). */
+  serifDisplay: 'DMSerifDisplay_400Regular',
 } as const;
 
 /** 4/8/12/16/24/32 rhythm. Existing keys (xs/sm/md/lg/xl) are unchanged. */

@@ -1,21 +1,21 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Text } from '../../components/AppText';
-
 import type { CommonTableResult } from '@meal-rescue/shared-types';
 
+import { Text } from '../../components/AppText';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { FadeInView } from '../../components/motion/FadeInView';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { getSharedMeal, splitReached, startCooking } from '../../services/common-table.api';
+import { haptics } from '../../services/haptics';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
-import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
  * Plan & Cook — step 2 of the Common Table flow. Starts as the plan preview
@@ -58,7 +58,9 @@ export function PlanCookScreen() {
         }
         attempts++;
         if (attempts < MAX_ATTEMPTS) {
-          setTimeout(() => { void fetchMeal(); }, POLL_INTERVAL);
+          setTimeout(() => {
+            void fetchMeal();
+          }, POLL_INTERVAL);
         } else {
           setMeal(fetched);
           setResult(fetched);
@@ -87,6 +89,7 @@ export function PlanCookScreen() {
       setMeal(started);
       setResult(started);
       setActiveSheet(started.sharedMealId, started.status);
+      haptics.light();
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -103,6 +106,7 @@ export function PlanCookScreen() {
       setMeal(split);
       setResult(split);
       setActiveSheet(split.sharedMealId, split.status);
+      haptics.light();
     } catch (err) {
       setError(toApiError(err));
     } finally {
@@ -148,48 +152,108 @@ export function PlanCookScreen() {
 
   if (!cooking) {
     // --- Step 2a: the plan preview --------------------------------------
-return (
+    return (
       <ScrollView contentContainerStyle={styles.content}>
         <FadeInView>
+          <ErrorBanner error={error} />
+
+          {meal.blockedIngredients.length > 0 && (
+            <View style={styles.safetyCard}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.softAlert} />
+              <Text style={styles.safetyText}>
+                Kept out for safety: {meal.blockedIngredients.join(', ')}
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.mealName}>{plan.baseName}</Text>
+          <Text style={styles.mealDesc}>{plan.baseDescription}</Text>
+
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={16} color={colors.softAlert} />
+              <Text style={styles.metaText}>~{plan.estimatedMinutes} min</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="flame-outline" size={16} color={colors.softAlert} />
+              <Text style={styles.metaText}>{plan.effort}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.sectionTitle}>Shared base</Text>
+          <View style={styles.chips}>
+            {plan.ingredients.map((ing) => (
+              <View key={ing} style={styles.chip}>
+                <Text style={styles.chipText}>{ing}</Text>
+              </View>
+            ))}
+          </View>
+
+          {plan.sharedSteps.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Shared steps</Text>
+              {plan.sharedSteps.slice(0, plan.splitPointIndex).map((step, i) => (
+                <View key={`shared-${i}`} style={styles.stepRow}>
+                  <View style={styles.stepNumber}>
+                    <Text style={styles.stepNumberText}>{i + 1}</Text>
+                  </View>
+                  <View style={styles.stepBody}>
+                    <Text style={styles.stepTitle}>{step.title}</Text>
+                    {step.detail ? <Text style={styles.stepDetail}>{step.detail}</Text> : null}
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+
+          {plan.finishes.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Each person's finish</Text>
+              {plan.finishes.map((finish) => (
+                <View key={finish.id} style={styles.finishRow}>
+                  <View style={styles.finishAvatar}>
+                    <Text style={styles.finishAvatarText}>{finish.memberName.charAt(0)}</Text>
+                  </View>
+                  <View style={styles.finishBody}>
+                    <Text style={styles.finishTitle}>{finish.title}</Text>
+                    {finish.additions.length > 0 && (
+                      <Text style={styles.finishAdditions}>{finish.additions.join(', ')}</Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+
+          <PrimaryButton
+            label="Start cooking"
+            onPress={() => void handleStartCooking()}
+            busy={acting}
+            style={styles.actionButton}
+          />
+        </FadeInView>
+      </ScrollView>
+    );
+  }
+
+  // --- Step 2b: cooking ------------------------------------------------
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <FadeInView>
         <ErrorBanner error={error} />
 
-        {meal.blockedIngredients.length > 0 && (
-          <View style={styles.safetyCard}>
-            <Ionicons name="shield-checkmark-outline" size={18} color={colors.softAlert} />
-            <Text style={styles.safetyText}>
-              Kept out for safety: {meal.blockedIngredients.join(', ')}
-            </Text>
-          </View>
-        )}
-
         <Text style={styles.mealName}>{plan.baseName}</Text>
-        <Text style={styles.mealDesc}>{plan.baseDescription}</Text>
+        <Text style={styles.status}>
+          {atSplit
+            ? 'Split point reached — everyone finishes their own plate now.'
+            : 'Start with the shared base, then we finish each plate.'}
+        </Text>
 
-        <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={16} color={colors.softAlert} />
-            <Text style={styles.metaText}>~{plan.estimatedMinutes} min</Text>
-          </View>
-          <View style={styles.metaItem}>
-            <Ionicons name="flame-outline" size={16} color={colors.softAlert} />
-            <Text style={styles.metaText}>{plan.effort}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Shared base</Text>
-        <View style={styles.chips}>
-          {plan.ingredients.map((ing) => (
-            <View key={ing} style={styles.chip}>
-              <Text style={styles.chipText}>{ing}</Text>
-            </View>
-          ))}
-        </View>
-
-        {plan.sharedSteps.length > 0 && (
+        {atSplit ? (
           <>
-            <Text style={styles.sectionTitle}>Shared steps</Text>
-            {plan.sharedSteps.slice(0, plan.splitPointIndex).map((step, i) => (
-              <View key={`shared-${i}`} style={styles.stepRow}>
+            <Text style={styles.sectionTitle}>Branch steps (from here)</Text>
+            {plan.branchSteps.map((step, i) => (
+              <View key={`branch-${i}`} style={styles.stepRow}>
                 <View style={styles.stepNumber}>
                   <Text style={styles.stepNumberText}>{i + 1}</Text>
                 </View>
@@ -199,11 +263,7 @@ return (
                 </View>
               </View>
             ))}
-          </>
-        )}
 
-        {plan.finishes.length > 0 && (
-          <>
             <Text style={styles.sectionTitle}>Each person's finish</Text>
             {plan.finishes.map((finish) => (
               <View key={finish.id} style={styles.finishRow}>
@@ -218,92 +278,44 @@ return (
                 </View>
               </View>
             ))}
-          </>
-        )}
 
-<PrimaryButton
-          label="Start cooking"
-          onPress={() => void handleStartCooking()}
-          busy={acting}
-          style={styles.actionButton}
-        />
-        </FadeInView>
-      </ScrollView>
-    );
-  }
-
-// --- Step 2b: cooking ------------------------------------------------
-  return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <FadeInView>
-      <ErrorBanner error={error} />
-
-      <Text style={styles.mealName}>{plan.baseName}</Text>
-      <Text style={styles.status}>
-        {atSplit
-          ? 'Split point reached — everyone finishes their own plate now.'
-          : 'Start with the shared base, then we finish each plate.'}
-      </Text>
-
-      {atSplit ? (
-        <>
-          <Text style={styles.sectionTitle}>Branch steps (from here)</Text>
-          {plan.branchSteps.map((step, i) => (
-            <View key={`branch-${i}`} style={styles.stepRow}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>{i + 1}</Text>
-              </View>
-              <View style={styles.stepBody}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                {step.detail ? <Text style={styles.stepDetail}>{step.detail}</Text> : null}
-              </View>
-            </View>
-          ))}
-
-          <Text style={styles.sectionTitle}>Each person's finish</Text>
-          {plan.finishes.map((finish) => (
-            <View key={finish.id} style={styles.finishRow}>
-              <View style={styles.finishAvatar}>
-                <Text style={styles.finishAvatarText}>{finish.memberName.charAt(0)}</Text>
-              </View>
-              <View style={styles.finishBody}>
-                <Text style={styles.finishTitle}>{finish.title}</Text>
-                {finish.additions.length > 0 && (
-                  <Text style={styles.finishAdditions}>{finish.additions.join(', ')}</Text>
-                )}
-              </View>
-            </View>
-          ))}
-
-          <PrimaryButton label="Everyone's served — how did it go?" onPress={goToWrapUp} style={styles.actionButton} />
-        </>
-      ) : (
-        <>
-          <Text style={styles.sectionTitle}>Shared base</Text>
-          {plan.sharedSteps.slice(0, plan.splitPointIndex).map((step, i) => (
-            <View key={`shared-${i}`} style={styles.stepRow}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>{i + 1}</Text>
-              </View>
-              <View style={styles.stepBody}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                {step.detail ? <Text style={styles.stepDetail}>{step.detail}</Text> : null}
-              </View>
-            </View>
-          ))}
-
-{hasBranches ? (
             <PrimaryButton
-              label="We've reached the split point"
-              onPress={() => void handleSplit()}
-              busy={acting}
+              label="Everyone's served — how did it go?"
+              onPress={goToWrapUp}
               style={styles.actionButton}
             />
-          ) : (
-            <PrimaryButton label="Everyone's served — how did it go?" onPress={goToWrapUp} style={styles.actionButton} />
-          )}
-        </>
-      )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>Shared base</Text>
+            {plan.sharedSteps.slice(0, plan.splitPointIndex).map((step, i) => (
+              <View key={`shared-${i}`} style={styles.stepRow}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>{i + 1}</Text>
+                </View>
+                <View style={styles.stepBody}>
+                  <Text style={styles.stepTitle}>{step.title}</Text>
+                  {step.detail ? <Text style={styles.stepDetail}>{step.detail}</Text> : null}
+                </View>
+              </View>
+            ))}
+
+            {hasBranches ? (
+              <PrimaryButton
+                label="We've reached the split point"
+                onPress={() => void handleSplit()}
+                busy={acting}
+                style={styles.actionButton}
+              />
+            ) : (
+              <PrimaryButton
+                label="Everyone's served — how did it go?"
+                onPress={goToWrapUp}
+                style={styles.actionButton}
+              />
+            )}
+          </>
+        )}
       </FadeInView>
     </ScrollView>
   );
@@ -398,7 +410,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-stepNumber: {
+  stepNumber: {
     width: 28,
     height: 28,
     borderRadius: 14,

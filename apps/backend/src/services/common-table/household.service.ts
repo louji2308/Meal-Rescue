@@ -11,7 +11,7 @@ import type {
 } from '@meal-rescue/shared-types';
 import { ErrorCategory } from '@meal-rescue/shared-types';
 
-import { sequelize } from '../../database';
+import { isDatabaseReady, sequelize } from '../../database';
 import type { Db } from '../../database/models';
 import { AppError } from '../../lib/errors';
 
@@ -62,12 +62,18 @@ export class HouseholdService {
   }
 
   async getForUser(userId: UUID): Promise<Household | null> {
+    if (!isDatabaseReady()) {
+      return this.degradedHousehold(userId);
+    }
     const household = await this.models.Household.findOne({ where: { ownerId: userId } });
     if (!household) return null;
     return this.hydrate(household);
   }
 
   async getOrCreateForUser(userId: UUID): Promise<Household> {
+    if (!isDatabaseReady()) {
+      return this.degradedHousehold(userId);
+    }
     const existing = await this.getForUser(userId);
     if (existing) return existing;
     return this.createForUser(userId);
@@ -75,6 +81,9 @@ export class HouseholdService {
 
   /** Idempotent per user: create the household + owner member atomically. */
   async createForUser(userId: UUID, name?: string): Promise<Household> {
+    if (!isDatabaseReady()) {
+      return this.degradedHousehold(userId, name);
+    }
     const existing = await this.models.Household.findOne({ where: { ownerId: userId } });
     if (existing) return this.hydrate(existing);
 
@@ -115,6 +124,39 @@ export class HouseholdService {
     const created = await this.models.Household.findByPk(householdId);
     if (!created) throw AppError.internal('Household creation did not persist');
     return this.hydrate(created);
+  }
+
+  /**
+   * Degraded mode fallback: no live DB (see initializeDatabase). Returns a
+   * stable in-memory household + owner member so downstream services (meal
+   * memory, common table, etc.) can render an empty UI instead of 500ing on
+   * the opaque "reading 'constructor'" TypeError of an unbound model.
+   */
+  private degradedHousehold(userId: UUID, name?: string): Household {
+    const now = new Date().toISOString();
+    const displayName = 'You';
+    const memberId = `demo-${userId}-owner`;
+    return {
+      id: `demo-${userId}`,
+      ownerId: userId,
+      name: name?.trim() || 'Our Table',
+      createdAt: now,
+      members: [
+        {
+          id: memberId,
+          householdId: `demo-${userId}`,
+          displayName,
+          initials: initialsFor(displayName),
+          relationship: 'self',
+          ageGroup: 'adult',
+          isOwner: true,
+          active: true,
+          constraints: { allergies: [], dietaryRestrictions: [], avoidIngredients: [] },
+          preferences: { likes: [], dislikes: [] },
+          createdAt: now,
+        },
+      ],
+    };
   }
 
   /** Ensures a household belongs to the requesting user; 404 otherwise. */

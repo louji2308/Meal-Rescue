@@ -2,6 +2,7 @@
   "name": "@meal-rescue/mobile",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -34,6 +35,7 @@
     "expo-haptics": "~57.0.1",
     "expo-image": "~57.0.5",
     "expo-image-picker": "~57.0.12",
+    "expo-linear-gradient": "~57.0.2",
     "expo-speech-recognition": "^56.0.1",
     "expo-status-bar": "~57.0.1",
     "expo-video": "~57.0.4",

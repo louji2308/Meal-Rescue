@@ -1,12 +1,13 @@
+import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Image } from 'expo-image';
 
-import { Text } from '../AppText';
-import { CameraIcon, ChevronRightIcon, UsersIcon } from '../icons';
-import { PressableScale } from '../motion/PressableScale';
 import HOME_CAT from '../../../assets/home-cat.png';
 import { colors, fonts } from '../../theme';
+import { Text } from '../AppText';
+import { CameraIcon, ChevronRightIcon, UsersIcon } from '../icons';
+import { FadeInView } from '../motion/FadeInView';
+import { PressableScale } from '../motion/PressableScale';
 
 type MealTime = 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'late';
 
@@ -44,59 +45,61 @@ export function HeroCard({ onCapture, onAddManual, onFamily, disabled = false }:
   const mealPrompt = MEAL_PROMPTS[getMealTime()];
 
   return (
-    <View style={styles.card}>
-      <View style={styles.titleZone}>
-        <Text style={styles.title}>What's on{'\n'}your plate?</Text>
-        <Image
-          source={HOME_CAT}
-          style={styles.cat}
-          contentFit="contain"
-          accessibilityLabel="Scraps the rescue cat"
-        />
+    <FadeInView rise={8}>
+      <View style={styles.card}>
+        <View style={styles.titleZone}>
+          <Text style={styles.title}>What's on{'\n'}your plate?</Text>
+          <Image
+            source={HOME_CAT}
+            style={styles.cat}
+            contentFit="contain"
+            accessibilityLabel="Scraps the rescue cat"
+          />
+        </View>
+        <Text style={styles.desc}>Tell us what you have and we'll find the best next move.</Text>
+
+        <PressableScale
+          style={[styles.cta, ...(disabled ? [{ opacity: 0.35 }] : [])]}
+          scaleTo={0.98}
+          pressedTintOpacity={1}
+          pressedTintColor={colors.homeButtonPressed}
+          onPress={onCapture}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={mealPrompt}
+          accessibilityState={{ disabled }}
+        >
+          <CameraIcon size={17} color={colors.homeSurface} />
+          <Text style={styles.ctaText}>{mealPrompt}</Text>
+        </PressableScale>
+
+        <PressableScale
+          style={styles.addManual}
+          scaleTo={0.97}
+          pressedTintOpacity={0.05}
+          onPress={onAddManual}
+          accessibilityRole="button"
+          accessibilityLabel="Add what you have manually"
+        >
+          <Text style={styles.addManualText}>Add manually</Text>
+          <ChevronRightIcon size={12} color={colors.homeTextQuiet} />
+        </PressableScale>
+
+        <PressableScale
+          style={styles.familyRow}
+          scaleTo={0.98}
+          pressedTintOpacity={0.06}
+          pressedTintColor={colors.homeInk}
+          onPress={onFamily}
+          accessibilityRole="button"
+          accessibilityLabel="Cook for the family"
+        >
+          <UsersIcon size={16} color={colors.homeInk} />
+          <Text style={styles.familyText}>Cook for the family</Text>
+          <ChevronRightIcon size={14} color={colors.homeTextQuiet} />
+        </PressableScale>
       </View>
-      <Text style={styles.desc}>Tell us what you have and we'll find the best next move.</Text>
-
-      <PressableScale
-        style={[styles.cta, ...(disabled ? [{ opacity: 0.35 }] : [])]}
-        scaleTo={0.98}
-        pressedTintOpacity={1}
-        pressedTintColor={colors.homeButtonPressed}
-        onPress={onCapture}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityLabel={mealPrompt}
-        accessibilityState={{ disabled }}
-      >
-        <CameraIcon size={17} color={colors.homeSurface} />
-        <Text style={styles.ctaText}>{mealPrompt}</Text>
-      </PressableScale>
-
-      <PressableScale
-        style={styles.addManual}
-        scaleTo={0.97}
-        pressedTintOpacity={0.05}
-        onPress={onAddManual}
-        accessibilityRole="button"
-        accessibilityLabel="Add what you have manually"
-      >
-        <Text style={styles.addManualText}>Add manually</Text>
-        <ChevronRightIcon size={12} color={colors.homeTextQuiet} />
-      </PressableScale>
-
-      <PressableScale
-        style={styles.familyRow}
-        scaleTo={0.98}
-        pressedTintOpacity={0.06}
-        pressedTintColor={colors.homeInk}
-        onPress={onFamily}
-        accessibilityRole="button"
-        accessibilityLabel="Cook for the family"
-      >
-        <UsersIcon size={16} color={colors.homeInk} />
-        <Text style={styles.familyText}>Cook for the family</Text>
-        <ChevronRightIcon size={14} color={colors.homeTextQuiet} />
-      </PressableScale>
-    </View>
+    </FadeInView>
   );
 }
 

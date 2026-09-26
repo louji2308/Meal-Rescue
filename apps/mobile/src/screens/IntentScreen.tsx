@@ -1,17 +1,72 @@
 import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { Text } from '../components/AppText';
 import { StepShell } from '../components/decision/StepShell';
 import { INTENT_OPTIONS, intentCopy } from '../components/decision/copy';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import { useDecisionStore } from '../stores/decision.store';
 import { colors, spacing } from '../theme';
+
+function IntentRow({
+  option,
+  onPress,
+}: {
+  option: (typeof INTENT_OPTIONS)[number];
+  onPress: () => void;
+}) {
+  const highlight = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: `rgba(241, 239, 230, ${0.4 + highlight.value * 0.6})`,
+    transform: [{ scale: withTiming(highlight.value ? 0.97 : 1, { duration: 120 }) }],
+  }));
+
+  const handlePress = useCallback(() => {
+    highlight.value = withSequence(
+      withTiming(1, { duration: 80 }),
+      withTiming(0, { duration: 160 }),
+    );
+    onPress();
+  }, [onPress]);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={option.label}
+      style={styles.row}
+      onPress={handlePress}
+    >
+      <Animated.View style={[styles.rowInner, animatedStyle]}>
+        <View style={styles.iconWrap}>
+          <Ionicons
+            // @ts-expect-error Ionicons glyph map is string-typed at runtime
+            name={option.icon}
+            size={22}
+            color={INTENT_ICON_COLORS[option.icon] ?? colors.rescueAccent}
+          />
+        </View>
+        <View style={styles.textWrap}>
+          <Text style={styles.label}>{option.label}</Text>
+          <Text style={styles.caption}>{option.caption}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.rescueAccent} />
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 const INTENT_ICON_COLORS: Record<string, string> = {
   'sparkles-outline': colors.rescueAccent,
@@ -29,18 +84,19 @@ const INTENT_ICON_COLORS: Record<string, string> = {
 export function IntentScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<RouteProp<HomeStackParamList, 'Intent'>>();
-const { analysis, editedMealText } = route.params;
+  const { analysis, editedMealText } = route.params;
   const setIntent = useDecisionStore((state) => state.setIntent);
 
   const mealId = analysis.mealId;
   const foods = analysis.detectedFoods.map((food) => food.name);
-  const foodSummary = editedMealText && editedMealText.length > 0
-    ? editedMealText
-    : foods.length > 0
-      ? foods.length === 1
-        ? foods[0]
-        : foods.slice(0, -1).join(', ') + ' and ' + foods[foods.length - 1]
-      : 'your meal';
+  const foodSummary =
+    editedMealText && editedMealText.length > 0
+      ? editedMealText
+      : foods.length > 0
+        ? foods.length === 1
+          ? foods[0]
+          : foods.slice(0, -1).join(', ') + ' and ' + foods[foods.length - 1]
+        : 'your meal';
 
   return (
     <StepShell
@@ -53,37 +109,22 @@ const { analysis, editedMealText } = route.params;
       </View>
 
       <View style={styles.list}>
-        {INTENT_OPTIONS.map((option) => (
-          <Pressable
-            key={option.intent}
-            accessibilityRole="button"
-            accessibilityLabel={option.label}
-            style={styles.row}
-            onPress={() => {
-              haptics.light();
-              const meta = intentCopy(option.intent);
-              setIntent(option.intent);
-              navigation.navigate('Reality', {
-                intentLabel: meta.label,
-                mealId,
-                foods,
-              });
-            }}
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons
-                // @ts-expect-error Ionicons glyph map is string-typed at runtime
-                name={option.icon}
-                size={22}
-                color={INTENT_ICON_COLORS[option.icon] ?? colors.rescueAccent}
-              />
-            </View>
-            <View style={styles.textWrap}>
-              <Text style={styles.label}>{option.label}</Text>
-              <Text style={styles.caption}>{option.caption}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.rescueAccent} />
-          </Pressable>
+        {INTENT_OPTIONS.map((option, idx) => (
+          <FadeInView key={option.intent} delay={idx * 60} rise={8}>
+            <IntentRow
+              option={option}
+              onPress={() => {
+                haptics.light();
+                const meta = intentCopy(option.intent);
+                setIntent(option.intent);
+                navigation.navigate('Reality', {
+                  intentLabel: meta.label,
+                  mealId,
+                  foods,
+                });
+              }}
+            />
+          </FadeInView>
         ))}
       </View>
     </StepShell>
@@ -108,12 +149,16 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  rowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 13,
     padding: spacing.md,
     gap: spacing.md,
   },
@@ -139,4 +184,3 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 });
-

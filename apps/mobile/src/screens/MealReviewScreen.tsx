@@ -1,82 +1,92 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  TextInput as RNTextInput,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RecognizedItem } from '@meal-rescue/shared-types';
 
+import { AppImage } from '../components/AppImage';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
-import { colors, radius, spacing, typography } from '../theme';
-
-const UNITS = ['pcs', 'g', 'kg', 'ml', 'l'] as const;
-
-const ITEM_TYPE_LABEL: Record<RecognizedItem['itemType'], string> = {
-  INGREDIENT: 'Ingredient',
-  PREPARED_MEAL: 'Meal',
-  LEFTOVER: 'Leftover',
-  PACKAGED_FOOD: 'Packaged',
-};
+import { colors, fonts, radius, spacing, typography } from '../theme';
 
 interface EditableItem {
   id: number;
   name: string;
   itemType: RecognizedItem['itemType'];
-  quantity: number | null;
-  unit: RecognizedItem['unit'];
-  servings: number | null;
 }
 
 /**
- * Meal photo review (plan: Capture -> Review/Edit -> AiRescue).
- *
- * Shows every item the vision model saw with editable name, quantity and
- * unit; prepared meals and leftovers get an extra servings stepper ("roughly
- * how many people can eat this"). Only photo captures land here - text
- * captures skip straight to AiRescue as before.
- *
- * Bottom bar has two buttons:
- * - "Next" — accept and continue to rescue (hidden if no food recognized)
- * - "Take Again" — return to camera/gallery for a new photo
+ * Meal photo review — shows the captured photo and identified food items.
+ * Photo captures land here from CaptureScreen. The user can fix misidentified
+ * names, add missing items, or remove wrong ones before continuing to rescue.
  */
 export function MealReviewScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<RouteProp<HomeStackParamList, 'MealReview'>>();
-  const { analysis } = route.params;
+  const { analysis, imageUri } = route.params;
 
   const [items, setItems] = useState<EditableItem[]>(() =>
     (analysis.items?.length ? analysis.items : deriveItems(analysis)).map((item, index) => ({
       id: index,
       name: item.name,
       itemType: item.itemType,
-      quantity: item.quantity ?? null,
-      unit: item.unit ?? 'pcs',
-      servings: item.servings ?? null,
     })),
   );
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [addInputVisible, setAddInputVisible] = useState(false);
+  const [addInputValue, setAddInputValue] = useState('');
+  const addInputRef = useRef<RNTextInput>(null);
+  const nextId = useRef(items.length > 0 ? Math.max(...items.map((i) => i.id)) + 1 : 0);
 
-  const [busy, setBusy] = useState(false);
+  const updateName = useCallback((id: number, name: string) => {
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, name } : item)));
+  }, []);
 
-  const isFood = (type: RecognizedItem['itemType']) =>
-    type === 'PREPARED_MEAL' || type === 'LEFTOVER';
+  const removeItem = useCallback((id: number) => {
+    haptics.light();
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
 
-  const updateItem = (id: number, patch: Partial<EditableItem>) => {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  };
+  const addItem = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    haptics.light();
+    setItems((prev) => [
+      ...prev,
+      { id: nextId.current++, name: trimmed, itemType: 'PREPARED_MEAL' as const },
+    ]);
+    setAddInputValue('');
+  }, []);
 
-  const adjustQty = (item: EditableItem, delta: number) => {
-    const _step = item.unit === 'g' ? 50 : item.unit === 'kg' ? 0.5 : item.unit === 'ml' ? 50 : 1;
-    const next = (item.quantity ?? 0) + delta;
-    updateItem(item.id, { quantity: next < 0 ? 0 : Math.round(next * 100) / 100 });
-  };
+  const submittedViaButton = useRef(false);
 
-  const handleContinue = () => {
-    setBusy(true);
+  const handleAddSubmit = useCallback(() => {
+    submittedViaButton.current = true;
+    addItem(addInputValue);
+    setTimeout(() => {
+      submittedViaButton.current = false;
+    }, 300);
+  }, [addInputValue, addItem]);
+
+  const handleAddPress = useCallback(() => {
+    setAddInputVisible(true);
+    setTimeout(() => addInputRef.current?.focus(), 100);
+  }, []);
+
+  const handleContinue = useCallback(() => {
     const foods = items
       .filter((item) => item.itemType !== 'INGREDIENT')
       .map((item) => item.name.trim())
@@ -90,11 +100,11 @@ export function MealReviewScreen() {
       ingredients,
       mealId: analysis.mealId,
     });
-  };
+  }, [items, navigation, analysis]);
 
-  const handleTakeAgain = () => {
+  const handleRetake = useCallback(() => {
     navigation.navigate('Capture');
-  };
+  }, [navigation]);
 
   const keptCount = useMemo(() => items.filter((i) => i.name.trim()).length, [items]);
   const nothingRecognized = items.length === 0 || keptCount === 0;
@@ -108,163 +118,169 @@ export function MealReviewScreen() {
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
-          <Ionicons name="chevron-back" size={24} color={colors.homeInk} />
+          <Ionicons name="chevron-back" size={22} color={colors.homeInk} />
         </Pressable>
-        <Text style={styles.headerTitle}>Check what I saw</Text>
         <View style={{ width: 42 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.hint}>
-          Fix names, amounts and servings — then we'll figure out how to rescue it.
-        </Text>
-
-        {items.length === 0 && (
-          <Text style={styles.empty}>Nothing recognized — go back and type it instead.</Text>
-        )}
-
-        {items.map((item) => (
-          <View key={item.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.typeBadge}>{ITEM_TYPE_LABEL[item.itemType]}</Text>
-              {isFood(item.itemType) && <Text style={styles.typeHint}>~serves people</Text>}
-            </View>
-
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.nameInput}
-              value={item.name}
-              onChangeText={(text) => updateItem(item.id, { name: text })}
-              placeholder="Item name"
-            />
-
-            <Text style={styles.label}>Amount</Text>
-            <View style={styles.qtyRow}>
-              <Pressable
-                style={styles.qtyBtn}
-                onPress={() => {
-                  haptics.light();
-                  adjustQty(item, -1);
-                }}
-                accessibilityRole="button"
-              >
-                <Ionicons name="remove" size={18} color={colors.primary} />
-              </Pressable>
-              <TextInput
-                style={styles.qtyInput}
-                value={item.quantity != null ? String(item.quantity) : ''}
-                onChangeText={(t) => updateItem(item.id, { quantity: t ? Number(t) : null })}
-                keyboardType="decimal-pad"
-                placeholder="—"
-              />
-              <Pressable
-                style={styles.qtyBtn}
-                onPress={() => {
-                  haptics.light();
-                  adjustQty(item, 1);
-                }}
-                accessibilityRole="button"
-              >
-                <Ionicons name="add" size={18} color={colors.primary} />
-              </Pressable>
-              <View style={styles.unitPills}>
-                {UNITS.map((u) => (
-                  <Pressable
-                    key={u}
-                    style={[styles.unitPill, item.unit === u && styles.unitPillActive]}
-                    onPress={() => {
-                      haptics.light();
-                      updateItem(item.id, { unit: u });
-                    }}
-                    accessibilityRole="button"
-                  >
-                    <Text
-                      style={[styles.unitPillText, item.unit === u && styles.unitPillTextActive]}
-                    >
-                      {u}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            {isFood(item.itemType) && (
-              <>
-                <Text style={styles.label}>Servings ({item.servings ?? 1})</Text>
-                <View style={styles.servingsRow}>
-                  <Pressable
-                    style={styles.qtyBtn}
-                    onPress={() =>
-                      updateItem(item.id, {
-                        servings: Math.max(1, (item.servings ?? 1) - 1),
-                      })
-                    }
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="remove" size={18} color={colors.primary} />
-                  </Pressable>
-                  <Text style={styles.servingsValue}>{item.servings ?? 1}</Text>
-                  <Pressable
-                    style={styles.qtyBtn}
-                    onPress={() =>
-                      updateItem(item.id, {
-                        servings: Math.min(50, (item.servings ?? 1) + 1),
-                      })
-                    }
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="add" size={18} color={colors.primary} />
-                  </Pressable>
-                  <Text style={styles.servingsNote}>How many can eat this?</Text>
-                </View>
-              </>
-            )}
-          </View>
-        ))}
-      </ScrollView>
-
-      {nothingRecognized ? (
-        <View style={styles.footer}>
-          <Text style={styles.noFoodMsg}>
-            No food recognized — take another photo or type it instead.
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.screenTitle}>Check what I saw</Text>
+          <Text style={styles.screenSubtitle}>
+            Review the items below and make any changes before we rescue your meal.
           </Text>
-          <Pressable
-            style={styles.takeAgainBtn}
-            onPress={handleTakeAgain}
-            accessibilityRole="button"
-            accessibilityLabel="Take another photo"
-          >
-            <Ionicons name="camera" size={18} color={colors.primary} />
-            <Text style={styles.takeAgainText}>Take Again</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.footer}>
-          <View style={styles.footerRow}>
-            <Pressable
-              style={styles.takeAgainBtn}
-              onPress={handleTakeAgain}
-              accessibilityRole="button"
-              accessibilityLabel="Take a different photo"
-            >
-              <Ionicons name="camera" size={18} color={colors.primary} />
-              <Text style={styles.takeAgainText}>Take Again</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.nextBtn, busy && styles.nextBtnDisabled]}
-              onPress={handleContinue}
-              disabled={busy}
-              accessibilityRole="button"
-              accessibilityLabel="Continue with these items"
-            >
-              <Text style={styles.nextText}>
-                {busy ? 'Working…' : `Next · rescue ${keptCount}`}
-              </Text>
-              <Ionicons name="arrow-forward" size={18} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
-      )}
+
+          {imageUri ? (
+            <View style={styles.photoFrame}>
+              <AppImage source={{ uri: imageUri }} style={styles.photo} contentFit="cover" />
+            </View>
+          ) : null}
+
+          {nothingRecognized ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="eye-off-outline" size={36} color={colors.textSecondary} />
+              <Text style={styles.emptyTitle}>Nothing recognized</Text>
+              <Text style={styles.emptySub}>Go back and type what you ate instead.</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>{"Here's what I picked up"}</Text>
+              <Text style={styles.sectionHint}>Tap a food to edit its name or to remove it</Text>
+
+              {items.map((item) => {
+                const isEditing = editingId === item.id;
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[styles.itemCard, isEditing && styles.itemCardEditing]}
+                    onPress={() => setEditingId(isEditing ? null : item.id)}
+                  >
+                    {isEditing ? (
+                      <View style={styles.editRow}>
+                        <TextInput
+                          style={styles.editInput}
+                          value={item.name}
+                          onChangeText={(text) => updateName(item.id, text)}
+                          placeholder="Food name"
+                          placeholderTextColor={colors.textSecondary}
+                          autoFocus
+                          onBlur={() => {
+                            if (!item.name.trim()) removeItem(item.id);
+                            setEditingId(null);
+                          }}
+                        />
+                        <Pressable
+                          style={styles.deleteBtn}
+                          onPress={() => removeItem(item.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${item.name}`}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={colors.error} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                      </>
+                    )}
+                  </Pressable>
+                );
+              })}
+
+              {addInputVisible ? (
+                <View style={styles.addInputRow}>
+                  <RNTextInput
+                    ref={addInputRef}
+                    style={styles.addInput}
+                    value={addInputValue}
+                    onChangeText={setAddInputValue}
+                    placeholder="Type a food or ingredient"
+                    placeholderTextColor={colors.textSecondary}
+                    onSubmitEditing={handleAddSubmit}
+                    returnKeyType="done"
+                    onBlur={() => {
+                      if (submittedViaButton.current) {
+                        setAddInputVisible(false);
+                        return;
+                      }
+                      if (addInputValue.trim()) {
+                        addItem(addInputValue);
+                      } else {
+                        setAddInputVisible(false);
+                      }
+                    }}
+                  />
+                  <Pressable
+                    style={styles.addConfirmBtn}
+                    onPress={handleAddSubmit}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add item"
+                  >
+                    <Ionicons name="checkmark" size={20} color={colors.homeButton} />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.addButton}
+                  onPress={handleAddPress}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add something I missed"
+                >
+                  <Ionicons name="add" size={20} color={colors.textSecondary} />
+                  <View style={styles.addTextCol}>
+                    <Text style={styles.addTitle}>Add something I missed</Text>
+                    <Text style={styles.addHint}>Type a food or ingredient</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                </Pressable>
+              )}
+            </>
+          )}
+
+          {nothingRecognized ? (
+            <View style={styles.footerRow}>
+              <Pressable
+                style={styles.retakeBtn}
+                onPress={handleRetake}
+                accessibilityRole="button"
+                accessibilityLabel="Take another photo"
+              >
+                <Ionicons name="camera-outline" size={20} color={colors.homeInk} />
+                <Text style={styles.retakeText}>Retake photo</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.footerRow}>
+              <Pressable
+                style={styles.retakeBtn}
+                onPress={handleRetake}
+                accessibilityRole="button"
+                accessibilityLabel="Take a different photo"
+              >
+                <Ionicons name="camera-outline" size={20} color={colors.homeInk} />
+                <Text style={styles.retakeText}>Retake photo</Text>
+              </Pressable>
+              <Pressable
+                style={styles.rescueBtn}
+                onPress={handleContinue}
+                accessibilityRole="button"
+                accessibilityLabel="Looks good, rescue it"
+              >
+                <Text style={styles.rescueText}>Looks good</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -273,7 +289,7 @@ function deriveItems(analysis: {
   detectedFoods: Array<{ name: string }>;
   detectedIngredients: Array<{ name: string }>;
 }): RecognizedItem[] {
-  const items: RecognizedItem[] = [
+  return [
     ...analysis.detectedIngredients.map((ing) => ({
       name: ing.name,
       itemType: 'INGREDIENT' as const,
@@ -288,10 +304,9 @@ function deriveItems(analysis: {
       confidence: 0.7,
       quantity: null,
       unit: null,
-      servings: 2,
+      servings: null,
     })),
   ];
-  return items;
 }
 
 const styles = StyleSheet.create({
@@ -305,74 +320,91 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   backButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(22, 22, 22, 0.08)',
-  },
-  headerTitle: {
-    ...typography.subhead,
-    color: colors.text,
+    borderColor: colors.border,
   },
   content: {
     padding: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: 120,
   },
-  hint: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.lg,
+  screenTitle: {
+    fontSize: 28,
+    fontFamily: fonts.display,
+    color: colors.homeInk,
+    letterSpacing: -0.4,
+    lineHeight: 36,
+    marginBottom: spacing.xs,
   },
-  empty: {
+  screenSubtitle: {
     ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: spacing.xl,
+    color: colors.homeTextSecondary,
+    marginBottom: spacing.lg,
+    lineHeight: 21,
   },
-  card: {
+  photoFrame: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.lg,
+    backgroundColor: colors.primaryLight,
+  },
+  photo: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: fonts.display,
+    color: colors.homeInk,
+    letterSpacing: -0.3,
+    lineHeight: 28,
+    marginBottom: 2,
+  },
+  sectionHint: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    marginBottom: spacing.md,
+  },
+  itemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 16,
     marginBottom: spacing.sm,
   },
-  cardHeader: {
+  itemCardEditing: {
+    borderColor: colors.homeButton,
+  },
+  itemName: {
+    ...typography.body,
+    color: colors.homeInk,
+    flex: 1,
+  },
+  editRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    flex: 1,
+    gap: spacing.sm,
   },
-  typeBadge: {
-    ...typography.bodySmall,
-    color: colors.primary,
-    fontWeight: '700',
-    backgroundColor: colors.primary + '15',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-    overflow: 'hidden',
-  },
-  typeHint: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  label: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    marginTop: 6,
-    fontWeight: '600',
-  },
-  nameInput: {
+  editInput: {
     ...typography.body,
-    color: colors.text,
+    color: colors.homeInk,
+    flex: 1,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
@@ -380,91 +412,81 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  qtyRow: {
+  deleteBtn: {
+    padding: spacing.sm,
+  },
+  addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  qtyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    borderStyle: 'dashed',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 18,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  addTextCol: {
+    flex: 1,
+  },
+  addTitle: {
+    ...typography.body,
+    color: colors.homeInk,
+    fontWeight: '500',
+  },
+  addHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  addInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  addInput: {
+    ...typography.body,
+    color: colors.homeInk,
+    flex: 1,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.homeButton,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  addConfirmBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qtyInput: {
-    ...typography.body,
+  emptyState: {
+    alignItems: 'center',
+    marginTop: spacing.xl * 2,
+    gap: spacing.sm,
+  },
+  emptyTitle: {
+    ...typography.subhead,
     color: colors.text,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minWidth: 64,
-    textAlign: 'center',
   },
-  unitPills: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  unitPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  unitPillActive: {
-    backgroundColor: colors.primary + '15',
-    borderColor: colors.primary,
-  },
-  unitPillText: {
+  emptySub: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    fontWeight: '600',
-    fontSize: 11,
-  },
-  unitPillTextActive: {
-    color: colors.primary,
-  },
-  servingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  servingsValue: {
-    ...typography.body,
-    color: colors.text,
-    fontWeight: '700',
-    minWidth: 24,
     textAlign: 'center',
-  },
-  servingsNote: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    paddingTop: spacing.sm,
   },
   footerRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
   },
-  noFoodMsg: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-  takeAgainBtn: {
+  retakeBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -473,30 +495,27 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: 'transparent',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  takeAgainText: {
-    ...typography.subhead,
-    color: colors.primary,
-    fontWeight: '600',
+  retakeText: {
+    fontSize: 15,
+    fontFamily: fonts.regular,
+    color: colors.homeInk,
   },
-  nextBtn: {
-    flex: 1.2,
+  rescueBtn: {
+    flex: 1.3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     height: 52,
     borderRadius: 26,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.homeButton,
   },
-  nextBtnDisabled: {
-    opacity: 0.5,
-  },
-  nextText: {
-    ...typography.subhead,
+  rescueText: {
+    fontSize: 15,
+    fontFamily: fonts.regular,
     color: '#fff',
-    fontWeight: '700',
   },
 });

@@ -1,10 +1,10 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text } from '../AppText';
+import Animated, { FadeOut, SlideInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing, typography } from '../../theme';
-import { FadeInView } from '../motion/FadeInView';
+import { Text } from '../AppText';
 
 /**
  * Shared layout shell for the V2 decision steps (intent / reality / craving).
@@ -29,14 +29,14 @@ export function StepShell({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <FadeInView>
-        <View style={styles.header}>
-          <Text style={[typography.caption, styles.step]}>{step} of 3 quick questions</Text>
-          <Text style={[typography.title, styles.title]}>{title}</Text>
-          {subtitle ? <Text style={[typography.body, styles.subtitle]}>{subtitle}</Text> : null}
-        </View>
-        <View style={styles.body}>{children}</View>
-        </FadeInView>
+        <Animated.View entering={SlideInRight.duration(280)} exiting={FadeOut.duration(120)}>
+          <View style={styles.header}>
+            <Text style={[typography.caption, styles.step]}>{step} of 3 quick questions</Text>
+            <Text style={[typography.title, styles.title]}>{title}</Text>
+            {subtitle ? <Text style={[typography.body, styles.subtitle]}>{subtitle}</Text> : null}
+          </View>
+          <View style={styles.body}>{children}</View>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );

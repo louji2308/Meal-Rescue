@@ -2,6 +2,7 @@
   "name": "@meal-rescue/ui-components",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Shared React Native components for Meal Rescue",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

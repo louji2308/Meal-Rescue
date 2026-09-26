@@ -30,7 +30,11 @@ import { signAccessToken } from '../src/lib/jwt';
 jest.setTimeout(90_000);
 
 const UUID = '00000000-0000-0000-0000-000000000000';
-const VALID_TOKEN = signAccessToken({ sub: UUID, email: 't@mealrescue.test', subscriptionTier: 'free' });
+const VALID_TOKEN = signAccessToken({
+  sub: UUID,
+  email: 't@mealrescue.test',
+  subscriptionTier: 'free',
+});
 
 type Endpoint = { method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT'; url: string };
 
@@ -88,6 +92,8 @@ const PROTECTED_SURFACE: Endpoint[] = [
   // ai-rescue (registered with no prefix - still must be hook-protected)
   { method: 'POST', url: '/api/v1/ai-rescue/generate' },
   { method: 'POST', url: '/api/v1/ai-rescue/negotiate' },
+  // paywall teaser
+  { method: 'POST', url: '/api/v1/paywall/teaser' },
   // subscription
   { method: 'POST', url: '/api/v1/subscription/sync' },
   // ads + notifications
@@ -98,7 +104,13 @@ const PROTECTED_SURFACE: Endpoint[] = [
 function expectStructuredUnauthorized(body: unknown): void {
   const parsed = body as {
     success: boolean;
-    error?: { category?: string; code?: string; message?: string; recoverable?: boolean; stack?: unknown };
+    error?: {
+      category?: string;
+      code?: string;
+      message?: string;
+      recoverable?: boolean;
+      stack?: unknown;
+    };
     requestId?: string;
     timestamp?: string;
   };
@@ -123,22 +135,28 @@ describe('security surface - 401 enforcement on every protected route', () => {
     await app?.close();
   });
 
-  it.each(PROTECTED_SURFACE)('rejects anonymous $method $url with structured 401', async ({ method, url }) => {
-    const res = await app.inject({ method, url });
-    expect(res.statusCode).toBe(401);
-    expectStructuredUnauthorized(res.json());
-  });
+  it.each(PROTECTED_SURFACE)(
+    'rejects anonymous $method $url with structured 401',
+    async ({ method, url }) => {
+      const res = await app.inject({ method, url });
+      expect(res.statusCode).toBe(401);
+      expectStructuredUnauthorized(res.json());
+    },
+  );
 
-  it.each(PROTECTED_SURFACE)('rejects garbage bearer token on $method $url', async ({ method, url }) => {
-    const res = await app.inject({
-      method,
-      url,
-      headers: { authorization: 'Bearer not-a-real-token' },
-    });
-    expect(res.statusCode).toBe(401);
-    const body = JSON.parse(res.body) as { error?: { message?: string } };
-    expect(body.error?.message).toBe('Invalid or missing authentication token');
-  });
+  it.each(PROTECTED_SURFACE)(
+    'rejects garbage bearer token on $method $url',
+    async ({ method, url }) => {
+      const res = await app.inject({
+        method,
+        url,
+        headers: { authorization: 'Bearer not-a-real-token' },
+      });
+      expect(res.statusCode).toBe(401);
+      const body = JSON.parse(res.body) as { error?: { message?: string } };
+      expect(body.error?.message).toBe('Invalid or missing authentication token');
+    },
+  );
 
   it('does not leak stack traces or secrets through the 401 body', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/user/me' });
@@ -207,25 +225,139 @@ describe('security surface - zod validation contract on malformed bodies', () =>
 
   const auth = { authorization: `Bearer ${VALID_TOKEN}` };
 
-  const cases: { name: string; method: 'POST' | 'PATCH'; url: string; payload: object; code: string }[] = [
-    { name: 'household member missing displayName', method: 'POST', url: '/api/v1/households/members', payload: {}, code: 'INVALID_MEMBER_INPUT' },
-    { name: 'household member displayName too long', method: 'POST', url: '/api/v1/households/members', payload: { displayName: 'x'.repeat(121) }, code: 'INVALID_MEMBER_INPUT' },
-    { name: 'converge with empty member list', method: 'POST', url: '/api/v1/common-table/converge', payload: { memberIds: [], ingredients: [] }, code: 'INVALID_COMMON_TABLE_INPUT' },
-    { name: 'converge with malformed memberIds', method: 'POST', url: '/api/v1/common-table/converge', payload: { memberIds: ['not-a-uuid'], ingredients: [] }, code: 'INVALID_COMMON_TABLE_INPUT' },
-    { name: 'pantry item missing name', method: 'POST', url: '/api/v1/pantry', payload: {}, code: 'INVALID_PANTRY_INPUT' },
-    { name: 'pantry quantity zero', method: 'POST', url: '/api/v1/pantry', payload: { ingredientName: 'milk', quantity: 0 }, code: 'INVALID_PANTRY_INPUT' },
-    { name: 'pantry quantity negative', method: 'POST', url: '/api/v1/pantry', payload: { ingredientName: 'milk', quantity: -2 }, code: 'INVALID_PANTRY_INPUT' },
-    { name: 'kitchen identify short image', method: 'POST', url: '/api/v1/kitchen/identify', payload: { imageBase64: 'too-short' }, code: 'INVALID_KITCHEN_INPUT' },
-    { name: 'kitchen what-can-i-make time zero', method: 'POST', url: '/api/v1/kitchen/what-can-i-make', payload: { timeAvailable: 0 }, code: 'INVALID_KITCHEN_INPUT' },
-    { name: 'meal analyze empty', method: 'POST', url: '/api/v1/meal/analyze', payload: {}, code: 'INVALID_ANALYSIS_INPUT' },
-    { name: 'meal-memory intent empty text', method: 'POST', url: '/api/v1/meal-memory/intent', payload: { text: '' }, code: 'INVALID_INTENT_INPUT' },
-    { name: 'meal-memory plan-week unknown key (strict)', method: 'POST', url: '/api/v1/meal-memory/plan-week', payload: { mealSlots: ['dinner'], injection: true }, code: 'INVALID_MEAL_MEMORY_INPUT' },
-    { name: 'meal-memory move missing dateKey', method: 'POST', url: `/api/v1/meal-memory/meals/${UUID}/move`, payload: {}, code: 'INVALID_MEAL_MEMORY_INPUT' },
-    { name: 'onboarding cuisines empty', method: 'POST', url: '/api/v1/user/taste/onboarding/cuisines', payload: {}, code: 'INVALID_CUISINE_INPUT' },
-    { name: 'onboarding answers empty', method: 'POST', url: '/api/v1/user/taste/onboarding/answers', payload: {}, code: 'INVALID_ONBOARDING_INPUT' },
-    { name: 'rescue generate bad mealId', method: 'POST', url: '/api/v1/rescue/generate', payload: { mealId: 'nope' }, code: 'INVALID_GENERATE_INPUT' },
-    { name: 'decision commit empty body', method: 'POST', url: `/api/v1/rescue/${UUID}/decide`, payload: {}, code: 'INVALID_DECIDE_INPUT' },
-    { name: 'common-table feedback empty body', method: 'POST', url: `/api/v1/common-table/${UUID}/feedback`, payload: {}, code: 'INVALID_FEEDBACK_INPUT' },
+  const cases: {
+    name: string;
+    method: 'POST' | 'PATCH';
+    url: string;
+    payload: object;
+    code: string;
+  }[] = [
+    {
+      name: 'household member missing displayName',
+      method: 'POST',
+      url: '/api/v1/households/members',
+      payload: {},
+      code: 'INVALID_MEMBER_INPUT',
+    },
+    {
+      name: 'household member displayName too long',
+      method: 'POST',
+      url: '/api/v1/households/members',
+      payload: { displayName: 'x'.repeat(121) },
+      code: 'INVALID_MEMBER_INPUT',
+    },
+    {
+      name: 'converge with empty member list',
+      method: 'POST',
+      url: '/api/v1/common-table/converge',
+      payload: { memberIds: [], ingredients: [] },
+      code: 'INVALID_COMMON_TABLE_INPUT',
+    },
+    {
+      name: 'converge with malformed memberIds',
+      method: 'POST',
+      url: '/api/v1/common-table/converge',
+      payload: { memberIds: ['not-a-uuid'], ingredients: [] },
+      code: 'INVALID_COMMON_TABLE_INPUT',
+    },
+    {
+      name: 'pantry item missing name',
+      method: 'POST',
+      url: '/api/v1/pantry',
+      payload: {},
+      code: 'INVALID_PANTRY_INPUT',
+    },
+    {
+      name: 'pantry quantity zero',
+      method: 'POST',
+      url: '/api/v1/pantry',
+      payload: { ingredientName: 'milk', quantity: 0 },
+      code: 'INVALID_PANTRY_INPUT',
+    },
+    {
+      name: 'pantry quantity negative',
+      method: 'POST',
+      url: '/api/v1/pantry',
+      payload: { ingredientName: 'milk', quantity: -2 },
+      code: 'INVALID_PANTRY_INPUT',
+    },
+    {
+      name: 'kitchen identify short image',
+      method: 'POST',
+      url: '/api/v1/kitchen/identify',
+      payload: { imageBase64: 'too-short' },
+      code: 'INVALID_KITCHEN_INPUT',
+    },
+    {
+      name: 'kitchen what-can-i-make time zero',
+      method: 'POST',
+      url: '/api/v1/kitchen/what-can-i-make',
+      payload: { timeAvailable: 0 },
+      code: 'INVALID_KITCHEN_INPUT',
+    },
+    {
+      name: 'meal analyze empty',
+      method: 'POST',
+      url: '/api/v1/meal/analyze',
+      payload: {},
+      code: 'INVALID_ANALYSIS_INPUT',
+    },
+    {
+      name: 'meal-memory intent empty text',
+      method: 'POST',
+      url: '/api/v1/meal-memory/intent',
+      payload: { text: '' },
+      code: 'INVALID_INTENT_INPUT',
+    },
+    {
+      name: 'meal-memory plan-week unknown key (strict)',
+      method: 'POST',
+      url: '/api/v1/meal-memory/plan-week',
+      payload: { mealSlots: ['dinner'], injection: true },
+      code: 'INVALID_MEAL_MEMORY_INPUT',
+    },
+    {
+      name: 'meal-memory move missing dateKey',
+      method: 'POST',
+      url: `/api/v1/meal-memory/meals/${UUID}/move`,
+      payload: {},
+      code: 'INVALID_MEAL_MEMORY_INPUT',
+    },
+    {
+      name: 'onboarding cuisines empty',
+      method: 'POST',
+      url: '/api/v1/user/taste/onboarding/cuisines',
+      payload: {},
+      code: 'INVALID_CUISINE_INPUT',
+    },
+    {
+      name: 'onboarding answers empty',
+      method: 'POST',
+      url: '/api/v1/user/taste/onboarding/answers',
+      payload: {},
+      code: 'INVALID_ONBOARDING_INPUT',
+    },
+    {
+      name: 'rescue generate bad mealId',
+      method: 'POST',
+      url: '/api/v1/rescue/generate',
+      payload: { mealId: 'nope' },
+      code: 'INVALID_GENERATE_INPUT',
+    },
+    {
+      name: 'decision commit empty body',
+      method: 'POST',
+      url: `/api/v1/rescue/${UUID}/decide`,
+      payload: {},
+      code: 'INVALID_DECIDE_INPUT',
+    },
+    {
+      name: 'common-table feedback empty body',
+      method: 'POST',
+      url: `/api/v1/common-table/${UUID}/feedback`,
+      payload: {},
+      code: 'INVALID_FEEDBACK_INPUT',
+    },
   ];
 
   it.each(cases)('$name → 400 $code', async ({ method, url, payload, code }) => {
@@ -270,7 +402,10 @@ describe('security surface - body size limit and error contract for 413', () => 
       payload: { ingredientName: 'milk', notes: big },
     });
     expect(res.statusCode).toBe(413);
-    const body = res.json() as { success: boolean; error?: { code?: string; message?: string; stack?: unknown } };
+    const body = res.json() as {
+      success: boolean;
+      error?: { code?: string; message?: string; stack?: unknown };
+    };
     expect(body.success).toBe(false);
     expect(body.error?.code).toBeTruthy();
     expect(body.error?.stack).toBeUndefined();
@@ -315,7 +450,10 @@ describe('security surface - ai-rescue error path (no key, degraded 502)', () =>
   });
 
   it('declines gracefully when the provider key is absent, without leaking secrets/stack', async () => {
-    if (env.OPENROUTER_API_KEY) return;
+    // The service reads OPENAI_API_KEY (not OPENROUTER_API_KEY). Skip only
+    // when the real provider key is present; jest does not load .env so this
+    // test normally runs keyless and must observe the degraded 502.
+    if (env.OPENAI_API_KEY) return;
 
     const res = await app.inject({
       method: 'POST',
@@ -324,7 +462,10 @@ describe('security surface - ai-rescue error path (no key, degraded 502)', () =>
       payload: { foods: ['instant noodles'], timeOfDay: 'afternoon' },
     });
     expect(res.statusCode).toBe(502);
-    const body = res.json() as { success: boolean; error?: { message?: string; code?: string; stack?: unknown } };
+    const body = res.json() as {
+      success: boolean;
+      error?: { message?: string; code?: string; stack?: unknown };
+    };
     expect(body.success).toBe(false);
     expect(body.error?.code).toBe('AI_RESUCE_ERROR');
     expect(body.error?.message).toBe('The AI rescue service is temporarily unavailable');
@@ -356,7 +497,10 @@ describe('security surface - subscription sync contract (RevenueCat-dependent)',
       payload: {},
     });
     expect(res.statusCode).toBe(503);
-    const body = res.json() as { success: boolean; error?: { code?: string; category?: string; recoverable?: boolean } };
+    const body = res.json() as {
+      success: boolean;
+      error?: { code?: string; category?: string; recoverable?: boolean };
+    };
     expect(body.success).toBe(false);
     expect(body.error?.code).toBe('REVENUECAT_NOT_CONFIGURED');
     expect(body.error?.category).toBe('EXTERNAL_SERVICE_FAILURE');

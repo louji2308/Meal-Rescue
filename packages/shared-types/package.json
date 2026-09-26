@@ -2,6 +2,7 @@
   "name": "@meal-rescue/shared-types",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Shared TypeScript types for Meal Rescue (backend + mobile)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type {
+  AiPlannerQuestion,
   MealEvent,
   MealMemoryCreateRuleRequest,
   MealMemoryFeedbackRequest,
@@ -24,10 +25,10 @@ import {
   listRules,
   moveMeal,
   planWeek,
+  postAiPlan,
   postFeedback,
   postIntent,
   postPlanConfirm,
-  postPlanPreview,
   recordActual,
   remember,
   removeMeal,
@@ -78,6 +79,11 @@ interface MealMemoryState {
   planPreview: PlanPreviewResponse | null;
   /** Whether the plan review modal is visible. */
   showPlanReview: boolean;
+  /** Live AI planning session — carried so edits reuse the last plan. */
+  aiSessionId: string | null;
+  /** Outstanding AI clarification when the model needs one detail. */
+  aiClarification: { message: string; questions: AiPlannerQuestion[] } | null;
+  planReviewEpoch: number;
   /** Auto-save flush indicator (debounced cell/ingredient edits). */
   saveStatus: SaveStatus;
 
@@ -89,7 +95,11 @@ interface MealMemoryState {
   sendIntent: (text: string) => Promise<MealMemoryIntentResponse>;
   answerIntent: (intentId: string, answer: string) => Promise<MealMemoryIntentResponse>;
   planThisWeek: (input?: Omit<PlanWeekRequest, 'weekStart'>) => Promise<void>;
-  moveEvent: (eventId: string, dateKey: string, mealSlot?: 'breakfast' | 'lunch' | 'dinner' | 'snack') => Promise<void>;
+  moveEvent: (
+    eventId: string,
+    dateKey: string,
+    mealSlot?: 'breakfast' | 'lunch' | 'dinner' | 'snack',
+  ) => Promise<void>;
   removeEvent: (eventId: string) => Promise<void>;
   markActual: (input: MealMemoryRecordActualRequest) => Promise<void>;
   feedBack: (input: MealMemoryFeedbackRequest) => Promise<void>;
@@ -101,7 +111,8 @@ interface MealMemoryState {
   loadRules: () => Promise<void>;
   addRule: (input: MealMemoryCreateRuleRequest) => Promise<void>;
   deactivateRule: (ruleId: string) => Promise<void>;
-  requestPlanPreview: (text: string) => Promise<void>;
+  startOrEditAiPlan: (text: string, sessionId?: string | null) => Promise<void>;
+  answerAiClarification: (answer: string) => Promise<void>;
   confirmPlan: (previewId: string, edits?: string) => Promise<void>;
   cancelPlanReview: () => void;
   clearError: () => void;
@@ -112,6 +123,32 @@ function shiftWeekStart(weekStart: string, delta: number): string {
   const anchor = new Date(`${weekStart}T00:00:00.000Z`);
   anchor.setUTCDate(anchor.getUTCDate() + delta * 7);
   return anchor.toISOString().slice(0, 10);
+}
+
+const PLANNING_DAY_WORDS =
+  /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{4}-\d{2}-\d{2}|this week|next week|the weekend|weekend)\b/i;
+const PLANNING_VERBS = /\b(plan|schedule|set up|make|build|replan|re-plan|rework)\b/i;
+
+/**
+ * True when the free-text message is a request to create or rework the meal
+ * plan ("plan", "help me with the plan", "schedule our week"), as opposed to a
+ * small instant action ("I ate X", "no eggs", "move dinner to tuesday").
+ *
+ * These messages are routed to the AI planner directly — never to the
+ * deterministic intent classifier, which classified bare planning phrases as
+ * SCHEDULE and looped back with "what meal / which day" clarification forever.
+ */
+export function isPlanningRequest(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  // Bare "plan" verbs always planning, even without a day ("plan something",
+  // "make me a plan", "help me plan").
+  if (/\b(plan|replan|re-plan|rework)\b/i.test(trimmed)) return true;
+
+  // "schedule/make/build/set up" count as planning only when a day is named,
+  // so quick actions like "make pasta" or "schedule the kids" stay instant.
+  return PLANNING_DAY_WORDS.test(trimmed) && PLANNING_VERBS.test(trimmed);
 }
 
 /** When exactly one household member is selected, scope the view to them. */
@@ -174,6 +211,9 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   recentMeals: [],
   planPreview: null,
   showPlanReview: false,
+  aiSessionId: null,
+  aiClarification: null,
+  planReviewEpoch: 0,
   saveStatus: 'idle',
   busy: false,
   error: null,
@@ -217,15 +257,57 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   sendIntent: async (text) => {
     set({ busy: true, error: null });
     try {
+      const sessionId = get().aiSessionId;
+      const pendingClarification = get().aiClarification;
+
+      // A planning-family request goes straight to the AI planner on first
+      // message too. Routing it through the deterministic classifier first is
+      // what caused the "ask the same question again" loop: SCHEDULE without a
+      // meal concept always came back asking for one. The AI gets the full
+      // household context and asks only what genuinely changes the plan.
+      // The same applies to every message while an AI planning session is
+      // alive — answers to its questions, or edits of its last plan — which is
+      // why these are one branch before the deterministic classifier.
+      if (isPlanningRequest(text) || sessionId || pendingClarification !== null) {
+        await get().startOrEditAiPlan(text, sessionId ?? null);
+        return {
+          intentId: '',
+          status: 'awaiting_confirmation',
+          resolution: {
+            intent: 'PLAN_WEEK',
+            confidence: 0,
+            confidenceBand: 'LOW',
+            entities: {
+              mealConcept: null,
+              targetDate: null,
+              targetHorizon: null,
+              mealSlot: null,
+              excludedDay: null,
+              ingredient: null,
+              memberId: null,
+              blockType: null,
+              effort: null,
+              constraint: null,
+              moveTarget: null,
+            },
+            rawText: text,
+            requiresClarification: false,
+            clarificationQuestion: null,
+          },
+          clarification: null,
+          result: null,
+        } satisfies MealMemoryIntentResponse;
+      }
+
       const response = await postIntent({ text });
       const intent = response.resolution?.intent;
       const isPlanningIntent = intent === 'PLAN_WEEK' || intent === 'REPLAN';
-      
+
       if (isPlanningIntent) {
-        await get().requestPlanPreview(text);
+        await get().startOrEditAiPlan(text);
         return response;
       }
-      
+
       set({ pendingIntent: response, lastMessage: response.result?.message ?? null });
       await get().loadWeek();
       await get().loadRules();
@@ -261,11 +343,36 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
     }
   },
 
-  requestPlanPreview: async (text) => {
+  startOrEditAiPlan: async (text, sessionId) => {
+    const epoch = get().planReviewEpoch;
     set({ busy: true, error: null });
     try {
-      const preview = await postPlanPreview(text);
-      set({ planPreview: preview, showPlanReview: true, lastMessage: preview.message });
+      const response = await postAiPlan({
+        text,
+        sessionId: sessionId ?? get().aiSessionId ?? null,
+      });
+      if (epoch !== get().planReviewEpoch) return;
+
+      if (response.status === 'ready' && response.preview) {
+        set({
+          aiSessionId: response.sessionId,
+          planPreview: response.preview,
+          showPlanReview: true,
+          aiClarification: null,
+          lastMessage: response.message,
+        });
+      } else if (response.status === 'clarification') {
+        set({
+          aiSessionId: response.sessionId,
+          aiClarification: {
+            message: response.message,
+            questions: response.questions,
+          },
+          planPreview: null,
+          showPlanReview: false,
+          lastMessage: response.message,
+        });
+      }
     } catch (err) {
       set({ error: toApiError(err) });
       throw err;
@@ -274,11 +381,27 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
     }
   },
 
+  answerAiClarification: async (answer) => {
+    const sessionId = get().aiSessionId;
+    if (!sessionId) {
+      // No live session yet — treat stray answers as a fresh planning prompt.
+      await get().startOrEditAiPlan(answer, null);
+      return;
+    }
+    await get().startOrEditAiPlan(answer, sessionId);
+  },
+
   confirmPlan: async (previewId, edits) => {
     set({ busy: true, error: null });
     try {
       await postPlanConfirm({ previewId, edits });
-      set({ planPreview: null, showPlanReview: false, lastMessage: 'Plan confirmed.' });
+      set({
+        planPreview: null,
+        showPlanReview: false,
+        aiSessionId: null,
+        aiClarification: null,
+        lastMessage: 'Plan confirmed.',
+      });
       await get().loadWeek();
       await get().loadRecents();
     } catch (err) {
@@ -290,7 +413,14 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   },
 
   cancelPlanReview: () => {
-    set({ planPreview: null, showPlanReview: false });
+    set({
+      planPreview: null,
+      showPlanReview: false,
+      aiSessionId: null,
+      aiClarification: null,
+      error: null,
+      planReviewEpoch: get().planReviewEpoch + 1,
+    });
   },
 
   planThisWeek: async (input) => {
@@ -467,14 +597,11 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   },
 
   loadRules: async () => {
-    set({ busy: true, error: null });
     try {
       const rules = await listRules();
       set({ rules });
     } catch (err) {
       set({ error: toApiError(err) });
-    } finally {
-      set({ busy: false });
     }
   },
 
@@ -529,10 +656,7 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   },
 }));
 
-function findPlannedEvent(
-  week: MealMemoryWeekResponse | null,
-  eventId: string,
-): MealEvent | null {
+function findPlannedEvent(week: MealMemoryWeekResponse | null, eventId: string): MealEvent | null {
   if (!week) return null;
   for (const day of week.days) {
     for (const slot of day.slots) {

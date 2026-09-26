@@ -1,21 +1,20 @@
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../../components/motion/Pressable';
 
 import { Text } from '../../components/AppText';
 import { TextInput } from '../../components/AppTextInput';
-
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { FadeInView } from '../../components/motion/FadeInView';
+import { Pressable } from '../../components/motion/Pressable';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { convergeMeal } from '../../services/common-table.api';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { useSettingsStore } from '../../stores/settings.store';
 import { colors, spacing } from '../../theme';
-import { FadeInView } from '../../components/motion/FadeInView';
 
 const TIME_OPTIONS = [
   { minutes: 15, label: '~15 min' },
@@ -82,9 +81,7 @@ export function IngredientsScreen() {
         </Text>
 
         {memberIds.length > 0 && (
-          <Text style={styles.membersTag}>
-            Cooking for {selectedNames(memberIds).join(', ')}
-          </Text>
+          <Text style={styles.membersTag}>Cooking for {selectedNames(memberIds).join(', ')}</Text>
         )}
 
         <TextInput
@@ -106,36 +103,40 @@ export function IngredientsScreen() {
         <View style={styles.section}>
           <Text style={styles.label}>Time available</Text>
           <View style={styles.optionRow}>
-            {TIME_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.minutes}
-                style={[
-                  styles.option,
-                  !showCustomTime && timeMinutes === opt.minutes && styles.optionActive,
-                ]}
-                onPress={() => {
-                  setTimeMinutes(opt.minutes);
-                  setShowCustomTime(false);
-                }}
-              >
-                <Text
+            {TIME_OPTIONS.map((opt, index) => (
+              <FadeInView key={opt.minutes} delay={index * 60} rise={4}>
+                <Pressable
+                  key={opt.minutes}
                   style={[
-                    styles.optionText,
-                    !showCustomTime && timeMinutes === opt.minutes && styles.optionTextActive,
+                    styles.option,
+                    !showCustomTime && timeMinutes === opt.minutes && styles.optionActive,
                   ]}
+                  onPress={() => {
+                    setTimeMinutes(opt.minutes);
+                    setShowCustomTime(false);
+                  }}
                 >
-                  {opt.label}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      !showCustomTime && timeMinutes === opt.minutes && styles.optionTextActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              </FadeInView>
+            ))}
+            <FadeInView delay={TIME_OPTIONS.length * 60} rise={4}>
+              <Pressable
+                style={[styles.option, showCustomTime && styles.optionActive]}
+                onPress={() => setShowCustomTime(true)}
+              >
+                <Text style={[styles.optionText, showCustomTime && styles.optionTextActive]}>
+                  + Custom
                 </Text>
               </Pressable>
-            ))}
-            <Pressable
-              style={[styles.option, showCustomTime && styles.optionActive]}
-              onPress={() => setShowCustomTime(true)}
-            >
-              <Text style={[styles.optionText, showCustomTime && styles.optionTextActive]}>
-                + Custom
-              </Text>
-            </Pressable>
+            </FadeInView>
           </View>
           {showCustomTime && (
             <View style={styles.customTimeRow}>

@@ -1,30 +1,27 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '../components/AppText';
-import { PrimaryButton } from '../components/PrimaryButton';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import { PressableScale } from '../components/motion/PressableScale';
+import type { KitchenStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
+import { haptics } from '../services/haptics';
 import {
   type WhatCanIMakeIdea,
-  markKitchenItemUsed,
   deleteKitchenItem,
+  markKitchenItemUsed,
   upsertKitchenItem,
   whatCanIMake,
 } from '../services/kitchen.api';
-import type { KitchenStackParamList } from '../navigation/AppNavigator';
 import { colors, fonts, radius, spacing } from '../theme';
 
 // ──────────────────────────────────────────────────────
@@ -71,11 +68,13 @@ export function IngredientDetailScreen() {
     setMakeBusy(true);
     try {
       const res = await whatCanIMake();
-      setMakeIdeas(res.ideas.filter((idea) =>
-        idea.ingredients.some(
-          (ing) => ing.toLowerCase() === item.ingredientName.toLowerCase(),
-        ),
-      ).slice(0, 3));
+      setMakeIdeas(
+        res.ideas
+          .filter((idea) =>
+            idea.ingredients.some((ing) => ing.toLowerCase() === item.ingredientName.toLowerCase()),
+          )
+          .slice(0, 3),
+      );
     } catch (err) {
       // Silently fail — suggestions are nice-to-have
     } finally {
@@ -88,6 +87,7 @@ export function IngredientDetailScreen() {
   }, [loadSuggestions]);
 
   async function handleQuantityChange(delta: number) {
+    haptics.light();
     const newQty = Math.max(0, quantity + delta);
     setQuantity(newQty);
     try {
@@ -126,6 +126,7 @@ export function IngredientDetailScreen() {
   }
 
   function confirmDelete() {
+    haptics.warning();
     Alert.alert('Remove item?', `Delete ${item.ingredientName} from your kitchen?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -148,17 +149,11 @@ export function IngredientDetailScreen() {
       <FadeInView style={dStyles.container}>
         {/* ── Header ── */}
         <View style={dStyles.header}>
-          <Pressable
-            style={dStyles.backBtn}
-            onPress={() => navigation.goBack()}
-          >
+          <Pressable style={dStyles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={22} color={colors.kitchenInk} />
           </Pressable>
           <Text style={dStyles.headerTitle}>{item.ingredientName}</Text>
-          <Pressable
-            style={dStyles.deleteBtn}
-            onPress={confirmDelete}
-          >
+          <Pressable style={dStyles.deleteBtn} onPress={confirmDelete}>
             <Ionicons name="trash-outline" size={18} color={colors.kitchenAlert} />
           </Pressable>
         </View>
@@ -189,10 +184,7 @@ export function IngredientDetailScreen() {
                   <Text style={dStyles.qtyBtnText}>−</Text>
                 </Pressable>
                 <Text style={dStyles.qtyValue}>{quantity}</Text>
-                <Pressable
-                  style={dStyles.qtyBtn}
-                  onPress={() => handleQuantityChange(1)}
-                >
+                <Pressable style={dStyles.qtyBtn} onPress={() => handleQuantityChange(1)}>
                   <Text style={dStyles.qtyBtnText}>+</Text>
                 </Pressable>
               </View>
@@ -256,7 +248,7 @@ export function IngredientDetailScreen() {
 
           {/* ── Expiry warning ── */}
           {isExpiringSoon && (
-            <View style={[dStyles.alertCard, { backgroundColor: '#F8F0F0' }]}>
+            <View style={[dStyles.alertCard, { backgroundColor: colors.errorSoft }]}>
               <Ionicons name="alert-circle-outline" size={18} color="#D95C54" />
               <Text style={dStyles.alertText}>
                 {item.daysUntilExpiry !== null && item.daysUntilExpiry <= 0
@@ -295,17 +287,14 @@ export function IngredientDetailScreen() {
 
           {makeBusy && (
             <View style={dStyles.loadingRow}>
-              <Text style={dStyles.loadingText}>Finding rescue ideas...</Text>
+              <Skeleton.Block width="100%" height={16} />
+              <Skeleton.Block width="80%" height={16} />
             </View>
           )}
 
           {/* ── Actions ── */}
           <View style={dStyles.actions}>
-            <PrimaryButton
-              label="Use 1"
-              onPress={confirmUse}
-              variant="primary"
-            />
+            <PrimaryButton label="Use 1" onPress={confirmUse} variant="primary" />
           </View>
 
           <View style={{ height: 40 }} />
@@ -510,11 +499,6 @@ const dStyles = StyleSheet.create({
   loadingRow: {
     alignItems: 'center',
     paddingVertical: spacing.md,
-  },
-  loadingText: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.kitchenSecondary,
   },
 
   // Actions

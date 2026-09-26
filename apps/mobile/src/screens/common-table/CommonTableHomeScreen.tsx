@@ -10,24 +10,21 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { Pressable } from '../../components/motion/Pressable';
+
+import type { HouseholdMemberProfile } from '@meal-rescue/shared-types';
 
 import { AppImage, prefetchImages } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
-
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { FadeInView } from '../../components/motion/FadeInView';
+import { Pressable } from '../../components/motion/Pressable';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
-import type { HouseholdMemberProfile } from '@meal-rescue/shared-types';
 import { toApiError } from '../../services/api';
-import {
-  getSharedMeal,
-  startCooking as startCookingApi,
-} from '../../services/common-table.api';
+import { getSharedMeal, startCooking as startCookingApi } from '../../services/common-table.api';
 import { loadPeoplePhotos } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, fonts, spacing } from '../../theme';
-import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
  * Common Table home — one unified "Your Table" screen.
@@ -67,10 +64,7 @@ function MemberRow({
   }));
 
   function handlePress() {
-    pop.value = withSequence(
-      withTiming(1, { duration: 90 }),
-      withTiming(0, { duration: 240 }),
-    );
+    pop.value = withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 240 }));
     onToggle(member.id);
   }
 
@@ -201,13 +195,11 @@ export function CommonTableHomeScreen() {
           <View style={styles.hero}>
             <View style={styles.heroRow}>
               <View style={styles.heroIcon}>
-                <Ionicons name="restaurant" size={24} color={colors.homeInk} />
+                <Ionicons name="restaurant-outline" size={22} color={colors.text} />
               </View>
               <View style={styles.heroText}>
-                <Text style={styles.heroEyebrow}>YOURTABLE</Text>
-                <Text style={styles.heroTitle}>
-                  {household ? household.name : 'Your table'}
-                </Text>
+                <Text style={styles.heroEyebrow}>YOUR TABLE</Text>
+                <Text style={styles.heroTitle}>{household ? household.name : 'Your table'}</Text>
                 <Text style={styles.heroSubtitle}>
                   {hasTable
                     ? `${activeMembers.length} ${activeMembers.length === 1 ? 'person' : 'people'} you cook for`
@@ -216,14 +208,14 @@ export function CommonTableHomeScreen() {
               </View>
               {hasTable ? (
                 <Pressable
-                  style={styles.heroAction}
+                  style={styles.heroManageBtn}
                   onPress={() => navigation.navigate('Household')}
                   accessibilityRole="button"
                   accessibilityLabel="Manage table"
                   disabled={!hasTable}
                 >
-                  <Text style={styles.heroActionText}>Manage</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.surface} />
+                  <Text style={styles.heroManageText}>Manage</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
                 </Pressable>
               ) : null}
             </View>
@@ -238,18 +230,20 @@ export function CommonTableHomeScreen() {
             >
               <View style={styles.resumeIcon}>
                 {resumeBusy ? (
-                  <ActivityIndicator size="small" color={colors.surface} />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Ionicons name="flame" size={20} color={colors.surface} />
+                  <Ionicons name="flame-outline" size={20} color={colors.primary} />
                 )}
               </View>
               <View style={styles.resumeText}>
                 <Text style={styles.resumeTitle}>A meal is in progress</Text>
                 <Text style={styles.resumeSubtitle}>
-                  {activeStatus === 'split' ? 'Branch time — continue' : 'Pick up where you left off'}
+                  {activeStatus === 'split'
+                    ? 'Branch time — continue'
+                    : 'Pick up where you left off'}
                 </Text>
               </View>
-              <Ionicons name="arrow-forward" size={20} color={colors.surface} />
+              <Ionicons name="arrow-forward" size={18} color={colors.textSecondary} />
             </Pressable>
           ) : null}
 
@@ -261,9 +255,7 @@ export function CommonTableHomeScreen() {
               </View>
 
               {selected.length === 0 ? (
-                <Text style={styles.pickHint}>
-                  Pick at least one person to cook for tonight.
-                </Text>
+                <Text style={styles.pickHint}>Pick at least one person to cook for tonight.</Text>
               ) : null}
 
               <View style={styles.memberList}>
@@ -280,9 +272,8 @@ export function CommonTableHomeScreen() {
 
               <PrimaryButton
                 label="Find a meal for tonight"
-                onPress={() =>
-                  navigation.navigate('Ingredients', { memberIds: selected })
-                }
+                variant="secondary"
+                onPress={() => navigation.navigate('Ingredients', { memberIds: selected })}
                 disabled={selected.length === 0}
                 style={styles.findMealCta}
               />
@@ -293,18 +284,18 @@ export function CommonTableHomeScreen() {
                 accessibilityRole="button"
               >
                 <View style={styles.addCircle}>
-                  <Ionicons name="add" size={18} color={colors.homeInk} />
+                  <Ionicons name="add-outline" size={18} color={colors.text} />
                 </View>
                 <Text style={styles.addSomeoneText}>Add someone</Text>
               </Pressable>
             </>
           ) : (
             <View style={styles.emptyMembers}>
-              <Ionicons name="people-outline" size={34} color={colors.homeTextTertiary} />
+              <Ionicons name="people-outline" size={34} color={colors.borderStrong} />
               <Text style={styles.emptyMembersTitle}>Set up your table</Text>
               <Text style={styles.emptyMembersText}>
-                Add the people you cook for — their allergies and avoid lists become hard
-                rules we never break.
+                Add the people you cook for — their allergies and avoid lists become hard rules we
+                never break.
               </Text>
               <PrimaryButton
                 label="Add someone"
@@ -353,9 +344,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   heroIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -381,36 +372,36 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  heroAction: {
+  heroManageBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.smd,
-    borderRadius: 10,
-    backgroundColor: colors.homeInk,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
   },
-  heroActionText: {
+  heroManageText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.surface,
+    color: colors.textSecondary,
   },
 
   // ── Resume ──────────────────────────────────────────────
   resumeCard: {
-    backgroundColor: colors.homeInk,
-    borderRadius: 16,
-    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.lg,
   },
   resumeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -418,14 +409,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resumeTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.surface,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
   },
   resumeSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.72)',
-    marginTop: 2,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
 
   // ── Section header ──────────────────────────────────────
@@ -457,7 +448,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.smd,
@@ -498,6 +489,7 @@ const styles = StyleSheet.create({
   // ── Find a meal ────────────────────────────────────────
   findMealCta: {
     marginTop: spacing.lg,
+    borderColor: colors.borderStrong,
   },
 
   // ── Add someone ─────────────────────────────────────────
@@ -509,10 +501,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   addCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

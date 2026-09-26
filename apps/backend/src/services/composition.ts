@@ -21,6 +21,7 @@ import { LeftoverAlchemistService } from './leftover-alchemist.service';
 import { MealAnalyzerService } from './meal-analyzer.service';
 import { MealCompletionService } from './meal-completion.service';
 import { AccountingService } from './meal-memory/accounting.service';
+import { AiPlannerService } from './meal-memory/ai-planner.service';
 import { MealIntelligenceService } from './meal-memory/meal-intelligence.service';
 import { MealMemoryAiService } from './meal-memory/meal-memory-ai.service';
 import { MealMemoryService } from './meal-memory/meal-memory.service';
@@ -93,6 +94,7 @@ export function buildServices(redis: Redis | null): {
   householdMembers: HouseholdMemberService;
   mealMemory: MealMemoryService;
   mealIntelligence: MealIntelligenceService;
+  aiPlanner: AiPlannerService;
   tasteJournal: TasteJournalService;
   onboarding: OnboardingPreferencesService;
 } {
@@ -150,6 +152,7 @@ export function buildServices(redis: Redis | null): {
     householdService,
     aiService,
   });
+  const aiPlannerService = new AiPlannerService(llm, worldStateService, householdService);
 
   return {
     mealAnalyzer: new MealAnalyzerService(llm, redis, visionLlm),
@@ -183,6 +186,7 @@ export function buildServices(redis: Redis | null): {
     householdMembers: new HouseholdMemberService(dbModels),
     mealMemory: mealMemoryService,
     mealIntelligence: mealIntelligenceService,
+    aiPlanner: aiPlannerService,
     tasteJournal: new TasteJournalService(models),
     onboarding: new OnboardingPreferencesService(
       models,

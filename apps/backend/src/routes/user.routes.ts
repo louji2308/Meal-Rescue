@@ -104,6 +104,64 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  /**
+   * DELETE /api/v1/user/account — full account deletion.
+   * Cleans up RevenueCat, OneSignal, and all DB records.
+   */
+  app.delete('/account', async (request, reply) => {
+    const userId = request.user.sub;
+    const { env } = await import('../config/env');
+
+    // 1. Best-effort RevenueCat deletion
+    if (env.REVENUECAT_API_KEY) {
+      try {
+        await fetch(`https://api.revenuecat.com/v1/subscribers/${userId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${env.REVENUECAT_API_KEY}` },
+        });
+      } catch (err) {
+        request.log.warn({ err }, 'RevenueCat account deletion failed (non-fatal)');
+      }
+    }
+
+    // 2. Best-effort OneSignal deletion
+    if (env.ONESIGNAL_REST_KEY && env.ONESIGNAL_APP_ID) {
+      try {
+        await fetch(`https://onesignal.com/api/v1/users/${userId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Basic ${env.ONESIGNAL_REST_KEY}` },
+        });
+      } catch (err) {
+        request.log.warn({ err }, 'OneSignal account deletion failed (non-fatal)');
+      }
+    }
+
+    // 3. Delete DB records (order matters due to foreign keys)
+    const { sequelize } = await import('../database');
+    const models = sequelize.models;
+    for (const modelName of Object.keys(models)) {
+      const model = models[modelName];
+      if (!model) continue;
+      const attrs = model.rawAttributes as Record<string, unknown> | undefined;
+      if (attrs?.userId || attrs?.user_id) {
+        const col = attrs.userId ? 'userId' : 'user_id';
+        try {
+          await model.destroy({ where: { [col]: userId } });
+        } catch (err) {
+          request.log.warn(
+            { err, model: modelName },
+            'Account cleanup failed for model (non-fatal)',
+          );
+        }
+      }
+    }
+
+    // 4. Delete the user record itself
+    await User.destroy({ where: { id: userId } });
+
+    return reply.send({ success: true });
+  });
+
   app.get('/taste/profile', async (request, reply) => {
     const { tasteMemory } = buildServices(app.redis);
     return reply.send(await tasteMemory.getTasteProfile(request.user.sub));

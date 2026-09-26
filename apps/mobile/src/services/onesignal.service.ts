@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { Alert, TurboModuleRegistry } from 'react-native';
 import type { NotificationClickEvent } from 'react-native-onesignal';
 
 /**
@@ -16,25 +16,44 @@ import type { NotificationClickEvent } from 'react-native-onesignal';
  * the config plugin).
  */
 
-export type NotificationActionButton = 'make_it' | 'later' | 'not_tonight';
+export type NotificationActionButton =
+  | 'make_it'
+  | 'later'
+  | 'not_tonight'
+  | 'loved_it'
+  | 'was_ok'
+  | 'not_great'
+  | 'open_app'
+  | 'dismiss';
 
 export interface ActionButtonPayload {
   actionId: NotificationActionButton;
   deepLink?: string;
   kind?: string;
+  rescueId?: string;
+  recommendation?: string;
 }
 
 let _oneSignal: typeof import('react-native-onesignal').OneSignal | null = null;
+let _nativeModuleResolved = false;
 
 function getOneSignal(): typeof import('react-native-onesignal').OneSignal | null {
-  if (_oneSignal) return _oneSignal;
+  if (_nativeModuleResolved) return _oneSignal;
+  _nativeModuleResolved = true;
   try {
+    // The package entry runs TurboModuleRegistry.getEnforcing at module
+    // evaluation time, which throws an invariant — Metro/LogBox surfaces it
+    // as a red console error before this catch ever sees it — whenever the
+    // native module is absent from the binary. Probe with get() first: it
+    // returns null silently, so unlinked builds never evaluate the package
+    // and the result is cached so the probe runs at most once per session.
+    if (TurboModuleRegistry.get('OneSignal') == null) return null;
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     _oneSignal = require('react-native-onesignal').OneSignal;
-    return _oneSignal;
   } catch {
-    return null;
+    _oneSignal = null;
   }
+  return _oneSignal;
 }
 
 const PERMISSION_ASKED_KEY = 'meal-rescue/onesignal-permission-asked';
@@ -261,22 +280,18 @@ function readIncomingPush(notification: unknown): IncomingPush | null {
  * click; the store dedupes the same push surfacing twice. Returns a single
  * unsubscribe for both.
  */
-export function onIncomingPush(
-  handler: (push: IncomingPush) => void,
-): () => void {
+export function onIncomingPush(handler: (push: IncomingPush) => void): () => void {
   if (!hasOneSignalAppId()) return () => undefined;
   const os = getOneSignal();
   if (!os) return () => undefined;
 
   const notifications = os.Notifications;
 
-  const handleForeground = (event: {
-    getNotification?: () => unknown;
-    notification?: unknown;
-  }) => {
+  const handleForeground = (event: { getNotification?: () => unknown; notification?: unknown }) => {
     let raw: unknown = null;
     try {
-      raw = typeof event.getNotification === 'function' ? event.getNotification() : event.notification;
+      raw =
+        typeof event.getNotification === 'function' ? event.getNotification() : event.notification;
     } catch {
       raw = event.notification ?? null;
     }
@@ -323,13 +338,11 @@ export function onAftercareNotificationClick(
 /**
  * Action button click handler.
  *
- * When a user taps an action button (Make it, Later, Not tonight),
+ * When a user taps an action button (Make it, Later, Not tonight, ...),
  * this listener receives the action ID and the notification's additionalData.
  * Returns an unsubscribe function.
  */
-export function onActionButtonClick(
-  handler: (payload: ActionButtonPayload) => void,
-): () => void {
+export function onActionButtonClick(handler: (payload: ActionButtonPayload) => void): () => void {
   if (!hasOneSignalAppId()) return () => undefined;
   const os = getOneSignal();
   if (!os) return () => undefined;
@@ -338,11 +351,20 @@ export function onActionButtonClick(
     const additionalData = event.notification?.additionalData;
     if (!additionalData || typeof additionalData !== 'object') return;
 
-    // OneSignal passes actionId on the event when a button is clicked
-    const actionId = (event as { actionId?: string }).actionId;
+    // SDK v5 click events are { result: { actionId?, url? }, notification }
+    const actionId = event.result?.actionId;
     if (!actionId) return;
 
-    const validActions: NotificationActionButton[] = ['make_it', 'later', 'not_tonight'];
+    const validActions: NotificationActionButton[] = [
+      'make_it',
+      'later',
+      'not_tonight',
+      'loved_it',
+      'was_ok',
+      'not_great',
+      'open_app',
+      'dismiss',
+    ];
     if (!validActions.includes(actionId as NotificationActionButton)) return;
 
     const data = additionalData as Record<string, unknown>;
@@ -350,6 +372,8 @@ export function onActionButtonClick(
       actionId: actionId as NotificationActionButton,
       deepLink: typeof data.deepLink === 'string' ? data.deepLink : undefined,
       kind: typeof data.kind === 'string' ? data.kind : undefined,
+      rescueId: typeof data.rescueId === 'string' ? data.rescueId : undefined,
+      recommendation: typeof data.recommendation === 'string' ? data.recommendation : undefined,
     });
   };
 

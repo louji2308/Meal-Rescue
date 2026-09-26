@@ -211,7 +211,18 @@ export class PlanningEngine {
       reasons.push({ kind: 'open_slot', message: 'No compatible slots to fill this week.' });
     }
 
-    const plan = params.previewMode ? null : await this.persistPlan(world, params, events);
+    const plan = params.previewMode
+      ? {
+          id: randomUUID(),
+          householdId: world.household!.id,
+          status: 'proposed' as const,
+          weekStart: params.weekStart,
+          source: 'plan_week' as const,
+          meals: events,
+          openSlots: this.openSlotsFor(world, events),
+          createdAt: new Date().toISOString(),
+        }
+      : await this.persistPlan(world, params, events);
 
     return {
       plan,

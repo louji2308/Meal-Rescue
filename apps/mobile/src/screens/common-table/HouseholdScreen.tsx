@@ -3,19 +3,18 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../../components/motion/Pressable';
 
 import { AppImage, prefetchImages } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
-
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { FadeInView } from '../../components/motion/FadeInView';
+import { Pressable } from '../../components/motion/Pressable';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { loadPeoplePhotos } from '../../services/people-photos';
 import { useCommonTableStore } from '../../stores/common-table.store';
 import { colors, spacing } from '../../theme';
-import { FadeInView } from '../../components/motion/FadeInView';
 
 /**
  * Household — the people you cook for, shown as a roster.
@@ -54,20 +53,16 @@ export function HouseholdScreen() {
   }, [loadHousehold]);
 
   function handleDelete(memberId: string, name: string) {
-    Alert.alert(
-      `Remove ${name}?`,
-      'They will no longer be part of your table.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            removeMember(memberId).catch((err) => setError(toApiError(err)));
-          },
+    Alert.alert(`Remove ${name}?`, 'They will no longer be part of your table.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          removeMember(memberId).catch((err) => setError(toApiError(err)));
         },
-      ],
-    );
+      },
+    ]);
   }
 
   const sorted = [...members].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
@@ -93,69 +88,71 @@ export function HouseholdScreen() {
           </View>
         ) : (
           <View style={styles.memberList}>
-            {sorted.map((member) => {
+            {sorted.map((member, index) => {
               const photo = photos[member.id];
               const hasConstraints =
                 member.constraints.allergies.length > 0 ||
                 member.constraints.avoidIngredients.length > 0 ||
                 member.constraints.dietaryRestrictions.length > 0;
               return (
-                <View key={member.id} style={styles.memberCard}>
-                  <View style={styles.memberRow}>
-                    <View style={[styles.avatar, photo && styles.avatarPhoto]}>
-                      {photo ? (
-                        <AppImage source={{ uri: photo }} style={styles.photo} />
-                      ) : (
-                        <Text style={styles.avatarText}>{member.initials}</Text>
-                      )}
-                    </View>
-                    <View style={styles.memberInfo}>
-                      <Text style={styles.memberName}>
-                        {member.displayName}
-                        {member.isOwner ? ' (you)' : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.memberActions}>
-                      <Pressable
-                        style={styles.iconButton}
-                        onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${member.displayName}`}
-                      >
-                        <Ionicons name="create-outline" size={20} color={colors.softAlert} />
-                      </Pressable>
-                      {!member.isOwner && (
+                <FadeInView key={member.id} delay={index * 80} rise={4}>
+                  <View style={styles.memberCard}>
+                    <View style={styles.memberRow}>
+                      <View style={[styles.avatar, photo && styles.avatarPhoto]}>
+                        {photo ? (
+                          <AppImage source={{ uri: photo }} style={styles.photo} />
+                        ) : (
+                          <Text style={styles.avatarText}>{member.initials}</Text>
+                        )}
+                      </View>
+                      <View style={styles.memberInfo}>
+                        <Text style={styles.memberName}>
+                          {member.displayName}
+                          {member.isOwner ? ' (you)' : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.memberActions}>
                         <Pressable
                           style={styles.iconButton}
-                          onPress={() => handleDelete(member.id, member.displayName)}
+                          onPress={() => navigation.navigate('AddPeople', { memberId: member.id })}
                           accessibilityRole="button"
-                          accessibilityLabel={`Remove ${member.displayName}`}
+                          accessibilityLabel={`Edit ${member.displayName}`}
                         >
-                          <Ionicons name="trash-outline" size={20} color={colors.softAlert} />
+                          <Ionicons name="create-outline" size={20} color={colors.softAlert} />
                         </Pressable>
-                      )}
+                        {!member.isOwner && (
+                          <Pressable
+                            style={styles.iconButton}
+                            onPress={() => handleDelete(member.id, member.displayName)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${member.displayName}`}
+                          >
+                            <Ionicons name="trash-outline" size={20} color={colors.softAlert} />
+                          </Pressable>
+                        )}
+                      </View>
                     </View>
+                    {hasConstraints && (
+                      <View style={styles.constraintChips}>
+                        {member.constraints.allergies.map((a) => (
+                          <View key={`a-${a}`} style={[styles.chip, styles.chipDanger]}>
+                            <Text style={styles.chipDangerText}>allergy: {a}</Text>
+                          </View>
+                        ))}
+                        {member.constraints.avoidIngredients.map((a) => (
+                          <View key={`v-${a}`} style={styles.chip}>
+                            <Text style={styles.chipText}>avoids {a}</Text>
+                          </View>
+                        ))}
+                        {member.constraints.dietaryRestrictions.map((d) => (
+                          <View key={`d-${d}`} style={styles.chip}>
+                            <Text style={styles.chipText}>{d}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
-                  {hasConstraints && (
-                    <View style={styles.constraintChips}>
-                      {member.constraints.allergies.map((a) => (
-                        <View key={`a-${a}`} style={[styles.chip, styles.chipDanger]}>
-                          <Text style={styles.chipDangerText}>allergy: {a}</Text>
-                        </View>
-                      ))}
-                      {member.constraints.avoidIngredients.map((a) => (
-                        <View key={`v-${a}`} style={styles.chip}>
-                          <Text style={styles.chipText}>avoids {a}</Text>
-                        </View>
-                      ))}
-                      {member.constraints.dietaryRestrictions.map((d) => (
-                        <View key={`d-${d}`} style={styles.chip}>
-                          <Text style={styles.chipText}>{d}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
+                </FadeInView>
               );
             })}
           </View>

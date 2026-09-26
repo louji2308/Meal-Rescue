@@ -1,21 +1,24 @@
-import { useNavigation, useRoute } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '../components/AppText';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { Skeleton } from '../components/Skeleton';
 import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
+import { haptics } from '../services/haptics';
 import { getMealInstructions } from '../services/meal-memory.api';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 
@@ -41,6 +44,52 @@ const EFFORT_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 const H_PAD = 24;
+
+const AnimatedCircle = Animated.createAnimatedComponent(View);
+
+function StepRow({
+  step,
+  index,
+  isCompleted,
+  isLast,
+  onPress,
+}: {
+  step: string;
+  index: number;
+  isCompleted: boolean;
+  isLast: boolean;
+  onPress: () => void;
+}) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  useEffect(() => {
+    if (isCompleted) {
+      scale.value = withSequence(
+        withSpring(1.3, { damping: 8, stiffness: 300 }),
+        withSpring(1, { damping: 8, stiffness: 300 }),
+      );
+    }
+  }, [isCompleted]);
+
+  return (
+    <Pressable style={[sStyles.stepRow, !isLast && sStyles.stepDivider]} onPress={onPress}>
+      <AnimatedCircle
+        style={[sStyles.stepCircle, isCompleted && sStyles.stepCircleCompleted, animatedStyle]}
+      >
+        {isCompleted ? (
+          <Ionicons name="checkmark" size={14} color={colors.surface} />
+        ) : (
+          <Text style={sStyles.stepNumber}>{index + 1}</Text>
+        )}
+      </AnimatedCircle>
+      <Text style={[sStyles.stepText, isCompleted && sStyles.stepTextCompleted]}>{step}</Text>
+    </Pressable>
+  );
+}
 
 export function DishDetailScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -73,7 +122,9 @@ export function DishDetailScreen() {
       }
     }
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [params.eventId, params.concept]);
 
   const resolvedIngredients = instructions?.ingredients ?? params.ingredients;
@@ -87,11 +138,20 @@ export function DishDetailScreen() {
   function toggleStep(index: number) {
     setCompletedSteps((prev) => {
       const next = new Set(prev);
-      if (next.has(index)) {
+      const wasCompleted = next.has(index);
+      if (wasCompleted) {
         next.delete(index);
       } else {
         next.add(index);
       }
+
+      haptics.light();
+
+      const totalSteps = resolvedInstructions?.length ?? 0;
+      if (totalSteps > 0 && next.size === totalSteps && !wasCompleted) {
+        haptics.success();
+      }
+
       return next;
     });
   }
@@ -108,10 +168,7 @@ export function DishDetailScreen() {
     <SafeAreaView style={sStyles.container} edges={['top']}>
       <FadeInView style={sStyles.container}>
         <View style={sStyles.header}>
-          <Pressable
-            style={sStyles.backBtn}
-            onPress={() => navigation.goBack()}
-          >
+          <Pressable style={sStyles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={22} color={colors.mealPlanInk} />
           </Pressable>
           <Text style={sStyles.headerTitle}>Dish Detail</Text>
@@ -152,7 +209,10 @@ export function DishDetailScreen() {
                 {resolvedIngredients!.map((item, idx) => (
                   <View
                     key={`ing-${idx}`}
-                    style={[sStyles.ingredientRow, idx < resolvedIngredients!.length - 1 && sStyles.ingredientDivider]}
+                    style={[
+                      sStyles.ingredientRow,
+                      idx < resolvedIngredients!.length - 1 && sStyles.ingredientDivider,
+                    ]}
                   >
                     <Ionicons name="ellipse" size={6} color={colors.mealPlanSecondary} />
                     <Text style={sStyles.ingredientText}>{item}</Text>
@@ -165,35 +225,27 @@ export function DishDetailScreen() {
           <FadeInView delay={160} rise={6}>
             <Text style={sStyles.sectionTitle}>Cooking Steps</Text>
             {loadingInstructions ? (
-              <View style={sStyles.loadingRow}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={sStyles.loadingText}>Generating cooking instructions...</Text>
+              <View style={sStyles.card}>
+                <Skeleton
+                  height={200}
+                  borderRadius={radius.lg}
+                  style={{ marginBottom: spacing.md }}
+                />
+                <Skeleton height={18} width="60%" style={{ marginBottom: spacing.md }} />
+                <Skeleton lines={4} height={14} />
               </View>
             ) : hasInstructions ? (
               <View style={sStyles.card}>
-                {resolvedInstructions!.map((step, idx) => {
-                  const isCompleted = completedSteps.has(idx);
-                  return (
-                    <Pressable
-                      key={`step-${idx}`}
-                      style={[sStyles.stepRow, idx < resolvedInstructions!.length - 1 && sStyles.stepDivider]}
-                      onPress={() => toggleStep(idx)}
-                    >
-                      <View style={[sStyles.stepCircle, isCompleted && sStyles.stepCircleCompleted]}>
-                        {isCompleted ? (
-                          <Ionicons name="checkmark" size={14} color={colors.surface} />
-                        ) : (
-                          <Text style={sStyles.stepNumber}>{idx + 1}</Text>
-                        )}
-                      </View>
-                      <Text
-                        style={[sStyles.stepText, isCompleted && sStyles.stepTextCompleted]}
-                      >
-                        {step}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {resolvedInstructions!.map((step, idx) => (
+                  <StepRow
+                    key={`step-${idx}`}
+                    step={step}
+                    index={idx}
+                    isCompleted={completedSteps.has(idx)}
+                    isLast={idx === resolvedInstructions!.length - 1}
+                    onPress={() => toggleStep(idx)}
+                  />
+                ))}
               </View>
             ) : (
               <View style={sStyles.emptyCard}>
@@ -223,17 +275,9 @@ export function DishDetailScreen() {
           )}
 
           <View style={sStyles.actions}>
-            <PrimaryButton
-              label="Cooked it"
-              onPress={handleCookedIt}
-              variant="primary"
-            />
+            <PrimaryButton label="Cooked it" onPress={handleCookedIt} variant="primary" />
             <View style={{ height: spacing.sm }} />
-            <PrimaryButton
-              label="Skip"
-              onPress={handleSkip}
-              variant="secondary"
-            />
+            <PrimaryButton label="Skip" onPress={handleSkip} variant="secondary" />
           </View>
 
           <View style={{ height: spacing.xl }} />
@@ -435,17 +479,5 @@ const sStyles = StyleSheet.create({
 
   actions: {
     marginTop: spacing.md,
-  },
-
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.lg,
-    justifyContent: 'center',
-  },
-  loadingText: {
-    ...typography.mealPlanBody,
-    color: colors.textSecondary,
   },
 });

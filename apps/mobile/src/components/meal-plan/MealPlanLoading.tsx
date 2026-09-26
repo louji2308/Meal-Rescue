@@ -1,13 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
 import { colors, spacing, typography } from '../../theme';
-import { FadeInView } from '../motion/FadeInView';
 import { Text } from '../AppText';
+import { Skeleton } from '../Skeleton';
+import { FadeInView } from '../motion/FadeInView';
 
 const SENTENCES = [
   'Reading your taste memory...',
-  'Checking what\'s in the kitchen...',
+  "Checking what's in the kitchen...",
   'Learning from past rescues...',
   'Considering household preferences...',
   'Balancing variety and nutrition...',
@@ -22,72 +25,107 @@ interface MealPlanLoadingProps {
 
 export default function MealPlanLoading({ visible }: MealPlanLoadingProps) {
   const [index, setIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!visible) {
       setIndex(0);
-      fadeAnim.setValue(1);
       return;
     }
 
     const interval = setInterval(() => {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }).start(() => {
-        setIndex((prev) => (prev + 1) % SENTENCES.length);
-        fadeAnim.setValue(0);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }).start();
-      });
+      setIndex((prev) => (prev + 1) % SENTENCES.length);
     }, ROTATION_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [visible, fadeAnim]);
+  }, [visible]);
 
   if (!visible) return null;
 
   return (
-    <FadeInView duration={600} style={styles.container}>
+    <FadeInView duration={400} style={styles.container}>
       <View style={styles.content}>
-        <Ionicons
-          name="fitness"
-          size={96}
-          color={colors.primary}
-          style={styles.icon}
-        />
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={styles.sentence}>{SENTENCES[index]}</Text>
-        </Animated.View>
+        {/* Skeleton placeholders for the meal plan UI */}
+        <View style={styles.skeletonArea}>
+          <Skeleton width={120} height={24} borderRadius={6} />
+          <View style={styles.skeletonSpacer} />
+          <Skeleton width="100%" height={80} borderRadius={12} />
+          <View style={styles.skeletonSpacer} />
+          <Skeleton width="100%" height={120} borderRadius={12} />
+        </View>
+        {/* Rotating loading message */}
+        <View style={styles.messageArea}>
+          <Ionicons name="fitness" size={32} color={colors.primary} style={styles.icon} />
+          <MessageCrossFade messages={SENTENCES} index={index} />
+        </View>
       </View>
     </FadeInView>
   );
 }
 
+function MessageCrossFade({ messages, index }: { messages: string[]; index: number }) {
+  const outgoingOpacity = useSharedValue(0);
+  const incomingOpacity = useSharedValue(1);
+  const prevIndex = useRef(index);
+
+  useEffect(() => {
+    if (index === prevIndex.current) return;
+    outgoingOpacity.value = withTiming(0, { duration: 200 });
+    incomingOpacity.value = 0;
+    incomingOpacity.value = withTiming(1, { duration: 200 });
+    prevIndex.current = index;
+  }, [index]);
+
+  const outgoingStyle = useAnimatedStyle(() => ({ opacity: outgoingOpacity.value }));
+  const incomingStyle = useAnimatedStyle(() => ({ opacity: incomingOpacity.value }));
+
+  return (
+    <View style={{ minHeight: 20, justifyContent: 'center' }}>
+      <Animated.View style={[styles.messageWrap, outgoingStyle]} pointerEvents="none">
+        <Text style={styles.sentence}>{messages[prevIndex.current]}</Text>
+      </Animated.View>
+      <Animated.View style={[styles.messageWrap, incomingStyle]}>
+        <Text style={styles.sentence}>{messages[index]}</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFill,
+    flex: 1,
     backgroundColor: colors.background,
-    zIndex: 100,
   },
   content: {
     flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  skeletonArea: {
+    flex: 1,
+  },
+  skeletonSpacer: {
+    height: spacing.md,
+  },
+  messageArea: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
   },
   icon: {
-    marginBottom: spacing.xl,
+    marginBottom: 0,
+  },
+  messageWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   sentence: {
-    ...typography.heading,
-    color: colors.text,
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    fontSize: 22,
+    fontSize: 14,
   },
 });

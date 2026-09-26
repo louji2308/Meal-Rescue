@@ -1,19 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { memo, useEffect } from 'react';
 import { ActivityIndicator, AppState } from 'react-native';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-
-import { haptics } from '../services/haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
 
@@ -25,18 +24,19 @@ import { navigationRef } from '../components/aftercare/navigation';
 import { SATISFACTION_ROUTE } from '../components/aftercare/slots';
 import { CalendarIcon, FoodIcon, HouseIcon, UserIcon } from '../components/icons';
 import { PawStamp } from '../components/mascot/PawStamp';
-import { CommonTableNavigator } from './CommonTableNavigator';
-import { CaptureScreen } from '../screens/CaptureScreen';
-import { MealReviewScreen } from '../screens/MealReviewScreen';
+import { FadeInView } from '../components/motion/FadeInView';
 import { AiRescueScreen } from '../screens/AiRescueScreen';
+import { CaptureScreen } from '../screens/CaptureScreen';
 import { CravingScreen } from '../screens/CravingScreen';
+import { DishDetailScreen } from '../screens/DishDetailScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { IngredientDetailScreen } from '../screens/IngredientDetailScreen';
 import { IntentScreen } from '../screens/IntentScreen';
 import { KitchenScreen } from '../screens/KitchenScreen';
-import { IngredientDetailScreen } from '../screens/IngredientDetailScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { MealPlanScreen } from '../screens/MealPlanScreen';
+import { MealReviewScreen } from '../screens/MealReviewScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
@@ -45,24 +45,25 @@ import { RealityScreen } from '../screens/RealityScreen';
 import { RescueLoadingScreen } from '../screens/RescueLoadingScreen';
 import { RescueResultScreen } from '../screens/RescueResultScreen';
 import { ReviewScreen } from '../screens/ReviewScreen';
-import { DishDetailScreen } from '../screens/DishDetailScreen';
 import { TasteJournalScreen } from '../screens/TasteJournalScreen';
 import { syncSubscription } from '../services/ads.api';
-import { useAuthStore } from '../stores/auth.store';
-import { useMonetization } from '../stores/monetization.store';
+import { haptics } from '../services/haptics';
 import type { KitchenItem } from '../services/kitchen.api';
+import { useAuthStore } from '../stores/auth.store';
+import { useCommonTableStore } from '../stores/common-table.store';
+import { useMealMemoryStore } from '../stores/meal-memory.store';
+import { useMonetization } from '../stores/monetization.store';
 import { colors, fonts } from '../theme';
 import { spring } from '../theme/motion';
+import { CommonTableNavigator } from './CommonTableNavigator';
 
-const TAB_ICONS: Record<
-  keyof RootTabParamList,
-  (size: number, color: string) => React.ReactNode
-> = {
-  Home: (size, color) => <HouseIcon size={size} color={color} strokeWidth={1.8} />,
-  Kitchen: (size, color) => <FoodIcon size={size} color={color} />,
-  MealPlan: (size, color) => <CalendarIcon size={size} color={color} />,
-  Profile: (size, color) => <UserIcon size={size} color={color} />,
-};
+const TAB_ICONS: Record<keyof RootTabParamList, (size: number, color: string) => React.ReactNode> =
+  {
+    Home: (size, color) => <HouseIcon size={size} color={color} strokeWidth={1.8} />,
+    Kitchen: (size, color) => <FoodIcon size={size} color={color} />,
+    MealPlan: (size, color) => <CalendarIcon size={size} color={color} />,
+    Profile: (size, color) => <UserIcon size={size} color={color} />,
+  };
 
 const PillTabBar = memo(function PillTabBar({
   state,
@@ -77,10 +78,7 @@ const PillTabBar = memo(function PillTabBar({
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const rawLabel = options.tabBarLabel;
-          const label =
-            typeof rawLabel === 'string'
-              ? rawLabel
-              : (options.title ?? route.name);
+          const label = typeof rawLabel === 'string' ? rawLabel : (options.title ?? route.name);
           const isFocused = state.index === index;
           const iconSize = 22;
 
@@ -122,12 +120,7 @@ const PillTabBar = memo(function PillTabBar({
                 size={iconSize}
                 isPro={isPro}
               />
-              <Text
-                style={[
-                  styles.label,
-                  isFocused ? styles.labelActive : styles.labelInactive,
-                ]}
-              >
+              <Text style={[styles.label, isFocused ? styles.labelActive : styles.labelInactive]}>
                 {label}
               </Text>
             </Pressable>
@@ -217,6 +210,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     color: colors.homeNavInactive,
   },
+  hydrating: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
 });
 
 export type HomeStackParamList = {
@@ -233,8 +232,14 @@ export type HomeStackParamList = {
     ingredients?: string[];
     tips?: string[];
   };
-  AiRescue: { foods: string[]; ingredients?: string[]; mealId?: string };
-  MealReview: { analysis: MealAnalysisResponse };
+  AiRescue: {
+    foods: string[];
+    ingredients?: string[];
+    mealId?: string;
+    timeMinutes?: number;
+    cookingAllowed?: boolean;
+  };
+  MealReview: { analysis: MealAnalysisResponse; imageUri?: string };
   Review: { analysis: MealAnalysisResponse };
   Intent: { analysis: MealAnalysisResponse; editedMealText?: string };
   Reality: { intentLabel: string; mealId: string; foods: string[] };
@@ -276,8 +281,8 @@ function HomeStack() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
-        animationDuration: 250,
+        animation: 'slide_from_right',
+        animationDuration: 280,
       }}
     >
       <Stack.Screen name="HomeMain" component={HomeScreen} />
@@ -303,8 +308,8 @@ function KitchenStack() {
     <KitchenStackNav.Navigator
       screenOptions={{
         headerShown: false,
-        animation: 'fade',
-        animationDuration: 150,
+        animation: 'slide_from_right',
+        animationDuration: 250,
       }}
     >
       <KitchenStackNav.Screen name="KitchenMain" component={KitchenScreen} />
@@ -341,6 +346,25 @@ function AuthenticatedTabs() {
     return () => sub.remove();
   }, [refreshTier]);
 
+  // Preload data for other tabs after Home tab mounts, so switching tabs feels instant.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Preload MealPlan week data
+      const mealStore = useMealMemoryStore.getState();
+      if (!mealStore.weekStart) {
+        void mealStore.loadWeek().catch(() => {});
+      }
+      void mealStore.loadRules().catch(() => {});
+      void mealStore.loadRecents().catch(() => {});
+      // Preload household data for Kitchen & Common Table
+      void useCommonTableStore
+        .getState()
+        .ensureHousehold()
+        .catch(() => {});
+    }, 800);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <Tab.Navigator
       tabBar={(props) => <PillTabBar {...props} isPro={isPro} />}
@@ -358,28 +382,14 @@ function AuthenticatedTabs() {
         };
       }}
     >
-      <Tab.Screen
-        name="Home"
-        options={{ title: 'Rescue' }}
-      >
+      <Tab.Screen name="Home" options={{ title: 'Rescue' }}>
         {() => <HomeStack />}
       </Tab.Screen>
-      <Tab.Screen
-        name="Kitchen"
-        options={{ title: 'Kitchen' }}
-      >
+      <Tab.Screen name="Kitchen" options={{ title: 'Kitchen' }}>
         {() => <KitchenStack />}
       </Tab.Screen>
-      <Tab.Screen
-        name="MealPlan"
-        component={MealPlanScreen}
-        options={{ title: 'Meal Plan' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ title: 'Profile' }}
-      />
+      <Tab.Screen name="MealPlan" component={MealPlanScreen} options={{ title: 'Meal Plan' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -391,8 +401,11 @@ export function AppNavigator() {
 
   if (!hydrated) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.hydrating}>
+        <FadeInView>
+          <Ionicons name="restaurant" size={48} color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 16 }} />
+        </FadeInView>
       </View>
     );
   }
@@ -403,7 +416,7 @@ export function AppNavigator() {
     <NavigationContainer ref={navigationRef}>
       {token ? (
         <RootStack.Navigator
-          screenOptions={{ headerShown: false }}
+          screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}
           initialRouteName={needsOnboarding ? 'Onboarding' : 'Tabs'}
         >
           <RootStack.Screen name="Tabs">{() => <AuthenticatedTabs />}</RootStack.Screen>

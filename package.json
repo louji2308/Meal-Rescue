@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Meal Rescue - AI-powered meal optimization monorepo",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "packageManager": "npm@11.6.2",
   "engines": {
     "node": ">=20"

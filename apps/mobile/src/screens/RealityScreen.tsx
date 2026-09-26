@@ -2,13 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
+import { StyleSheet, TextStyle, View } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { Text } from '../components/AppText';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { StepShell } from '../components/decision/StepShell';
 import { BUDGET_OPTIONS, CLEANUP_OPTIONS, TIME_OPTIONS } from '../components/decision/copy';
+import { Pressable } from '../components/motion/Pressable';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { haptics } from '../services/haptics';
 import { useDecisionStore } from '../stores/decision.store';
@@ -128,18 +134,38 @@ function Chip({
   selected: boolean;
   onPress: () => void;
 }) {
+  const progress = useSharedValue(selected ? 1 : 0);
+
+  React.useEffect(() => {
+    progress.value = withTiming(selected ? 1 : 0, { duration: 220 });
+  }, [selected]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [colors.surface, colors.homeTintNeutral],
+    ),
+    borderColor: interpolateColor(progress.value, [0, 1], [colors.border, colors.borderStrong]),
+  }));
+
+  const labelStyle = useAnimatedStyle(() => ({
+    fontWeight: (progress.value > 0.5 ? '600' : '400') as TextStyle['fontWeight'],
+  }));
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
-      style={[styles.chip, selected ? styles.chipSelected : null]}
       onPress={() => {
         haptics.light();
         onPress();
       }}
     >
-      <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>{label}</Text>
+      <Animated.View style={[styles.chip, animatedStyle]}>
+        <Animated.Text style={[styles.chipLabel, labelStyle]}>{label}</Animated.Text>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -167,17 +193,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
   },
-chipSelected: {
-    backgroundColor: colors.homeTintNeutral,
-    borderColor: colors.borderStrong,
-  },
   chipLabel: {
     fontSize: 14,
     color: colors.text,
-  },
-  chipLabelSelected: {
-    color: colors.text,
-    fontWeight: '600',
   },
   hintRow: {
     flexDirection: 'row',
@@ -194,4 +212,3 @@ chipSelected: {
     marginTop: spacing.xs,
   },
 });
-

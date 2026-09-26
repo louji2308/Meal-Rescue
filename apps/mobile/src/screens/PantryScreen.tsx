@@ -1,27 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../components/motion/Pressable';
-import { Text } from '../components/AppText';
-import { TextInput } from '../components/AppTextInput';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, SlideInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PantryItem, PantryUpsertRequest } from '@meal-rescue/shared-types';
 
+import { Text } from '../components/AppText';
+import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import { toApiError } from '../services/api';
+import { haptics } from '../services/haptics';
 import {
+  type MarkUsedResult,
   deletePantryItem,
   getPantry,
   markPantryItemUsed,
   upsertPantryItem,
-  type MarkUsedResult,
 } from '../services/pantry.api';
 import { PickedImage, analyzeMeal } from '../services/rescue.api';
 import { colors, spacing, typography } from '../theme';
-import { FadeInView } from '../components/motion/FadeInView';
 
 interface Toast {
   id: number;
@@ -136,6 +138,7 @@ export function PantryScreen() {
   }
 
   function confirmDelete(item: PantryItem) {
+    haptics.warning();
     const label =
       item.kind === 'leftover' ? (item.dishName ?? item.ingredientName) : item.ingredientName;
     Alert.alert('Remove item?', `Delete ${label} from your pantry?`, [
@@ -151,18 +154,27 @@ export function PantryScreen() {
   }
 
   async function handleDelete(item: PantryItem) {
-    setBusy(true);
+    const previousItems = items;
+    const previousExpiring = expiringSoon;
+    const previousLowStock = lowStock;
+    haptics.warning();
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    setExpiringSoon((prev) => prev.filter((i) => i.id !== item.id));
+    setLowStock((prev) => prev.filter((i) => i.id !== item.id));
     try {
       await deletePantryItem(item.id);
       await loadPantry();
       showToast(
-        `Deleted ${item.kind === 'leftover' ? item.dishName ?? item.ingredientName : item.ingredientName}`,
+        `Deleted ${item.kind === 'leftover' ? (item.dishName ?? item.ingredientName) : item.ingredientName}`,
         'Undo',
         () => {
           void handleUndoDelete(item);
         },
       );
     } catch (err) {
+      setItems(previousItems);
+      setExpiringSoon(previousExpiring);
+      setLowStock(previousLowStock);
       setError(toApiError(err));
     } finally {
       setBusy(false);
@@ -390,209 +402,218 @@ export function PantryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <FadeInView style={styles.container}>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={[typography.heading, styles.title]}>My Pantry</Text>
-          <Pressable
-            style={styles.addButton}
-            onPress={() => setShowAdd(true)}
-          >
-            <Text style={styles.addButtonText}>+ Add Item</Text>
-          </Pressable>
-        </View>
-
-        <ErrorBanner error={error} />
-
-        {showAdd && (
-          <View style={styles.addForm}>
-            <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>Add to Pantry</Text>
-              <Pressable
-                onPress={() => {
-                  setShowAdd(false);
-                  setNewName('');
-                  setNewQty('');
-                  setNewUnit('');
-                  setNewExpiry('');
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Close form"
-              >
-                <Ionicons name="close" size={20} color={colors.softAlert} />
-              </Pressable>
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="What did you get?"
-              placeholderTextColor={colors.textSecondary}
-              value={newName}
-              onChangeText={setNewName}
-              autoFocus
-            />
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.qtyInput}
-                placeholder="Qty"
-                placeholderTextColor={colors.textSecondary}
-                value={newQty}
-                onChangeText={setNewQty}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={styles.unitInput}
-                placeholder="Unit"
-                placeholderTextColor={colors.textSecondary}
-                value={newUnit}
-                onChangeText={setNewUnit}
-              />
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Expires (tomorrow, in 3 days)"
-              placeholderTextColor={colors.textSecondary}
-              value={newExpiry}
-              onChangeText={setNewExpiry}
-            />
-            <PrimaryButton
-              label="Add to pantry"
-              onPress={() => void handleAdd()}
-              busy={busy}
-              disabled={!newName.trim()}
-              style={styles.addButton}
-            />
-          </View>
-        )}
-
-        {(suggestedUses.length > 0 || expiringSoon.length > 0 || lowStock.length > 0) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Attention</Text>
-            {suggestedUses.map((s) => (
-              <View key={s.ingredientName} style={styles.alertItem}>
-                <Text>{s.ingredientName}</Text>
-                <Text style={styles.alertReason}>{s.reason}</Text>
-              </View>
-            ))}
-            {expiringSoon.map((item) => (
-              <View key={item.id} style={styles.alertItem}>
-                <Text>{item.ingredientName}</Text>
-                <Text style={styles.alertReason}>Expires in {item.daysUntilExpiry} day(s)</Text>
-              </View>
-            ))}
-            {lowStock.map((item) => (
-              <View key={item.id} style={styles.alertItem}>
-                <Text>{item.ingredientName}</Text>
-                <Text style={styles.alertReason}>
-                  Low stock ({item.quantity}
-                  {item.unit ? ' ' + item.unit : ''})
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <Text style={styles.sectionTitle}>Your Items</Text>
-        {items.length === 0 ? (
-          <View style={styles.empty}>
-            <Image
-              source={require('../../assets/pantry-cat.png')}
-              style={styles.pantryCat}
-              resizeMode="contain"
-              accessible
-              accessibilityLabel="Scraps the rescue cat with an empty plate"
-            />
-            <Text style={styles.emptyTitle}>Your pantry is a blank plate.</Text>
-            <Text style={styles.emptyText}>
-              {snapBusy
-                ? 'Scraps is scanning your shelf…'
-                : 'Snap what you have on hand and I will stock it for you.'}
-            </Text>
-            <View style={styles.emptyActions}>
-              <PrimaryButton
-                label="Snap your groceries"
-                onPress={() => void handleSnapGroceries()}
-                busy={snapBusy}
-                style={styles.emptyAction}
-              />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.list}>
-            {items.map((item) => (
-              <Pressable
-                key={item.id}
-                style={styles.item}
-                onLongPress={() => confirmDelete(item)}
-                delayLongPress={500}
-              >
-                <View style={styles.itemMain}>
-                  <Text style={styles.itemName}>
-                    {item.kind === 'leftover' ? item.dishName ?? item.ingredientName : item.ingredientName}
-                  </Text>
-                  {expiryBadge(item)}
-                </View>
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemQty}>
-                    {item.kind === 'leftover'
-                      ? item.servings !== null
-                        ? `${item.servings} serving${item.servings === 1 ? '' : 's'}`
-                        : 'Leftover'
-                      : item.quantity !== null
-                        ? `${item.quantity}${item.unit ? ' ' + item.unit : ''}`
-                        : 'On hand'}
-                  </Text>
-                  <Pressable
-                    style={styles.useChip}
-                    onPress={() => confirmUse(item)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Mark ${item.ingredientName} as used`}
-                  >
-                    <Text style={styles.useChipText}>
-                      {item.kind === 'leftover' ? 'Serve' : 'Use'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        {toast && (
-          <View style={styles.toast}>
-            <Text style={styles.toastText} numberOfLines={1}>
-              {toast.message}
-            </Text>
-            <Pressable
-              onPress={() => {
-                toast.onAction();
-                setToast(null);
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityRole="button"
-              accessibilityLabel="Undo last action"
-            >
-              <Text style={styles.toastAction}>{toast.actionLabel}</Text>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <Text style={[typography.heading, styles.title]}>My Pantry</Text>
+            <Pressable style={styles.addButton} onPress={() => setShowAdd(true)}>
+              <Text style={styles.addButtonText}>+ Add Item</Text>
             </Pressable>
           </View>
-        )}
-      </ScrollView>
 
-      {/* Scanning overlay */}
-      {snapBusy && (
-        <View style={styles.scanningOverlay}>
-          <View style={styles.scanningCard}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.scanningTitle}>Scraps is scanning...</Text>
-            <Text style={styles.scanningSubtitle}>Identifying your groceries</Text>
-          </View>
-        </View>
-      )}
+          <ErrorBanner error={error} />
+
+          {showAdd && (
+            <View style={styles.addForm}>
+              <View style={styles.formHeader}>
+                <Text style={styles.formTitle}>Add to Pantry</Text>
+                <Pressable
+                  onPress={() => {
+                    setShowAdd(false);
+                    setNewName('');
+                    setNewQty('');
+                    setNewUnit('');
+                    setNewExpiry('');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close form"
+                >
+                  <Ionicons name="close" size={20} color={colors.softAlert} />
+                </Pressable>
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="What did you get?"
+                placeholderTextColor={colors.textSecondary}
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.qtyInput}
+                  placeholder="Qty"
+                  placeholderTextColor={colors.textSecondary}
+                  value={newQty}
+                  onChangeText={setNewQty}
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={styles.unitInput}
+                  placeholder="Unit"
+                  placeholderTextColor={colors.textSecondary}
+                  value={newUnit}
+                  onChangeText={setNewUnit}
+                />
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="Expires (tomorrow, in 3 days)"
+                placeholderTextColor={colors.textSecondary}
+                value={newExpiry}
+                onChangeText={setNewExpiry}
+              />
+              <PrimaryButton
+                label="Add to pantry"
+                onPress={() => void handleAdd()}
+                busy={busy}
+                disabled={!newName.trim()}
+                style={styles.addButton}
+              />
+            </View>
+          )}
+
+          {(suggestedUses.length > 0 || expiringSoon.length > 0 || lowStock.length > 0) && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Attention</Text>
+              {suggestedUses.map((s) => (
+                <View key={s.ingredientName} style={styles.alertItem}>
+                  <Text>{s.ingredientName}</Text>
+                  <Text style={styles.alertReason}>{s.reason}</Text>
+                </View>
+              ))}
+              {expiringSoon.map((item) => (
+                <View key={item.id} style={styles.alertItem}>
+                  <Text>{item.ingredientName}</Text>
+                  <Text style={styles.alertReason}>Expires in {item.daysUntilExpiry} day(s)</Text>
+                </View>
+              ))}
+              {lowStock.map((item) => (
+                <View key={item.id} style={styles.alertItem}>
+                  <Text>{item.ingredientName}</Text>
+                  <Text style={styles.alertReason}>
+                    Low stock ({item.quantity}
+                    {item.unit ? ' ' + item.unit : ''})
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.sectionTitle}>Your Items</Text>
+          {items.length === 0 ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="basket-outline" size={64} color={colors.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>Your pantry is a blank plate.</Text>
+              <Text style={styles.emptyText}>
+                {snapBusy
+                  ? 'Scraps is scanning your shelf…'
+                  : 'Snap what you have on hand and I will stock it for you.'}
+              </Text>
+              <View style={styles.emptyActions}>
+                <PrimaryButton
+                  label="Snap your groceries"
+                  onPress={() => void handleSnapGroceries()}
+                  busy={snapBusy}
+                  style={styles.emptyAction}
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.list}>
+              {items.map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.item}
+                  onLongPress={() => confirmDelete(item)}
+                  delayLongPress={500}
+                >
+                  <View style={styles.itemMain}>
+                    <Text style={styles.itemName}>
+                      {item.kind === 'leftover'
+                        ? (item.dishName ?? item.ingredientName)
+                        : item.ingredientName}
+                    </Text>
+                    {expiryBadge(item)}
+                  </View>
+                  <View style={styles.itemDetails}>
+                    <Text style={styles.itemQty}>
+                      {item.kind === 'leftover'
+                        ? item.servings !== null
+                          ? `${item.servings} serving${item.servings === 1 ? '' : 's'}`
+                          : 'Leftover'
+                        : item.quantity !== null
+                          ? `${item.quantity}${item.unit ? ' ' + item.unit : ''}`
+                          : 'On hand'}
+                    </Text>
+                    <Pressable
+                      style={styles.useChip}
+                      onPress={() => {
+                        haptics.light();
+                        confirmUse(item);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Mark ${item.ingredientName} as used`}
+                    >
+                      <Text style={styles.useChipText}>
+                        {item.kind === 'leftover' ? 'Serve' : 'Use'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {toast && (
+            <Animated.View
+              style={styles.toast}
+              entering={SlideInRight.duration(280)}
+              exiting={FadeOut.duration(200)}
+            >
+              <Text style={styles.toastText} numberOfLines={1}>
+                {toast.message}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  toast.onAction();
+                  setToast(null);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Undo last action"
+              >
+                <Text style={styles.toastAction}>{toast.actionLabel}</Text>
+              </Pressable>
+            </Animated.View>
+          )}
+        </ScrollView>
+
+        {/* Scanning overlay */}
+        {snapBusy && (
+          <Animated.View
+            style={styles.scanningOverlay}
+            entering={FadeIn.duration(250)}
+            exiting={FadeOut.duration(200)}
+          >
+            <Animated.View
+              style={styles.scanningCard}
+              entering={FadeIn.springify().damping(18).stiffness(120)}
+            >
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.scanningTitle}>Scraps is scanning...</Text>
+              <Text style={styles.scanningSubtitle}>Identifying your groceries</Text>
+            </Animated.View>
+          </Animated.View>
+        )}
       </FadeInView>
     </SafeAreaView>
   );
@@ -708,9 +729,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: spacing.xl,
   },
-  pantryCat: {
-    width: 200,
-    height: 160,
+  emptyIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.lg,
   },
   emptyTitle: {

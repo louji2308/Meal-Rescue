@@ -13,6 +13,7 @@ import { z } from 'zod';
 
 import type { IntentResolution, PlanningResult } from '@meal-rescue/shared-types';
 
+import { env } from '../../config/env';
 import type { LlmClient } from '../ai/llm-client';
 
 const intentPolishSchema = z.object({
@@ -21,7 +22,11 @@ const intentPolishSchema = z.object({
   mealConcept: z.string().nullable(),
   mealSlot: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).nullable().optional(),
   ingredient: z.string().nullable().optional(),
-  targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  targetDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
 });
 
 const planPolishSchema = z.object({
@@ -56,7 +61,7 @@ export class MealMemoryAiService {
           entities: resolution.entities,
         },
         schema: intentPolishSchema,
-        modelName: 'meal-memory-intent-polish',
+        modelName: env.OPENAI_TEXT_MODEL,
         maxTokens: 300,
       });
 
@@ -91,7 +96,7 @@ export class MealMemoryAiService {
           meals: result.plan.meals.map((m) => ({ id: m.id, concept: m.concept })),
         },
         schema: planPolishSchema,
-        modelName: 'meal-memory-plan-polish',
+        modelName: env.OPENAI_TEXT_MODEL,
         maxTokens: 400,
       });
 
@@ -137,7 +142,7 @@ export class MealMemoryAiService {
           mealSlot: mealSlot ?? 'dinner',
         },
         schema: instructionsSchema,
-        modelName: 'meal-instructions',
+        modelName: env.OPENAI_TEXT_MODEL,
         maxTokens: 800,
       });
 

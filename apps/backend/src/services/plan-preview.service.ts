@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
+
 import { Op } from 'sequelize';
 
-import type { SubscriptionTier, UUID, MealSlot } from '@meal-rescue/shared-types';
+import type { MealSlot, SubscriptionTier, UUID } from '@meal-rescue/shared-types';
 
-import { User } from '../database/models/user.model';
-import { MealPlan } from '../database/models/meal-plan.model';
-import { MealEvent } from '../database/models/meal-event.model';
 import { Household } from '../database/models/household.model';
+import { MealEvent } from '../database/models/meal-event.model';
+import { MealPlan } from '../database/models/meal-plan.model';
+import { User } from '../database/models/user.model';
 import { AppError, ErrorCategory } from '../lib/errors';
 
 /**
@@ -115,7 +116,9 @@ export class PlanPreviewService {
     const tier = user.subscriptionTier;
     const daysUsed = user.planDaysUsed ?? 0;
     const daysRemaining =
-      tier === 'pro' ? Number.POSITIVE_INFINITY : Math.max(0, PlanPreviewService.FREE_PLAN_DAY_LIMIT - daysUsed);
+      tier === 'pro'
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, PlanPreviewService.FREE_PLAN_DAY_LIMIT - daysUsed);
 
     return { tier, daysUsed, daysRemaining };
   }
@@ -125,7 +128,7 @@ export class PlanPreviewService {
    */
   async generatePreview(
     userId: UUID,
-    planningResult: { days: PlannedDay[]; daysPlanned: number }
+    planningResult: { days: PlannedDay[]; daysPlanned: number },
   ): Promise<PlanPreviewResponse> {
     const previewId = randomUUID() as UUID;
     const now = new Date();
@@ -170,7 +173,7 @@ export class PlanPreviewService {
    */
   getPreview(previewId: UUID): PlanPreview | undefined {
     const preview = this.store.get(previewId);
-    
+
     // Check if preview exists and is still valid
     if (!preview) {
       return undefined;
@@ -189,7 +192,7 @@ export class PlanPreviewService {
    */
   async confirmPreview(
     previewId: UUID,
-    edits?: string
+    edits?: string,
   ): Promise<{ success: boolean; preview: PlanPreview }> {
     const preview = this.getPreview(previewId);
 
@@ -258,10 +261,7 @@ export class PlanPreviewService {
       await MealEvent.destroy({
         where: { planId: { [Op.in]: previousIds }, kind: 'plan' },
       });
-      await MealPlan.update(
-        { status: 'superseded' },
-        { where: { id: { [Op.in]: previousIds } } },
-      );
+      await MealPlan.update({ status: 'superseded' }, { where: { id: { [Op.in]: previousIds } } });
     }
 
     // Create the MealPlan
@@ -287,12 +287,12 @@ export class PlanPreviewService {
           dateKey: day.dateKey,
           mealSlot: meal.mealSlot,
           kind: 'plan',
-          concept: meal.name,
+          concept: toTitleCase(meal.name),
           conceptType: 'recipe',
           state: 'CONFIRMED',
           slotStatus: 'LOCKED',
           flexible: false,
-          ingredients: meal.ingredients,
+          ingredients: (meal.ingredients ?? []).map(toTitleCase),
           reasons: edits ? [edits] : undefined,
           effort: meal.prepTimeMinutes > 30 ? 'high' : meal.prepTimeMinutes > 15 ? 'medium' : 'low',
           rawText: edits ?? null,
@@ -309,7 +309,7 @@ export class PlanPreviewService {
     // Increment user's planDaysUsed
     await User.update(
       { planDaysUsed: User.sequelize!.literal(`planDaysUsed + ${daysCount}`) },
-      { where: { id: preview.userId } }
+      { where: { id: preview.userId } },
     );
 
     return {
@@ -332,3 +332,17 @@ export class PlanPreviewService {
 
 // Export a singleton instance
 export const planPreviewService = new PlanPreviewService();
+
+/**
+ * Title-like casing for saved meal names: the first letter of each word is
+ * uppercased, the rest is left untouched (so acronyms and proper nouns like
+ * "BBQ" or "Paneer" survive). Handles the leading/trailing whitespace and
+ * punctuation before the first letter.
+ */
+function toTitleCase(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((word) => (word.length === 0 ? word : word[0]!.toUpperCase() + word.slice(1)))
+    .join(' ');
+}

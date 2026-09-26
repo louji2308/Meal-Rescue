@@ -14,6 +14,7 @@ import { authRoutes } from './modules/auth/auth.routes';
 import redisPlugin from './plugins/redis';
 import { adsRoutes } from './routes/ads.routes';
 import { aftercareRoutes } from './routes/aftercare.routes';
+import { aiPlannerRoutes } from './routes/ai-planner.routes';
 import { aiRescueRoutes } from './routes/ai-rescue.routes';
 import { commonTableRoutes } from './routes/common-table.routes';
 import { decisionRoutes } from './routes/decision.routes';
@@ -25,6 +26,7 @@ import { mealMemoryRoutes } from './routes/meal-memory.routes';
 import { mealRoutes } from './routes/meal.routes';
 import { notificationRoutes } from './routes/notification.routes';
 import { pantryRoutes } from './routes/pantry.routes';
+import { paywallRoutes } from './routes/paywall.routes';
 import { planReviewRoutes } from './routes/plan-review.routes';
 import { rescueRoutes } from './routes/rescue.routes';
 import { satisfactionRoutes } from './routes/satisfaction.routes';
@@ -49,7 +51,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // SECURITY: Disable detailed HTTP error responses in production.
     // Prevents Fastify from sending full stack traces or error objects.
     disableRequestLogging: false,
-    bodyLimit: 1048576, // 1 MB global body limit
+    bodyLimit: 10 * 1024 * 1024, // 10 MB — matches multipart fileSize limit
     // SECURITY: Do not expose Node.js version in X-Powered-By header.
     // helmet() handles this, but belt-and-suspenders.
     http2: false,
@@ -93,7 +95,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     global: true,
     max: env.RATE_LIMIT_MAX_REQUESTS,
     timeWindow: env.RATE_LIMIT_WINDOW_MS,
-    redis: app.redis ?? undefined,
+    redis: app.redis?.status === 'ready' ? app.redis : undefined,
   });
 
   await app.register(swagger, {
@@ -160,6 +162,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(kitchenRoutes, { prefix: '/api/v1/kitchen' });
   await app.register(adsRoutes, { prefix: '/api/v1/ads' });
   await app.register(aiRescueRoutes);
+  await app.register(paywallRoutes);
   await app.register(subscriptionRoutes, { prefix: '/api/v1' });
   await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
   await app.register(webhookRoutes, { prefix: '/api/v1' });
@@ -167,6 +170,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(commonTableRoutes, { prefix: '/api/v1/common-table' });
   await app.register(mealMemoryRoutes, { prefix: '/api/v1/meal-memory' });
   await app.register(planReviewRoutes, { prefix: '/api/v1/meal-memory' });
+  await app.register(aiPlannerRoutes, { prefix: '/api/v1/meal-memory' });
 
   return app;
 }

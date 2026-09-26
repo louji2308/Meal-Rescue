@@ -1049,9 +1049,7 @@ When a behaviour changes, update the corresponding tests and shared contract rat
 
 # License & Repository Status
 
-The current root package metadata marks the project as `UNLICENSED`. No open-source license is asserted by this repository snapshot.
-
-Do not assume that source code is reusable under an open-source license unless the project owner publishes one separately.
+This project is released under the [MIT License](./LICENSE). Copyright (c) 2026 Loujan. You are free to use, modify, and distribute the code, provided the license and copyright notice are preserved.
 
 ---
 

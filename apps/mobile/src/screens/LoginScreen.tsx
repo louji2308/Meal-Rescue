@@ -1,29 +1,34 @@
-import React, { useRef, useState } from 'react';
+import { Image, ImageBackground } from 'expo-image';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  ImageBackground,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
-import { Text } from '../components/AppText';
-import { Pressable } from '../components/motion/Pressable';
+import Animated, {
+  Easing,
+  FadeOut,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Text } from '../components/AppText';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { FadeInView } from '../components/motion/FadeInView';
+import { Pressable } from '../components/motion/Pressable';
 import { toApiError } from '../services/api';
-import {
-  checkEmail,
-  loginWithCredentials,
-  registerAccount,
-  sendVerificationCode,
-  verifyCode,
-} from '../services/auth.api';
+import { checkEmail, loginWithCredentials, registerAccount } from '../services/auth.api';
 import { signInWithGoogle } from '../services/google-auth';
 import { useAuthStore } from '../stores/auth.store';
 import { colors, fonts, spacing } from '../theme';
@@ -53,9 +58,30 @@ const googleStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   red: { position: 'absolute', top: 0, left: 0, width: 12, height: 12, backgroundColor: '#EA4335' },
-  yellow: { position: 'absolute', top: 0, right: 0, width: 12, height: 12, backgroundColor: '#FBBC05' },
-  green: { position: 'absolute', bottom: 0, left: 0, width: 12, height: 12, backgroundColor: '#34A853' },
-  blue: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, backgroundColor: '#4285F4' },
+  yellow: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    backgroundColor: '#FBBC05',
+  },
+  green: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 12,
+    height: 12,
+    backgroundColor: '#34A853',
+  },
+  blue: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    backgroundColor: '#4285F4',
+  },
   center: {
     position: 'absolute',
     top: 7,
@@ -75,9 +101,78 @@ const googleStyles = StyleSheet.create({
   },
 });
 
-type FlowStep = 'email' | 'send-code' | 'verify-code' | 'password';
+type FlowStep = 'email' | 'password';
 
-const CODE_LENGTH = 6;
+const STEP_ORDER: FlowStep[] = ['email', 'password'];
+
+const PRIVACY_URL = 'https://mealrescue.app/privacy';
+const TERMS_URL = 'https://mealrescue.app/terms';
+
+const PASSWORD_RULES = [
+  { test: (p: string) => p.length >= 8, label: 'At least 8 characters' },
+  { test: (p: string) => /[a-zA-Z]/.test(p), label: 'Contains a letter' },
+  { test: (p: string) => /\d/.test(p), label: 'Contains a number' },
+] as const;
+
+function AnimatedPasswordRequirements({ password }: { password: string }) {
+  return (
+    <View style={pwStyles.container}>
+      {PASSWORD_RULES.map(({ test, label }, i) => {
+        const met = test(password);
+        return <PasswordRule key={label} label={label} met={met} index={i} />;
+      })}
+    </View>
+  );
+}
+
+function PasswordRule({ label, met, index }: { label: string; met: boolean; index: number }) {
+  const scale = useSharedValue(0);
+
+  useEffect(() => {
+    scale.value = withDelay(
+      index * 40,
+      withTiming(met ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }),
+    );
+  }, [met]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: scale.value,
+  }));
+
+  return (
+    <View style={pwStyles.row}>
+      <Animated.View
+        style={[pwStyles.checkWrap, met ? pwStyles.checkWrapMet : null, animatedStyle]}
+      >
+        <Text style={pwStyles.checkMark}>{met ? '\u2713' : ''}</Text>
+      </Animated.View>
+      <Text style={[pwStyles.label, met && pwStyles.labelMet]}>{label}</Text>
+    </View>
+  );
+}
+
+const pwStyles = StyleSheet.create({
+  container: { marginBottom: spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
+  checkWrap: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  checkWrapMet: {
+    borderColor: colors.success,
+    backgroundColor: colors.successSoft,
+  },
+  checkMark: { fontSize: 11, fontFamily: fonts.semiBold, color: colors.success },
+  label: { fontSize: 12, color: colors.textSecondary },
+  labelMet: { color: colors.textPrimary },
+});
 
 export function LoginScreen() {
   const setSession = useAuthStore((state) => state.setSession);
@@ -86,22 +181,48 @@ export function LoginScreen() {
   const [isNewUser, setIsNewUser] = useState<boolean | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [verificationToken, setVerificationToken] = useState('');
-  const [codeDigits, setCodeDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
-  const [cooldown, setCooldown] = useState(0);
-  const codeInputRefs = useRef<(TextInput | null)[]>([]);
+
+  const shakeX = useSharedValue(0);
+
+  const shakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
+  function triggerShake() {
+    shakeX.value = withSequence(
+      withTiming(-8, { duration: 50 }),
+      withTiming(8, { duration: 50 }),
+      withTiming(-6, { duration: 50 }),
+      withTiming(6, { duration: 50 }),
+      withTiming(-3, { duration: 50 }),
+      withTiming(3, { duration: 50 }),
+      withTiming(0, { duration: 50 }),
+    );
+  }
+
+  useEffect(() => {
+    if (error) triggerShake();
+  }, [error]);
+
+  const goToStep = useCallback(
+    (nextStep: FlowStep) => {
+      const prevIdx = STEP_ORDER.indexOf(step);
+      const nextIdx = STEP_ORDER.indexOf(nextStep);
+      void prevIdx;
+      void nextIdx;
+      setStep(nextStep);
+    },
+    [step],
+  );
 
   function openEmailModal() {
-    setStep('email');
+    goToStep('email');
     setIsNewUser(null);
     setEmail('');
     setPassword('');
-    setCodeDigits(Array(CODE_LENGTH).fill(''));
-    setVerificationToken('');
     setError(null);
-    setCooldown(0);
     setEmailModalVisible(true);
   }
 
@@ -111,10 +232,7 @@ export function LoginScreen() {
     setIsNewUser(null);
     setEmail('');
     setPassword('');
-    setCodeDigits(Array(CODE_LENGTH).fill(''));
-    setVerificationToken('');
     setError(null);
-    setCooldown(0);
   }
 
   async function handleGoogleSignIn() {
@@ -139,85 +257,9 @@ export function LoginScreen() {
     try {
       const result = await checkEmail(email.trim());
       setIsNewUser(!result.exists);
-      // Send verification code
-      await sendVerificationCode(email.trim());
-      setStep('verify-code');
-      startCooldown();
+      goToStep('password');
     } catch (err) {
       setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleResendCode() {
-    if (cooldown > 0) return;
-    setError(null);
-    setBusy(true);
-    try {
-      await sendVerificationCode(email.trim());
-      startCooldown();
-    } catch (err) {
-      setError(toApiError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function startCooldown() {
-    setCooldown(60);
-    const interval = setInterval(() => {
-      setCooldown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }
-
-  function handleCodeChange(text: string, index: number) {
-    if (text.length > 1) {
-      text = text.slice(-1);
-    }
-    const newDigits = [...codeDigits];
-    newDigits[index] = text;
-    setCodeDigits(newDigits);
-    setError(null);
-
-    // Auto-advance
-    if (text && index < CODE_LENGTH - 1) {
-      codeInputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all digits entered
-    if (newDigits.every((d) => d !== '') && newDigits.join('').length === CODE_LENGTH) {
-      void handleVerifyCode(newDigits.join(''));
-    }
-  }
-
-  function handleKeyPress(key: string, index: number) {
-    if (key === 'Backspace' && !codeDigits[index] && index > 0) {
-      const newDigits = [...codeDigits];
-      newDigits[index - 1] = '';
-      setCodeDigits(newDigits);
-      codeInputRefs.current[index - 1]?.focus();
-    }
-  }
-
-  async function handleVerifyCode(code: string) {
-    setError(null);
-    setBusy(true);
-    try {
-      const result = await verifyCode(email.trim(), code);
-      setVerificationToken(result.token);
-      setStep('password');
-    } catch (err) {
-      setError(toApiError(err));
-      // Clear code on error
-      setCodeDigits(Array(CODE_LENGTH).fill(''));
-      codeInputRefs.current[0]?.focus();
     } finally {
       setBusy(false);
     }
@@ -232,14 +274,12 @@ export function LoginScreen() {
         const tokens = await registerAccount({
           email: email.trim(),
           password,
-          verificationToken,
         });
         setSession(tokens.accessToken, tokens.user);
       } else {
         const tokens = await loginWithCredentials({
           email: email.trim(),
           password,
-          verificationToken,
         });
         setSession(tokens.accessToken, { ...tokens.user, onboardingCompleted: true });
       }
@@ -252,10 +292,12 @@ export function LoginScreen() {
 
   function getStepTitle(): string {
     switch (step) {
-      case 'email': return 'Get Started';
-      case 'verify-code': return 'Verify Email';
-      case 'password': return isNewUser ? 'Create Account' : 'Welcome Back';
-      default: return 'Get Started';
+      case 'email':
+        return 'Get Started';
+      case 'password':
+        return isNewUser ? 'Create Account' : 'Welcome Back';
+      default:
+        return 'Get Started';
     }
   }
 
@@ -264,48 +306,55 @@ export function LoginScreen() {
       <ImageBackground
         source={require('../../assets/continue-with-google-page.png')}
         style={styles.background}
-        resizeMode="cover"
+        contentFit="cover"
+        transition={300}
+        cachePolicy="memory-disk"
       >
         <View style={styles.bottomOverlay} />
         <SafeAreaView style={styles.safe}>
           <View style={styles.bottomSection}>
-            <Text style={styles.headline}>
-              Rescue your meals.{'\n'}Love your food.
-            </Text>
-            <Text style={styles.subtitle}>
-              Transform leftovers into something{'\n'}beautiful and delicious.
-            </Text>
+            <FadeInView delay={0} duration={400} rise={10}>
+              <Text style={styles.headline}>Rescue your meals.{'\n'}Love your food.</Text>
+            </FadeInView>
 
-            <Pressable
-              style={styles.googleButton}
-              onPress={() => void handleGoogleSignIn()}
-              disabled={busy}
-              scaleTo={0.97}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#333" />
-              ) : (
-                <View style={styles.googleButtonInner}>
-                  <GoogleLogo />
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
-                </View>
-              )}
-            </Pressable>
+            <FadeInView delay={120} duration={400} rise={10}>
+              <Text style={styles.subtitle}>
+                Transform leftovers into something{'\n'}beautiful and delicious.
+              </Text>
+            </FadeInView>
 
-            <Pressable
-              style={styles.emailButton}
-              onPress={openEmailModal}
-              scaleTo={0.97}
-            >
-              <Text style={styles.emailButtonText}>Use Email</Text>
-            </Pressable>
+            <FadeInView delay={240} duration={400} rise={10}>
+              <Pressable
+                style={styles.googleButton}
+                onPress={() => void handleGoogleSignIn()}
+                disabled={busy}
+                scaleTo={0.97}
+              >
+                {busy ? (
+                  <ActivityIndicator size="small" color="#333" />
+                ) : (
+                  <View style={styles.googleButtonInner}>
+                    <GoogleLogo />
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  </View>
+                )}
+              </Pressable>
 
-            <Text style={styles.terms}>
-              By continuing, you agree to our{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text>
-              {' '}and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
-            </Text>
+              <Pressable style={styles.emailButton} onPress={openEmailModal} scaleTo={0.97}>
+                <Text style={styles.emailButtonText}>Use Email</Text>
+              </Pressable>
+
+              <Text style={styles.terms}>
+                By continuing, you agree to our{' '}
+                <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>
+                  Terms of Service
+                </Text>{' '}
+                and{' '}
+                <Text style={styles.termsLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+                  Privacy Policy
+                </Text>
+              </Text>
+            </FadeInView>
           </View>
         </SafeAreaView>
       </ImageBackground>
@@ -322,11 +371,7 @@ export function LoginScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
             <View style={styles.modalHeader}>
-              <Pressable
-                onPress={closeEmailModal}
-                style={styles.modalCloseBtn}
-                scaleTo={1}
-              >
+              <Pressable onPress={closeEmailModal} style={styles.modalCloseBtn} scaleTo={1}>
                 <Text style={styles.modalCloseText}>Cancel</Text>
               </Pressable>
               <Text style={styles.modalTitle}>{getStepTitle()}</Text>
@@ -338,150 +383,86 @@ export function LoginScreen() {
 
               <View style={styles.modalMascotWrap}>
                 <Image
-                  source={require('../../assets/mascot.png')}
+                  source={require('../../assets/logo.png')}
                   style={styles.modalMascot}
-                  resizeMode="contain"
+                  contentFit="contain"
+                  transition={200}
+                  cachePolicy="memory-disk"
                 />
               </View>
 
-              {step === 'email' && (
-                <>
-                  <TextInput
-                    accessibilityLabel="Email"
-                    style={styles.input}
-                    placeholder="Enter your email"
-                    placeholderTextColor={colors.textSecondary}
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoFocus
-                  />
-
-                  <PrimaryButton
-                    label="Continue"
-                    onPress={() => void handleEmailContinue()}
-                    busy={busy}
-                    disabled={!email.includes('@')}
-                    style={styles.submit}
-                  />
-                </>
-              )}
-
-              {step === 'verify-code' && (
-                <>
-                  <Text style={styles.emailHint}>
-                    We sent a 6-digit code to{'\n'}
-                    <Text style={styles.emailBold}>{email}</Text>
-                  </Text>
-
-                  <View style={styles.codeRow}>
-                    {Array.from({ length: CODE_LENGTH }).map((_, i) => (
+              <Animated.View key={step} entering={SlideInRight} exiting={FadeOut}>
+                <Animated.View style={shakeStyle}>
+                  {step === 'email' && (
+                    <>
                       <TextInput
-                        key={i}
-                        ref={(ref) => { codeInputRefs.current[i] = ref; }}
-                        style={[
-                          styles.codeDigit,
-                          codeDigits[i] ? styles.codeDigitFilled : null,
-                        ]}
-                        value={codeDigits[i]}
-                        onChangeText={(text) => handleCodeChange(text, i)}
-                        onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, i)}
-                        keyboardType="number-pad"
-                        maxLength={1}
-                        selectTextOnFocus
-                        autoFocus={i === 0}
+                        accessibilityLabel="Email"
+                        style={styles.input}
+                        placeholder="Enter your email"
+                        placeholderTextColor={colors.textSecondary}
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        keyboardType="email-address"
+                        value={email}
+                        onChangeText={setEmail}
+                        autoFocus
                       />
-                    ))}
-                  </View>
 
-                  <PrimaryButton
-                    label={busy ? 'Verifying...' : 'Verify Code'}
-                    onPress={() => void handleVerifyCode(codeDigits.join(''))}
-                    busy={busy}
-                    disabled={codeDigits.some((d) => d === '')}
-                    style={styles.submit}
-                  />
-
-                  <Pressable
-                    onPress={() => void handleResendCode()}
-                    style={styles.changeEmail}
-                    scaleTo={1}
-                    disabled={cooldown > 0}
-                  >
-                    <Text style={[styles.changeEmailText, cooldown > 0 && styles.disabledText]}>
-                      {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      setStep('email');
-                      setCodeDigits(Array(CODE_LENGTH).fill(''));
-                      setError(null);
-                    }}
-                    style={styles.changeEmail}
-                    scaleTo={1}
-                  >
-                    <Text style={styles.changeEmailText}>Use a different email</Text>
-                  </Pressable>
-                </>
-              )}
-
-              {step === 'password' && (
-                <>
-                  <Text style={styles.emailHint}>
-                    {isNewUser
-                      ? `Creating account for ${email}`
-                      : `Signing in as ${email}`}
-                  </Text>
-
-                  <TextInput
-                    accessibilityLabel="Password"
-                    style={styles.input}
-                    placeholder={isNewUser ? 'Create a password (8+ chars)' : 'Enter your password'}
-                    placeholderTextColor={colors.textSecondary}
-                    secureTextEntry
-                    autoComplete={isNewUser ? 'new-password' : 'password'}
-                    value={password}
-                    onChangeText={setPassword}
-                    autoFocus
-                  />
-
-                  {isNewUser && (
-                    <Text style={styles.passwordHint}>
-                      At least 8 characters with a letter and a number.
-                    </Text>
+                      <PrimaryButton
+                        label="Continue"
+                        onPress={() => void handleEmailContinue()}
+                        busy={busy}
+                        disabled={!email.includes('@')}
+                        style={styles.submit}
+                      />
+                    </>
                   )}
 
-                  <PrimaryButton
-                    label={isNewUser ? 'Create account' : 'Sign in'}
-                    onPress={() => void handlePasswordSubmit()}
-                    busy={busy}
-                    disabled={
-                      isNewUser
-                        ? password.length < 8
-                        : password.length === 0
-                    }
-                    style={styles.submit}
-                  />
+                  {step === 'password' && (
+                    <>
+                      <Text style={styles.emailHint}>
+                        {isNewUser ? `Creating account for ${email}` : `Signing in as ${email}`}
+                      </Text>
 
-                  <Pressable
-                    onPress={() => {
-                      setStep('email');
-                      setPassword('');
-                      setCodeDigits(Array(CODE_LENGTH).fill(''));
-                      setVerificationToken('');
-                      setError(null);
-                    }}
-                    style={styles.changeEmail}
-                    scaleTo={1}
-                  >
-                    <Text style={styles.changeEmailText}>Use a different email</Text>
-                  </Pressable>
-                </>
-              )}
+                      <TextInput
+                        accessibilityLabel="Password"
+                        style={styles.input}
+                        placeholder={
+                          isNewUser ? 'Create a password (8+ chars)' : 'Enter your password'
+                        }
+                        placeholderTextColor={colors.textSecondary}
+                        secureTextEntry
+                        autoComplete={isNewUser ? 'new-password' : 'password'}
+                        value={password}
+                        onChangeText={setPassword}
+                        autoFocus
+                      />
+
+                      {isNewUser && <AnimatedPasswordRequirements password={password} />}
+
+                      <PrimaryButton
+                        label={isNewUser ? 'Create account' : 'Sign in'}
+                        onPress={() => void handlePasswordSubmit()}
+                        busy={busy}
+                        disabled={isNewUser ? password.length < 8 : password.length === 0}
+                        style={styles.submit}
+                      />
+
+                      <Pressable
+                        onPress={() => {
+                          goToStep('email');
+                          setPassword('');
+                          setError(null);
+                        }}
+                        style={styles.changeEmail}
+                        scaleTo={1}
+                      >
+                        <Text style={styles.changeEmailText}>Use a different email</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </Animated.View>
+              </Animated.View>
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
@@ -497,6 +478,7 @@ const styles = StyleSheet.create({
   },
   background: {
     flex: 1,
+    backgroundColor: '#1a1a1a',
   },
   bottomOverlay: {
     ...StyleSheet.absoluteFill,
@@ -634,12 +616,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.md,
   },
-  passwordHint: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: -spacing.sm,
-    marginBottom: spacing.md,
-  },
   submit: {
     marginTop: spacing.sm,
   },
@@ -651,31 +627,5 @@ const styles = StyleSheet.create({
   changeEmailText: {
     color: colors.textSecondary,
     fontSize: 14,
-  },
-  disabledText: {
-    opacity: 0.5,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  codeDigit: {
-    width: 48,
-    height: 56,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    textAlign: 'center',
-    fontSize: 24,
-    fontFamily: fonts.semiBold,
-    color: colors.textPrimary,
-  },
-  codeDigitFilled: {
-    borderColor: colors.primary,
-    backgroundColor: '#FFF0F5',
   },
 });

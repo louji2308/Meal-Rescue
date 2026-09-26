@@ -152,3 +152,6 @@ apps/mobile/assets/app-icon-1024.png
 # Railway IAC pull artifacts
 # ---------------------------------------------------------------------------
 .railway-config-pull-*/
+
+# Local Postgres data snapshot (never commit)
+pgdata_old/

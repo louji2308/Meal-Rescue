@@ -1,31 +1,31 @@
 ﻿import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Image } from 'expo-image';
 import React, { useEffect } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 
 import HOME_CAT from '../../assets/home-cat.png';
-
 import { Text } from '../components/AppText';
 import {
   BellIcon,
-  FoodIcon,
-  UsersIcon,
-  LeafIcon,
-  SparkIcon,
   ClockIcon,
-  UtensilsIcon,
+  FoodIcon,
+  LeafIcon,
   ServingIcon,
+  SparkIcon,
+  UsersIcon,
+  UtensilsIcon,
 } from '../components/icons';
+import { FadeInView } from '../components/motion/FadeInView';
 import { PressableScale } from '../components/motion/PressableScale';
 import type {
   HomeStackParamList,
   RootStackParamList,
   RootTabParamList,
 } from '../navigation/AppNavigator';
+import { selectUnreadCount, useNotificationsStore } from '../stores/notifications.store';
 import { useSettingsStore } from '../stores/settings.store';
-import { useNotificationsStore, selectUnreadCount } from '../stores/notifications.store';
 import { colors, fonts, radius, spacing } from '../theme';
 
 type MealTime = 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'late';
@@ -72,9 +72,10 @@ const MEAL_OPTIONS: Record<MealTime, { prompt: string; sub: string; icon: React.
  * the rescue actions. Nothing scrolls, no cards, no sections.
  */
 export function HomeScreen() {
-  const navigation = useNavigation<
-    NativeStackNavigationProp<HomeStackParamList & RootStackParamList & RootTabParamList>
-  >();
+  const navigation =
+    useNavigation<
+      NativeStackNavigationProp<HomeStackParamList & RootStackParamList & RootTabParamList>
+    >();
   const kitchenImportEnabled = useSettingsStore((s) => s.kitchenImportEnabled);
   const setKitchenImportEnabled = useSettingsStore((s) => s.setKitchenImportEnabled);
   const unread = useNotificationsStore(selectUnreadCount);
@@ -107,83 +108,85 @@ export function HomeScreen() {
         </PressableScale>
       </View>
 
-      <View style={styles.content}>
-        {/* ── Cat ── */}
-        <Image source={HOME_CAT} style={styles.cat} contentFit="contain" contentPosition="bottom" />
+      <FadeInView duration={300} rise={10} style={styles.fadeWrap}>
+        <View style={styles.content}>
+          {/* ── Cat ── */}
+          <Image source={HOME_CAT} style={styles.cat} contentFit="contain" />
 
-        {/* ── Greeting ── */}
-        <Text style={styles.greeting}>Something smells good.</Text>
+          {/* ── Greeting ── */}
+          <Text style={styles.greeting}>Something smells good.</Text>
 
-        {/* ── Question ── */}
-        <Text style={styles.question}>Let's make your meal{'\n'}something better!</Text>
+          {/* ── Question ── */}
+          <Text style={styles.question}>Let's make your meal{'\n'}something better!</Text>
 
-        {/* ── Actions ── */}
-        <View style={styles.actions}>
-          {/* Primary pill — Time-aware meal prompt */}
-          <PressableScale
-            style={styles.pill}
-            scaleTo={0.97}
-            pressedTintOpacity={1}
-            pressedTintColor={colors.homeButtonPressed}
-            onPress={goToCapture}
-            accessibilityRole="button"
-            accessibilityLabel={meal.prompt}
-          >
-            {meal.icon}
-            <View style={styles.pillTextGroup}>
-              <Text style={styles.pillText}>{meal.prompt}</Text>
-              <Text style={styles.pillSubtext}>{meal.sub}</Text>
-            </View>
-          </PressableScale>
-
-          {/* Pill row — Cook for the family */}
-          <PressableScale
-            style={styles.boxRow}
-            scaleTo={0.98}
-            pressedTintOpacity={0.05}
-            onPress={goToFamily}
-            accessibilityRole="button"
-            accessibilityLabel="Cook for the family"
-          >
-            <View style={styles.boxRowLeft}>
-              <UsersIcon size={18} color={colors.homeInk} />
-              <Text style={styles.boxRowText}>Cook for the family</Text>
-            </View>
-          </PressableScale>
-
-          {/* Import kitchen toggle */}
-          <PressableScale
-            style={styles.importCard}
-            scaleTo={0.98}
-            pressedTintOpacity={0.04}
-            onPress={() => setKitchenImportEnabled(!kitchenImportEnabled)}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: kitchenImportEnabled }}
-            accessibilityLabel="Import kitchen to AI"
-          >
-            <View style={styles.importCardTop}>
-              <View style={styles.importCardLeft}>
-                <LeafIcon
-                  size={18}
-                  color={kitchenImportEnabled ? colors.kitchenFresh : colors.homeTextQuiet}
-                />
-                <Text style={styles.importCardTitle}>Import kitchen</Text>
+          {/* ── Actions ── */}
+          <View style={styles.actions}>
+            {/* Primary pill — Time-aware meal prompt */}
+            <PressableScale
+              style={styles.pill}
+              scaleTo={0.97}
+              pressedTintOpacity={1}
+              pressedTintColor={colors.homeButtonPressed}
+              onPress={goToCapture}
+              accessibilityRole="button"
+              accessibilityLabel={meal.prompt}
+            >
+              {meal.icon}
+              <View style={styles.pillTextGroup}>
+                <Text style={styles.pillText}>{meal.prompt}</Text>
+                <Text style={styles.pillSubtext}>{meal.sub}</Text>
               </View>
-              <Switch
-                value={kitchenImportEnabled}
-                onValueChange={setKitchenImportEnabled}
-                trackColor={{ true: colors.kitchenPillActive, false: '#D8D6CD' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <Text style={styles.importCardDesc}>
-              {kitchenImportEnabled
-                ? 'The rescuer can see everything in your kitchen.'
-                : 'Your kitchen stays invisible. The AI knows nothing.'}
-            </Text>
-          </PressableScale>
+            </PressableScale>
+
+            {/* Pill row — Cook for the family */}
+            <PressableScale
+              style={styles.boxRow}
+              scaleTo={0.98}
+              pressedTintOpacity={0.05}
+              onPress={goToFamily}
+              accessibilityRole="button"
+              accessibilityLabel="Cook for the family"
+            >
+              <View style={styles.boxRowLeft}>
+                <UsersIcon size={18} color={colors.homeInk} />
+                <Text style={styles.boxRowText}>Cook for the family</Text>
+              </View>
+            </PressableScale>
+
+            {/* Import kitchen toggle */}
+            <PressableScale
+              style={styles.importCard}
+              scaleTo={0.98}
+              pressedTintOpacity={0.04}
+              onPress={() => setKitchenImportEnabled(!kitchenImportEnabled)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: kitchenImportEnabled }}
+              accessibilityLabel="Import kitchen to AI"
+            >
+              <View style={styles.importCardTop}>
+                <View style={styles.importCardLeft}>
+                  <LeafIcon
+                    size={18}
+                    color={kitchenImportEnabled ? colors.kitchenFresh : colors.homeTextQuiet}
+                  />
+                  <Text style={styles.importCardTitle}>Import kitchen</Text>
+                </View>
+                <Switch
+                  value={kitchenImportEnabled}
+                  onValueChange={setKitchenImportEnabled}
+                  trackColor={{ true: colors.kitchenPillActive, false: '#D8D6CD' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+              <Text style={styles.importCardDesc}>
+                {kitchenImportEnabled
+                  ? 'The rescuer can see everything in your kitchen.'
+                  : 'Your kitchen stays invisible. The AI knows nothing.'}
+              </Text>
+            </PressableScale>
+          </View>
         </View>
-      </View>
+      </FadeInView>
     </SafeAreaView>
   );
 }
@@ -222,20 +225,22 @@ const styles = StyleSheet.create({
   },
 
   /* ── Main content ── */
+  fadeWrap: {
+    flex: 1,
+  },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
-    paddingBottom: 40,
-    gap: 0,
+    paddingBottom: 20,
   },
 
   /* ── Cat ── */
   cat: {
-    width: 220,
-    height: 200,
-    marginBottom: 16,
+    width: 240,
+    height: 213,
+    marginBottom: 12,
   },
 
   /* ── Greeting (uncommon, not "Good morning") ── */
@@ -253,12 +258,12 @@ const styles = StyleSheet.create({
   /* ── Question ── */
   question: {
     fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 33,
+    fontSize: 24,
+    lineHeight: 30,
     letterSpacing: -0.3,
     color: colors.homeInk,
     textAlign: 'center',
-    marginBottom: 36,
+    marginBottom: 24,
   },
 
   /* ── Actions ── */

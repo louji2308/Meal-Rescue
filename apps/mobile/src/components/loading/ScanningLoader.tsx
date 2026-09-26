@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from '../AppText';
 import Animated, {
   Easing,
+  type SharedValue,
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
@@ -10,144 +10,139 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { haptics } from '../../services/haptics';
 import { colors, spacing } from '../../theme';
+import { Text } from '../AppText';
 
-/** Pure so copy lives in one place and stays trivially testable. */
-export function buildScanSteps(mealText: string | null): string[] {
-  const subject = mealText?.trim()
-    ? `"${mealText.trim().slice(0, 40)}${mealText.length > 40 ? '…' : ''}"`
-    : 'your meal';
-  return [`Reading ${subject}`, 'Checking your pantry…', 'Finding the best move…'];
+const DOT_COUNT = 8;
+const DOT_SIZE = 10;
+const CIRCLE_SIZE = 76;
+const RADIUS = 28;
+const CYCLE_MS = 1400;
+
+const MESSAGES = ['Analyzing your meal…', 'Finding your best move…'];
+const MESSAGE_SWITCH_MS = 3000;
+const FADE_MS = 200;
+
+function CircleDot({ progress, index }: { progress: SharedValue<number>; index: number }) {
+  const angle = (index / DOT_COUNT) * 360;
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const phase = (((progress.value - index / DOT_COUNT) % 1) + 1) % 1;
+    const wave = 0.5 - 0.5 * Math.cos(phase * 2 * Math.PI);
+    return {
+      opacity: 0.3 + 0.7 * wave,
+      transform: [
+        { rotate: `${angle}deg` },
+        { translateY: -RADIUS },
+        { scale: 0.55 + 0.65 * wave },
+      ],
+    };
+  });
+
+  return <Animated.View style={[styles.slot, animatedStyle]} />;
 }
 
-interface ScanStep {
-  label: string;
-  state: 'done' | 'active' | 'pending';
+function MessageCrossFade({ messages, index }: { messages: string[]; index: number }) {
+  const outgoingOpacity = useSharedValue(1);
+  const incomingOpacity = useSharedValue(0);
+  const prevIndex = useRef(index);
+
+  useEffect(() => {
+    if (index === prevIndex.current) return;
+    outgoingOpacity.value = withTiming(0, { duration: FADE_MS });
+    incomingOpacity.value = 0;
+    incomingOpacity.value = withTiming(1, { duration: FADE_MS });
+    prevIndex.current = index;
+  }, [index, incomingOpacity, outgoingOpacity]);
+
+  const outgoingStyle = useAnimatedStyle(() => ({ opacity: outgoingOpacity.value }));
+  const incomingStyle = useAnimatedStyle(() => ({ opacity: incomingOpacity.value }));
+
+  return (
+    <View style={styles.messageBox}>
+      <Animated.View style={[styles.messageWrap, outgoingStyle]} pointerEvents="none">
+        <Text style={styles.message}>{messages[prevIndex.current]}</Text>
+      </Animated.View>
+      <Animated.View style={[styles.messageWrap, incomingStyle]} pointerEvents="none">
+        <Text style={styles.message}>{messages[index]}</Text>
+      </Animated.View>
+    </View>
+  );
 }
 
-const STEP_MS = 2800;
-
-export function ScanningLoader({ mealText }: { mealText: string | null }) {
-  const steps = useMemo(() => buildScanSteps(mealText), [mealText]);
-  const [index, setIndex] = useState(0);
+export function ScanningLoader() {
+  const progress = useSharedValue(0);
+  const [messageIndex, setMessageIndex] = useState(0);
 
   useEffect(() => {
-    setIndex(0);
-    const id = setInterval(() => {
-      setIndex((i) => Math.min(i + 1, steps.length - 1));
-    }, STEP_MS);
-    return () => clearInterval(id);
-  }, [steps]);
-
-  useEffect(() => {
-    if (index > 0) haptics.light();
-  }, [index]);
-
-  const beam = useSharedValue(-60);
-
-  useEffect(() => {
-    beam.value = -60;
-    beam.value = withRepeat(
-      withTiming(220, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+    progress.value = 0;
+    progress.value = withRepeat(
+      withTiming(1, { duration: CYCLE_MS, easing: Easing.linear }),
       -1,
-      true,
+      false,
     );
-    return () => cancelAnimation(beam);
-  }, [beam]);
+    return () => cancelAnimation(progress);
+  }, [progress]);
 
-  const beamStyle = useAnimatedStyle(() => ({ transform: [{ translateY: beam.value }] }));
-
-  const rendered: ScanStep[] = steps.map((label, i) => ({
-    label,
-    state: i < index ? 'done' : i === index ? 'active' : 'pending',
-  }));
-  const active = rendered[index];
+  useEffect(() => {
+    const id = setTimeout(() => setMessageIndex(1), MESSAGE_SWITCH_MS);
+    return () => clearTimeout(id);
+  }, []);
 
   return (
     <View
       style={styles.wrap}
       accessibilityLiveRegion="polite"
-      accessibilityLabel="Analyzing your meal"
+      accessibilityLabel={MESSAGES[messageIndex]}
     >
-      <View style={styles.scanWindow}>
-        <Animated.View style={[styles.beam, beamStyle]} />
-        {rendered.map((step) => (
-          <View key={step.label} style={styles.stepRow}>
-            <Text style={[styles.tick, step.state === 'done' ? styles.tickDone : null]}>
-              {step.state === 'done' ? '✓' : step.state === 'active' ? '›' : '·'}
-            </Text>
-            <Text
-              style={[
-                styles.stepText,
-                step.state === 'active' ? styles.stepActive : null,
-                step.state === 'pending' ? styles.stepPending : null,
-              ]}
-              numberOfLines={1}
-            >
-              {step.label}
-            </Text>
-          </View>
+      <View
+        style={styles.circle}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        {Array.from({ length: DOT_COUNT }, (_, i) => (
+          <CircleDot key={i} progress={progress} index={i} />
         ))}
       </View>
-      {active && active.label.startsWith('Finding') ? (
-        <Text style={styles.hint}>This usually takes ~15 seconds</Text>
-      ) : null}
+      <MessageCrossFade messages={MESSAGES} index={messageIndex} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: spacing.lg,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
   },
-  scanWindow: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    overflow: 'hidden',
-    gap: spacing.sm,
+  circle: {
+    width: CIRCLE_SIZE,
+    height: CIRCLE_SIZE,
   },
-  beam: {
+  slot: {
+    position: 'absolute',
+    left: (CIRCLE_SIZE - DOT_SIZE) / 2,
+    top: (CIRCLE_SIZE - DOT_SIZE) / 2,
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
+    backgroundColor: colors.rescueAccent,
+  },
+  messageBox: {
+    alignSelf: 'stretch',
+    minHeight: 20,
+    justifyContent: 'center',
+  },
+  messageWrap: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: 44,
-    backgroundColor: 'rgba(46,125,50,0.10)',
-  },
-  stepRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
   },
-  tick: {
-    width: 16,
-    color: colors.textSecondary,
-    fontWeight: '700',
-  },
-  tickDone: {
-    color: colors.rescueAccent,
-  },
-  stepText: {
-    flex: 1,
+  message: {
     fontSize: 14,
-    color: colors.text,
-  },
-  stepActive: {
-    fontWeight: '600',
-  },
-  stepPending: {
+    fontWeight: '500',
     color: colors.textSecondary,
-  },
-  hint: {
-    marginTop: spacing.sm,
-    fontSize: 13,
-    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });

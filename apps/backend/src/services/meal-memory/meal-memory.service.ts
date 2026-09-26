@@ -46,6 +46,7 @@ import type {
   UUID,
 } from '@meal-rescue/shared-types';
 
+import { isDatabaseReady } from '../../database';
 import type { Db } from '../../database/models';
 import { AppError, ErrorCategory } from '../../lib/errors';
 import { HouseholdService } from '../common-table/household.service';
@@ -316,9 +317,12 @@ export class MealMemoryService {
     weekStart?: string,
     memberId?: UUID,
   ): Promise<MealMemoryWeekResponse> {
-    const householdId = await this.requireHouseholdId(userId);
     const todayKey = dateKeyFor(new Date(), 0);
     const start = weekStart ?? weekStartFor(todayKey);
+    if (!isDatabaseReady()) {
+      return this.emptyWeek(start);
+    }
+    const householdId = await this.requireHouseholdId(userId);
     const scopeMember =
       memberId && (await this.resolveMemberId(householdId, memberId)) ? memberId : null;
     const rows = await this.models.MealEvent.findAll({
@@ -358,6 +362,25 @@ export class MealMemoryService {
         });
       }
       days.push({ dateKey, slots: slotKeys.map((s) => s.view) });
+    }
+    return { weekStart: start, days };
+  }
+
+  /** Degraded-mode week: empty OPEN slots for all 7 days / 4 meal times. */
+  private emptyWeek(start: string): MealMemoryWeekResponse {
+    const days: MealMemoryDay[] = [];
+    for (let i = 0; i < 7; i++) {
+      const dateKey = addDays(start, i);
+      const slots: MealMemorySlotView[] = (
+        ['breakfast', 'lunch', 'dinner', 'snack'] as MealSlot[]
+      ).map((mealSlot) => ({
+        dateKey,
+        mealSlot,
+        slotStatus: 'OPEN' as const,
+        planned: null,
+        actual: null,
+      }));
+      days.push({ dateKey, slots });
     }
     return { weekStart: start, days };
   }
@@ -604,6 +627,7 @@ export class MealMemoryService {
   }
 
   async listRules(userId: UUID): Promise<MealMemoryRulesResponse> {
+    if (!isDatabaseReady()) return { rules: [] };
     const householdId = await this.requireHouseholdId(userId);
     const rules = await this.accountingService.activeRules(householdId);
     return { rules };
@@ -735,6 +759,7 @@ export class MealMemoryService {
   }
 
   async recentMeals(userId: UUID): Promise<MealMemoryRecentsResponse> {
+    if (!isDatabaseReady()) return { meals: [] };
     const householdId = await this.requireHouseholdId(userId);
     const rows = await this.models.MealEvent.findAll({
       where: { householdId, kind: 'actual', concept: { [Op.not]: null } },

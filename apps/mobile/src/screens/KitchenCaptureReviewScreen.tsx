@@ -1,24 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TextInput } from '../components/AppTextInput';
-import { colors, typography, spacing, radius } from '../theme';
-import type {
-  CapturedItem,
-  CaptureConfirmItem,
-  CaptureResult,
-} from '../services/kitchen.api';
+import type { CaptureConfirmItem, CaptureResult, CapturedItem } from '../services/kitchen.api';
 import { confirmCapture } from '../services/kitchen.api';
+import { colors, radius, spacing, typography } from '../theme';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -36,26 +32,36 @@ interface Props {
 
 function tierColor(tier: 'HIGH' | 'MEDIUM' | 'LOW') {
   switch (tier) {
-    case 'HIGH': return colors.success;
-    case 'MEDIUM': return colors.primary;
-    case 'LOW': return colors.textSecondary;
+    case 'HIGH':
+      return colors.success;
+    case 'MEDIUM':
+      return colors.primary;
+    case 'LOW':
+      return colors.textSecondary;
   }
 }
 
 function tierLabel(tier: 'HIGH' | 'MEDIUM' | 'LOW') {
   switch (tier) {
-    case 'HIGH': return 'Confirmed';
-    case 'MEDIUM': return 'Uncertain';
-    case 'LOW': return 'Unclear';
+    case 'HIGH':
+      return 'Confirmed';
+    case 'MEDIUM':
+      return 'Uncertain';
+    case 'LOW':
+      return 'Unclear';
   }
 }
 
 function stateLabel(state: string) {
   switch (state) {
-    case 'RAW': return 'Raw';
-    case 'COOKED': return 'Cooked';
-    case 'READY_TO_EAT': return 'Ready to eat';
-    default: return '';
+    case 'RAW':
+      return 'Raw';
+    case 'COOKED':
+      return 'Cooked';
+    case 'READY_TO_EAT':
+      return 'Ready to eat';
+    default:
+      return '';
   }
 }
 
@@ -64,7 +70,8 @@ function formatExpiry(days: number | null): string {
   if (days === 0) return 'Use today';
   if (days === 1) return 'Use tomorrow';
   if (days < 7) return `Use in ${days} days`;
-  if (days < 30) return `Use in ${Math.round(days / 7)} week${Math.round(days / 7) === 1 ? '' : 's'}`;
+  if (days < 30)
+    return `Use in ${Math.round(days / 7)} week${Math.round(days / 7) === 1 ? '' : 's'}`;
   return `Use in ${Math.round(days / 30)} month${Math.round(days / 30) === 1 ? '' : 's'}`;
 }
 
@@ -78,7 +85,11 @@ function expiryDateFromDays(days: number | null): string {
 const EXPIRY_PRESETS = [1, 2, 3, 5, 7, 14, 30];
 
 const QTY_STEP: Record<string, number> = {
-  pcs: 1, g: 50, kg: 0.5, L: 0.25, ml: 50,
+  pcs: 1,
+  g: 50,
+  kg: 0.5,
+  L: 0.25,
+  ml: 50,
 };
 
 // ---------------------------------------------------------------------------
@@ -132,15 +143,12 @@ function ItemCard({
     [item.id, editName, qty, unit, servings, expiryDays, onUpdate],
   );
 
-  const adjustQty = useCallback(
-    (delta: number) => {
-      setQty((prev) => {
-        const next = (prev ?? 0) + delta;
-        return next < 0 ? 0 : Math.round(next * 100) / 100;
-      });
-    },
-    [],
-  );
+  const adjustQty = useCallback((delta: number) => {
+    setQty((prev) => {
+      const next = (prev ?? 0) + delta;
+      return next < 0 ? 0 : Math.round(next * 100) / 100;
+    });
+  }, []);
 
   const adjustExpiry = useCallback((delta: number) => {
     setExpiryDays((prev) => {
@@ -168,7 +176,9 @@ function ItemCard({
       >
         <View style={styles.cardInfo}>
           <View style={styles.cardNameRow}>
-            <Text style={styles.cardName} numberOfLines={1}>{editName}</Text>
+            <Text style={styles.cardName} numberOfLines={1}>
+              {editName}
+            </Text>
             <View style={[styles.tierBadge, { backgroundColor: tierCol + '18' }]}>
               <Text style={[styles.tierText, { color: tierCol }]}>
                 {tierLabel(item.confidenceTier)}
@@ -178,9 +188,7 @@ function ItemCard({
 
           {/* Quantity + unit row */}
           <View style={styles.cardMetaRow}>
-            <Text style={styles.cardMeta}>
-              {stateLabel(item.state)}
-            </Text>
+            <Text style={styles.cardMeta}>{stateLabel(item.state)}</Text>
             {qty != null && (
               <Text style={styles.cardQty}>
                 {qty} {unit}
@@ -212,13 +220,22 @@ function ItemCard({
                 {item.duplicateOf!.currentUnit ?? ''}
               </Text>
               <View style={styles.duplicateActions}>
-                <TouchableOpacity style={styles.dupAction} onPress={() => handleDuplicateAction('UPDATE')}>
+                <TouchableOpacity
+                  style={styles.dupAction}
+                  onPress={() => handleDuplicateAction('UPDATE')}
+                >
                   <Text style={styles.dupActionText}>Replace</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.dupAction} onPress={() => handleDuplicateAction('ADD_MORE')}>
+                <TouchableOpacity
+                  style={styles.dupAction}
+                  onPress={() => handleDuplicateAction('ADD_MORE')}
+                >
                   <Text style={styles.dupActionText}>Add more</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.dupAction, styles.dupSkip]} onPress={() => handleDuplicateAction('SKIP')}>
+                <TouchableOpacity
+                  style={[styles.dupAction, styles.dupSkip]}
+                  onPress={() => handleDuplicateAction('SKIP')}
+                >
                   <Text style={[styles.dupActionText, { color: colors.textSecondary }]}>Skip</Text>
                 </TouchableOpacity>
               </View>
@@ -301,7 +318,12 @@ function ItemCard({
                 style={[styles.expiryPreset, expiryDays === d && styles.expiryPresetActive]}
                 onPress={() => setExpiryDays(d)}
               >
-                <Text style={[styles.expiryPresetText, expiryDays === d && styles.expiryPresetTextActive]}>
+                <Text
+                  style={[
+                    styles.expiryPresetText,
+                    expiryDays === d && styles.expiryPresetTextActive,
+                  ]}
+                >
                   {d}d
                 </Text>
               </TouchableOpacity>
@@ -404,10 +426,7 @@ export default function KitchenCaptureReviewScreen({ result, onDone, onBack }: P
             {doneResult.skipped > 0 ? ` · ${doneResult.skipped} skipped` : ''}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => onDone(doneResult)}>
-            <Text style={styles.doneBtnText}>Rescue something with these →</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.doneSecondary} onPress={() => onDone(doneResult)}>
-            <Text style={styles.doneSecondaryText}>Back to kitchen</Text>
+            <Text style={styles.doneBtnText}>Back to kitchen</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -447,7 +466,10 @@ export default function KitchenCaptureReviewScreen({ result, onDone, onBack }: P
       {/* Confirm button */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.confirmBtn, (submitting || summary.accepted === 0) && styles.confirmBtnDisabled]}
+          style={[
+            styles.confirmBtn,
+            (submitting || summary.accepted === 0) && styles.confirmBtnDisabled,
+          ]}
           onPress={handleConfirm}
           disabled={submitting || summary.accepted === 0}
         >
@@ -833,12 +855,5 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: '#fff',
     fontWeight: '700',
-  },
-  doneSecondary: {
-    paddingVertical: 8,
-  },
-  doneSecondaryText: {
-    ...typography.body,
-    color: colors.textSecondary,
   },
 });

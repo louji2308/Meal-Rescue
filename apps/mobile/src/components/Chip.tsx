@@ -1,11 +1,17 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, ViewStyle } from 'react-native';
-import { Text } from './AppText';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { haptics } from '../services/haptics';
 import { colors, spacing } from '../theme';
 import { spring } from '../theme/motion';
+import { Text } from './AppText';
 
 interface ChipProps {
   label: string;
@@ -20,6 +26,7 @@ interface ChipProps {
  */
 export function Chip({ label, selected, onToggle, style }: ChipProps) {
   const scale = useSharedValue(1);
+  const selectionProgress = useSharedValue(selected ? 1 : 0);
 
   useEffect(() => {
     if (selected) {
@@ -27,20 +34,32 @@ export function Chip({ label, selected, onToggle, style }: ChipProps) {
       scale.value = withSpring(1, spring.snappy);
       haptics.light();
     }
-  }, [selected, scale]);
+    selectionProgress.value = withTiming(selected ? 1 : 0, { duration: 200 });
+  }, [selected, scale, selectionProgress]);
 
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    borderColor: interpolateColor(
+      selectionProgress.value,
+      [0, 1],
+      [colors.border, colors.borderStrong],
+    ),
+    backgroundColor: interpolateColor(
+      selectionProgress.value,
+      [0, 1],
+      [colors.surface, colors.primaryLight],
+    ),
+  }));
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
-      style={[styles.base, selected ? styles.selected : null, style]}
       hitSlop={{ top: 4, bottom: 4 }}
       onPress={onToggle}
     >
-      <Animated.View style={[styles.inner, animated]}>
+      <Animated.View style={[styles.base, animated, style]}>
         <Text style={[styles.label, selected ? styles.labelSelected : null]}>{label}</Text>
       </Animated.View>
     </Pressable>
@@ -51,17 +70,10 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     minHeight: 36,
   },
-  selected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.borderStrong,
-  },
-  inner: {},
   label: {
     fontSize: 14,
     color: colors.textSecondary,
