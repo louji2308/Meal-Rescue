@@ -9,9 +9,11 @@ import Animated, {
 
 import type { AiPlannerQuestion, PlanPreviewResponse } from '@meal-rescue/shared-types';
 
+import type { ApiError } from '../services/api';
 import { colors, spacing, typography } from '../theme';
 import { spring } from '../theme/motion';
 import { Text } from './AppText';
+import { ErrorBanner } from './ErrorBanner';
 import { PrimaryButton } from './PrimaryButton';
 import { XIcon } from './icons';
 
@@ -19,6 +21,7 @@ interface PlanReviewPopupProps {
   visible: boolean;
   preview: PlanPreviewResponse | null;
   clarification: { message: string; questions: AiPlannerQuestion[] } | null;
+  error?: ApiError | null;
   onAccept: () => void;
   onEdit: (edits: string) => void;
   onAnswer: (answer: string) => void;
@@ -31,6 +34,7 @@ export function PlanReviewPopup({
   visible,
   preview,
   clarification,
+  error = null,
   onAccept,
   onEdit,
   onAnswer,
@@ -117,6 +121,8 @@ export function PlanReviewPopup({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            <ErrorBanner error={error} />
+
             {showingClarification ? (
               <View style={styles.clarificationSection}>
                 <Text style={styles.clarificationMessage}>{clarification.message}</Text>

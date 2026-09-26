@@ -21,7 +21,7 @@
 import { afterAll, beforeAll, describe, expect, it, jest } from '@jest/globals';
 import type { FastifyInstance } from 'fastify';
 
-import { buildApp } from '../src/app';
+import { BODY_LIMIT_BYTES, buildApp } from '../src/app';
 import { env } from '../src/config/env';
 import { signAccessToken } from '../src/lib/jwt';
 
@@ -394,7 +394,9 @@ describe('security surface - body size limit and error contract for 413', () => 
   });
 
   it('rejects an oversized JSON body with a structured, non-leaky 413', async () => {
-    const big = 'a'.repeat(1_100_000);
+    // Sized off the real ceiling: 1 MB used to work until bodyLimit grew to
+    // 10 MB, which silently downgraded this to a 400 from zod instead.
+    const big = 'a'.repeat(BODY_LIMIT_BYTES + 1_000);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/pantry',

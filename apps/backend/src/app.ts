@@ -36,6 +36,13 @@ import { userRoutes } from './routes/user.routes';
 import { webhookRoutes } from './routes/webhook.routes';
 
 /**
+ * Global JSON body ceiling. Exported so the 413 security-contract test can
+ * exceed exactly this value instead of hardcoding one (they drifted once
+ * already and the test started passing a payload Fastify happily accepted).
+ */
+export const BODY_LIMIT_BYTES = 10 * 1024 * 1024; // 10 MB — matches multipart fileSize limit
+
+/**
  * Builds the Fastify application. Deliberately free of side effects:
  * no database connection, no port binding. `server.ts` owns startup;
  * tests call buildApp() and use fastify.inject().
@@ -51,7 +58,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // SECURITY: Disable detailed HTTP error responses in production.
     // Prevents Fastify from sending full stack traces or error objects.
     disableRequestLogging: false,
-    bodyLimit: 10 * 1024 * 1024, // 10 MB — matches multipart fileSize limit
+    bodyLimit: BODY_LIMIT_BYTES,
     // SECURITY: Do not expose Node.js version in X-Powered-By header.
     // helmet() handles this, but belt-and-suspenders.
     http2: false,
