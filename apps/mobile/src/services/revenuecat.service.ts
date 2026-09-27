@@ -24,18 +24,26 @@ type PurchasesApi = typeof import('react-native-purchases').default;
 let _purchasesModule: PurchasesApi | null | undefined;
 
 /** Active API key for the current platform, or undefined when unavailable. */
+// QA builds set EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE=1 so the official
+// RevenueCat Test Store runs in a non-__DEV__ bundle (Expo ships
+// debuggableVariants = [], so even debug APKs bundle with dev=false).
+// Release builds must never set it: with a `test_` key the SDK shows a
+// "Wrong API Key" dialog and force-closes, so they stay on the
+// unconfigured / paywall-disabled path.
+const TEST_STORE_ALLOWED = process.env.EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE === '1';
+
 function platformAPIKey(): string | undefined {
   const apiKey =
     Platform.OS === 'android'
       ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY
       : process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
   if (!apiKey) return undefined;
-  // RevenueCat `test_` keys only work in Simulated Store mode, which RevenueCat
+  // RevenueCat `test_` keys only work in Test Store mode, which RevenueCat
   // enables for debug/dev builds. Shipping a test key in a release build makes
   // the SDK show a "Wrong API Key" dialog and force-close the app. Treat it as
-  // unconfigured outside __DEV__ so the release app stays usable with the
-  // paywall's static (purchase-disabled) fallback.
-  if (apiKey.startsWith('test_') && !__DEV__) return undefined;
+  // unconfigured outside __DEV__ (unless this is an explicit Test Store build)
+  // so the release app stays usable with the paywall's purchase-disabled path.
+  if (apiKey.startsWith('test_') && !__DEV__ && !TEST_STORE_ALLOWED) return undefined;
   return apiKey;
 }
 

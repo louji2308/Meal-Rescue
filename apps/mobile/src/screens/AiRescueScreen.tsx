@@ -9,7 +9,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { ClocheIcon } from '../components/icons';
 import { ScanningLoader } from '../components/loading/ScanningLoader';
 import { FadeInView } from '../components/motion/FadeInView';
 import { Pressable } from '../components/motion/Pressable';
@@ -165,7 +164,6 @@ export function AiRescueScreen() {
       >
         {/* Header */}
         <View style={styles.hero}>
-          <ClocheIcon size={32} color={colors.rescueAccent} strokeWidth={2.5} />
           <Text style={styles.title}>Your best rescue</Text>
           <Text style={styles.foodTag}>{foodSummary}</Text>
         </View>

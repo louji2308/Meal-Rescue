@@ -155,3 +155,8 @@ apps/mobile/assets/app-icon-1024.png
 
 # Local Postgres data snapshot (never commit)
 pgdata_old/
+
+# ---------------------------------------------------------------------------
+# Local setup notes (never commit)
+# ---------------------------------------------------------------------------
+setup.md

@@ -17,33 +17,35 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ICON_RESOURCE_NAME = 'ic_stat_meal_rescue';
+const METADATA_NAME = 'com.onesignal.NotificationIcon';
+const DEFAULT_LOGO = './assets/notification-logo.png';
 
-function androidManifestMod(manifest, config) {
-  const logoPath = config.logo || './assets/notification-logo.png';
-  const name = 'com.onesignal.NotificationIcon';
+function androidManifestMod(manifest) {
+  const application = manifest.manifest.application?.[0];
+  if (!application) return manifest;
 
-  const hasMetadata =
-    manifest.manifest.application?.[0]?.['meta-data']?.some((m) => m.$?.['android:name'] === name) ??
-    false;
+  const hasMetadata = (application['meta-data'] ?? []).some((m) => m.$?.['android:name'] === METADATA_NAME);
 
   if (!hasMetadata) {
-    manifest.manifest.application[0]['meta-data'] = [
-      ...(manifest.manifest.application[0]['meta-data'] ?? []),
+    application['meta-data'] = [
+      ...(application['meta-data'] ?? []),
       {
         $: {
-          'android:name': name,
+          'android:name': METADATA_NAME,
           'android:resource': `@drawable/${ICON_RESOURCE_NAME}`,
         },
       },
     ];
   }
 
-  return { ...manifest, _logoPath: logoPath };
+  return manifest;
 }
 
-module.exports = function withMealRescueNotificationIcon(config) {
+module.exports = function withMealRescueNotificationIcon(config, props) {
+  const logoPath = (props && props.logo) || DEFAULT_LOGO;
+
   config = withAndroidManifest(config, (modRes) => {
-    modRes.modResults = androidManifestMod(modRes.modResults, config);
+    modRes.modResults = androidManifestMod(modRes.modResults);
     return modRes;
   });
 
@@ -51,7 +53,6 @@ module.exports = function withMealRescueNotificationIcon(config) {
     'android',
     (modRes) => {
       const projectRoot = modRes.modRequest.projectRoot;
-      const logoPath = modRes.modResults._logoPath;
       const source = path.resolve(projectRoot, logoPath);
       const resDir = path.join(projectRoot, 'android', 'app', 'src', 'main', 'res');
       const drawableDir = path.join(resDir, 'drawable');

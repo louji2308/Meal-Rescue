@@ -24,21 +24,60 @@ import {
   restorePurchases,
 } from '../services/revenuecat.service';
 import { useMonetization } from '../stores/monetization.store';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, spacing, typography } from '../theme';
+
+type PlanId = 'monthly' | 'yearly' | 'lifetime';
 
 const STATIC_PRICING = [
-  { id: 'monthly', title: 'Monthly', price: '$4.99 / month' },
-  { id: 'annual', title: 'Yearly', price: '$39.99 / year' },
+  { id: 'monthly', title: 'Monthly', price: '$4.99' },
+  { id: 'annual', title: 'Yearly', price: '$39.99' },
   { id: 'lifetime', title: 'Lifetime', price: '$79.99' },
 ];
 
-const TITLE_OVERRIDES: Record<string, string> = {
+const PLAN_LABELS: Record<PlanId, string> = {
   monthly: 'Monthly',
-  annual: 'Yearly',
-  year: 'Yearly',
+  yearly: 'Yearly',
   lifetime: 'Lifetime',
-  pro_lifetime: 'Lifetime',
 };
+
+const PLAN_ORDER: Record<PlanId, number> = { monthly: 0, yearly: 1, lifetime: 2 };
+
+const PLAN_PRICE_SUFFIX: Record<PlanId, string | null> = {
+  monthly: '/ month',
+  yearly: '/ year',
+  lifetime: null,
+};
+
+/**
+ * Resolves which billing tier a package belongs to.
+ *
+ * Store product titles are usually a single marketing string ("Pro") shared by
+ * every tier, so they can never be used to tell the cards apart. The package
+ * type RevenueCat derives from the predefined identifiers is authoritative;
+ * after that we scan identifiers, then the ISO-8601 subscription period.
+ */
+function detectPlan(
+  packageType: string | undefined,
+  sources: Array<string | null | undefined>,
+  product?: { subscriptionPeriod?: string | null; productCategory?: string | null } | null,
+): PlanId | null {
+  if (packageType === 'LIFETIME') return 'lifetime';
+  if (packageType === 'ANNUAL') return 'yearly';
+  if (packageType === 'MONTHLY') return 'monthly';
+
+  const haystack = sources.filter(Boolean).join(' ').toLowerCase();
+  if (/(lifetime|forever|one[-_ ]?time)/.test(haystack)) return 'lifetime';
+  if (/(annual|yearly|year)/.test(haystack)) return 'yearly';
+  if (/(monthly|month)/.test(haystack)) return 'monthly';
+
+  const period = product?.subscriptionPeriod;
+  if (period) {
+    if (period.includes('Y')) return 'yearly';
+    if (period.includes('M')) return 'monthly';
+  }
+  if (product?.productCategory === 'NON_SUBSCRIPTION') return 'lifetime';
+  return null;
+}
 
 /**
  * Paywall - honest pricing, no fake timers, no dismiss-blocking.
@@ -197,34 +236,54 @@ export function PaywallScreen() {
               </View>
             </>
           ) : (
-            (packages.length > 0 ? packages : STATIC_PRICING).map((item, i) => {
-              const pkg = item as PurchasesPackage;
-              const id = pkg.identifier ?? (item as { id: string }).id;
-              const rawTitle = pkg.product?.title ?? (item as { title: string }).title;
-              const title =
-                TITLE_OVERRIDES[id] ?? TITLE_OVERRIDES[rawTitle.toLowerCase()] ?? rawTitle;
-              const price = pkg.product?.priceString ?? (item as { price: string }).price;
-              const recommended = /annual|year/i.test(title) || id === 'annual';
-              return (
-                <FadeInView key={id} delay={500 + i * 100} rise={12}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Choose ${title} plan`}
-                    style={[styles.planCard, recommended && styles.planCardRecommended]}
-                    disabled={busy || isPro || !hasRevenueCatKeys()}
-                    onPress={() => void handlePurchase(pkg, id)}
-                  >
-                    {recommended && (
-                      <View style={styles.recommendedBadge}>
-                        <Text style={styles.recommendedBadgeText}>Best value</Text>
-                      </View>
-                    )}
-                    <Text style={styles.planTitle}>{title}</Text>
-                    <Text style={styles.planPrice}>{price}</Text>
-                  </Pressable>
-                </FadeInView>
-              );
-            })
+            (packages.length > 0 ? packages : STATIC_PRICING)
+              .map((item, i) => {
+                const pkg = item as PurchasesPackage;
+                const id = pkg.identifier ?? (item as { id: string }).id;
+                const product = pkg.product;
+                const fallbackTitle = (item as { title: string }).title;
+                const plan =
+                  detectPlan(pkg.packageType, [id, product?.identifier, product?.title], product) ??
+                  detectPlan(undefined, [fallbackTitle]);
+                const title = plan ? PLAN_LABELS[plan] : fallbackTitle;
+                const rawPrice = product?.priceString ?? (item as { price: string }).price;
+                const price =
+                  plan && PLAN_PRICE_SUFFIX[plan]
+                    ? `${rawPrice} ${PLAN_PRICE_SUFFIX[plan]}`
+                    : rawPrice;
+                const recommended = plan === 'yearly';
+                return {
+                  key: `${id}-${i}`,
+                  pkg,
+                  id,
+                  title,
+                  price,
+                  recommended,
+                  order: plan ? PLAN_ORDER[plan] : 99,
+                };
+              })
+              .sort((a, b) => a.order - b.order)
+              .map(({ key, pkg, id, title, price, recommended }, i) => {
+                return (
+                  <FadeInView key={key} delay={500 + i * 100} rise={12}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choose ${title} plan`}
+                      style={[styles.planCard, recommended && styles.planCardRecommended]}
+                      disabled={busy || isPro || !hasRevenueCatKeys()}
+                      onPress={() => void handlePurchase(pkg, id)}
+                    >
+                      {recommended && (
+                        <View style={styles.recommendedBadge}>
+                          <Text style={styles.recommendedBadgeText}>Best value</Text>
+                        </View>
+                      )}
+                      <Text style={styles.planTitle}>{title}</Text>
+                      <Text style={styles.planPrice}>{price}</Text>
+                    </Pressable>
+                  </FadeInView>
+                );
+              })
           )}
 
           {passNote ? <Text style={styles.passNote}>{passNote}</Text> : null}
@@ -314,31 +373,29 @@ const styles = StyleSheet.create({
     marginTop: -spacing.sm,
   },
   teaserCard: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: 12,
-    padding: spacing.md,
     marginBottom: spacing.lg,
   },
   teaserEyebrow: {
     color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
   },
   teaserOpener: {
-    fontSize: 17,
-    lineHeight: 24,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
+    fontFamily: fonts.display,
+    fontSize: 20,
+    lineHeight: 28,
+    letterSpacing: -0.2,
+    color: colors.text,
   },
   teaserHook: {
-    fontSize: 20,
-    lineHeight: 27,
-    color: colors.text,
-    fontWeight: '700',
-    marginTop: spacing.xs,
+    fontFamily: fonts.regular,
+    fontSize: 17,
+    lineHeight: 24,
+    marginTop: spacing.sm,
+    color: colors.textSecondary,
   },
   planCard: {
     borderWidth: 1,

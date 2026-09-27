@@ -3,25 +3,15 @@ import axios from 'axios';
 import type { ErrorResponse } from '@meal-rescue/shared-types';
 
 /**
- * Base URLs tried in order on pure network failures (no HTTP response).
- * - Configured URL first (LAN / EXPO_PUBLIC_API_BASE_URL)
- * - 127.0.0.1: adb reverse over USB
- * - 10.0.2.2: Android emulator host loopback
+ * API base URL, inlined from EXPO_PUBLIC_API_BASE_URL at bundle time.
+ * One backend only — a standalone build must not silently retry loopback or
+ * LAN hosts that can never exist on a phone; it surfaces an honest error.
  */
-const BASE_URLS = Array.from(
-  new Set(
-    [
-      process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.57.6.237:3010',
-      'http://127.0.0.1:3010',
-      'http://10.0.2.2:3010',
-    ].filter(Boolean),
-  ),
-);
-
-let baseIndex = 0;
+const BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://meal-rescue-production.up.railway.app';
 
 export const api = axios.create({
-  baseURL: BASE_URLS[0],
+  baseURL: BASE_URL,
   timeout: 30_000,
 });
 
@@ -37,40 +27,6 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
-
-type RetryConfig = { baseURL?: string; __baseTried?: number[] } & Record<string, unknown>;
-
-// On network-level failures only (no HTTP response), walk remaining base URLs
-// before surfacing "Cannot reach Meal Rescue".
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (!axios.isAxiosError(error) || error.response || !error.config) {
-      throw error;
-    }
-    const config = error.config as unknown as RetryConfig;
-    const tried = config.__baseTried ?? [];
-    for (let i = 0; i < BASE_URLS.length; i++) {
-      if (i === baseIndex || tried.includes(i)) continue;
-      tried.push(i);
-      try {
-        const next = await api.request({
-          ...(config as unknown as Record<string, unknown>),
-          baseURL: BASE_URLS[i],
-          ...({ __baseTried: tried } as Record<string, unknown>),
-        });
-        baseIndex = i;
-        api.defaults.baseURL = BASE_URLS[i];
-        return next;
-      } catch (retryErr) {
-        if (axios.isAxiosError(retryErr) && retryErr.response) {
-          throw retryErr;
-        }
-      }
-    }
-    throw error;
-  },
-);
 
 /**
  * Normalized error surfaced to screens. The backend always answers failures

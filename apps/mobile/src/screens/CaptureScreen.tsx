@@ -214,9 +214,9 @@ export function CaptureScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={[typography.heading, styles.title]}>Show Scraps what's on your plate.</Text>
+          <Text style={[typography.heading, styles.title]}>Show us your meal!</Text>
           <Text style={[typography.caption, styles.hint]}>
-            Take a photo, type it, or tell Scraps - "instant noodles with egg".
+            Take a photo, type it, or tell Meal Rescue what you have.
           </Text>
 
           <ErrorBanner error={error} />

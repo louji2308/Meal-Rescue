@@ -98,6 +98,7 @@ module.exports = {
       ],
       optionalPlugin('onesignal-expo-plugin', EXPO_PUBLIC_ONESIGNAL_APP_ID ? { mode: 'production' } : undefined),
       ['./plugins/with-meal-rescue-notification-icon', { logo: './assets/notification-logo.png' }],
+      './plugins/with-debuggable-variants',
     ],
   },
 };

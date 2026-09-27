@@ -31,7 +31,7 @@ import {
   markKitchenItemUsed,
   upsertKitchenItem,
 } from '../services/kitchen.api';
-import { colors, fonts, spacing, typography } from '../theme';
+import { colors, fonts, radius, spacing, typography } from '../theme';
 import KitchenCaptureBottomSheet from './KitchenCaptureBottomSheet';
 import KitchenCaptureReviewScreen from './KitchenCaptureReviewScreen';
 
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.homeInk,
-    borderRadius: 16,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     shadowColor: '#000',
