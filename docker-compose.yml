@@ -39,6 +39,10 @@ services:
     environment:
       DATABASE_URL: postgresql://meal_rescue:local_password@postgres:5432/meal_rescue_dev
       REDIS_URL: redis://redis:6379
+      # The port MUST match the published 3010:3010 mapping and the image
+      # healthcheck: without it the server falls back to its default of 3000
+      # (no .env ships in the image) and the container never becomes healthy.
+      PORT: 3010
       NODE_ENV: development
       JWT_SECRET: local-dev-secret-not-for-production!
       LOG_LEVEL: info

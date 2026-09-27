@@ -3,7 +3,10 @@ const EXPO_PUBLIC_ADMOB_IOS_APP_ID = process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID;
 const EXPO_PUBLIC_ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
 
 const admobAppId = (id) => (id && id.length > 0 ? id : undefined);
-const optionalPlugin = (plugin, config) => (config ? [plugin, config] : plugin);
+// Returns null when the plugin has no config so it is dropped from the list.
+// Registering OneSignal bare makes Expo throw ("mode is required") and kills
+// `expo start` on any checkout whose .env leaves the app id empty.
+const optionalPlugin = (plugin, config) => (config ? [plugin, config] : null);
 
 module.exports = {
   expo: {
@@ -99,6 +102,6 @@ module.exports = {
       optionalPlugin('onesignal-expo-plugin', EXPO_PUBLIC_ONESIGNAL_APP_ID ? { mode: 'production' } : undefined),
       ['./plugins/with-meal-rescue-notification-icon', { logo: './assets/notification-logo.png' }],
       './plugins/with-debuggable-variants',
-    ],
+    ].filter(Boolean),
   },
 };

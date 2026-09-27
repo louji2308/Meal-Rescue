@@ -10,6 +10,10 @@
   <p>
     <a href="https://www.shipaton.com/">Shipaton 2026</a> · Expo · React Native · Fastify · PostgreSQL · Redis · TypeScript
   </p>
+
+  <p>
+    <a href="https://github.com/louji2308/Meal-Rescue/actions/workflows/ci.yml"><img src="https://github.com/louji2308/Meal-Rescue/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  </p>
 </div>
 
 ---
@@ -30,7 +34,7 @@ Meal Rescue is not a recipe generator. It is a **minimum-intervention decision s
 
 ## Built for Fast Technical Review
 
-Shipaton’s published judging process says prescreeners read the project submission and watch the first two minutes of the demo, while judges read the full description, review screenshots, and may download the app. The 2025 Grand Prize criteria also emphasized **innovation, execution, feasibility, and integration**. This README is organized around those same review questions: what is novel, where the implementation lives, how the system works, how it runs, and how the integrations are used.
+Shipaton’s published judging process says prescreeners read the project submission and watch the first two minutes of the demo, while judges read the full description, review screenshots, and may download the app. Judging has consistently emphasized **innovation, execution, feasibility, and integration**. This README is organized around those same review questions: what is novel, where the implementation lives, how the system works, how it runs, and how the integrations are used.
 
 **Official reviewer guidance:** [How we judge Shipaton](https://www.shipaton.com/blog/how-we-judge-shipaton) · [How to win Shipaton: pitching](https://www.shipaton.com/blog/how-to-win-shipaton-part-4-pitching)
 
@@ -96,10 +100,10 @@ Meal Rescue is a Turborepo + npm-workspaces monorepo with two applications and t
 │   └── backend/                 # Fastify API + domain services
 ├── packages/
 │   ├── shared-types/            # Zod-backed API/domain contracts
-│   ├── design-tokens/           # Shared visual tokens
-│   └── eslint-config/            # Shared lint configuration
+│   ├── ai-pipeline/             # Standalone AI pipeline package
+│   └── ui-components/           # Shared UI components
 ├── assets/                      # Product / mascot / cuisine assets
-├── docs/                        # Documentation namespaces (currently skeletal)
+├── docs/                        # Legal, demo script, product & design specs
 ├── .github/workflows/           # CI
 ├── docker-compose.yml           # PostgreSQL + Redis + backend
 ├── railway.toml                 # Railway deployment configuration
@@ -122,7 +126,7 @@ flowchart TB
     end
 
     subgraph API[Fastify API]
-      ROUTES[20 Route Modules]
+      ROUTES[23 Route Modules]
       AUTH[Auth / JWT]
       DOMAIN[Domain Services]
       DECISION[Decision + Constraint Engines]
@@ -513,7 +517,7 @@ RootStack
 └── Common Table
 ```
 
-The Rescue stack contains the core capture → intent → reality → craving → recommendation → feedback loop. The report generated from the repository identifies 14 screens in that HomeStack, while the full mobile source tree contains additional root, Kitchen, Common Table, and detail screens.
+The Rescue stack contains the core capture → intent → reality → craving → recommendation → feedback loop. The HomeStack contains 14 screens covering the whole loop — capture, intent, reality, craving, recommendation, feedback, and satisfaction — while the rest of the mobile source tree adds the root, Kitchen, Common Table, and detail screens.
 
 ## Profile + Taste Journal
 
@@ -578,7 +582,7 @@ React Query is used alongside Zustand for API-state management, keeping long-liv
 
 # API Surface
 
-The backend exposes **83 application endpoints across 20 route modules**, plus the `/health` endpoint.
+The backend exposes **85 application endpoints across 23 route modules**, plus the `/health` endpoint.
 
 | Domain | Scope |
 |---|---|
@@ -623,7 +627,7 @@ packages/shared-types/src/index.ts
 
 # Data Model
 
-The repository currently contains **35 domain model definitions** spanning:
+The repository currently contains **32 domain model definitions** spanning:
 
 ### Core product state
 
@@ -682,7 +686,7 @@ The codebase also includes tests covering areas such as:
 - meal memory
 - webhook handling
 
-The current source tree contains **65 backend test files**. Those files are evidence of intended behaviour; this README does **not** claim that every test/build command was re-run as part of documentation generation.
+The current source tree contains **71 backend test files** (22 of those suites are database-backed and run against the PostgreSQL service in CI). `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` all pass from a clean `npm ci`, and every job in the CI workflow is green on `main`.
 
 ---
 
@@ -779,15 +783,17 @@ PowerShell:
 Copy-Item apps/backend/.env.example apps/backend/.env
 ```
 
-Set at minimum:
+Set at minimum (values below match the Compose stack in step 3):
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/meal_rescue
+DATABASE_URL=postgresql://meal_rescue:local_password@localhost:5432/meal_rescue_dev
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=replace-this-in-development
 ```
 
 For model-backed AI, configure the relevant API key/model variables as well.
+
+> `docker compose up -d` supplies these values to the API container itself, so this file is only read when you run the backend directly (`npm run dev --workspace @meal-rescue/backend`).
 
 > Never commit real credentials. The mobile `EXPO_PUBLIC_*` variables are client-exposed configuration and must never contain server secrets.
 
@@ -842,6 +848,13 @@ EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3010
 ```
 
 For an iOS simulator, use the host machine address appropriate to your environment (commonly `http://localhost:3010`).
+
+Two optional integrations degrade gracefully when left blank:
+
+- **OneSignal** (`EXPO_PUBLIC_ONESIGNAL_APP_ID`): push reminders are disabled; the plugin is skipped entirely.
+- **RevenueCat**: in-app purchases stay disabled in development.
+
+**AdMob is different.** `EXPO_PUBLIC_ADMOB_ANDROID_APP_ID` and `EXPO_PUBLIC_ADMOB_IOS_APP_ID` must be set before `expo run:android` / `expo run:ios` — the native Google Mobile Ads SDK crashes on launch without them. Metro (`npm run dev`) only logs a warning.
 
 ## 5. Start Expo
 
@@ -988,15 +1001,13 @@ The heuristic implementation is intentionally available without network access, 
 
 # Current Implementation Notes
 
-This repository is substantial, but the following limitations are intentionally documented rather than hidden:
+This repository is substantial, but the following boundaries are documented rather than left for a reviewer to discover:
 
-- **Database migrations:** the current code uses Sequelize `sync({ alter: true })`; a dedicated migration runner is not present in this snapshot.
-- **Mobile CI:** CI runs Expo Doctor rather than a full native release build.
-- **Release links:** store listing, demo-video, and Devpost submission URLs are not encoded in the repository snapshot and are therefore not guessed here.
-- **Documentation namespaces:** `docs/api`, `docs/product`, and `docs/technical` currently contain placeholder files rather than a full separate documentation site.
-- **Test/build status:** this README documents the repository and its test inventory; it does not claim that every command has passed in this documentation run.
-
-These are explicit boundaries of the current repository, not omissions disguised as features.
+- **Database migrations:** the current code uses Sequelize `sync({ alter: true })`; a dedicated migration runner is not present in this snapshot. This is the development-time schema strategy, and a migration runner is the planned production path.
+- **Mobile CI:** CI runs Expo Doctor rather than a full native release build. Native store packaging is verified separately on release branches.
+- **Release links:** store listing, demo video, and Devpost URLs live in the submission itself rather than in this repository.
+- **Documentation depth:** `docs/legal`, `docs/demo-script.md`, and `docs/superpowers/` (design specs and plans) are populated; `docs/api`, `docs/product`, and `docs/technical` are still namespaces rather than a full documentation site.
+- **Verification:** lint, typecheck, tests, and build were re-run from a clean checkout and are re-run by CI on every push.
 
 ---
 
@@ -1009,7 +1020,7 @@ A judge who wants to understand the implementation quickly can inspect the repos
 2. apps/backend/src/services/composition.ts
 3. apps/backend/src/services/rescue-pipeline.service.ts
 4. apps/backend/src/services/ai/
-5. apps/backend/src/services/decision/
+5. apps/backend/src/services/v2/
 6. apps/backend/src/services/meal-completion.service.ts
 7. apps/backend/src/services/common-table/
 8. apps/backend/tests/

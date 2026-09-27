@@ -22,6 +22,9 @@ RUN npm run build --workspace @meal-rescue/shared-types \
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# Match EXPOSE/HEALTHCHECK: no .env ships in this image, so the server would
+# otherwise fall back to its default port 3000 and fail its own healthcheck.
+ENV PORT=3010
 
 RUN addgroup -S app && adduser -S app -G app
 
