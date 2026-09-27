@@ -256,7 +256,15 @@ function heuristicTeaser(move: LastBestMoveContext | null): PaywallTeaser {
 
 /** Parse the model's markdown-tolerant JSON blob into a candidate teaser. */
 function parseCandidate(raw: string): { opener?: string; hook?: string } {
-  const cleaned = raw.replace(/```(?:json)?/gi, '').trim();
+  // Strip fences ONLY around the payload. Fences that live inside a JSON
+  // string value are content the validator must still see — blanking every
+  // "```" in the raw text would silently repair garbage like
+  // {"hook":"```code```"} into {"hook":"code"} and let it pass as model copy.
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
   if (start === -1 || end <= start) return {};

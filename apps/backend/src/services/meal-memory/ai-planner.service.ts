@@ -252,6 +252,16 @@ export class AiPlannerService {
     sessionId: string | null,
     text: string,
   ): Promise<AiPlannerResponse | null> {
+    // Session lookup comes first: an unknown/foreign id answers 404 from the
+    // session map alone, so that answer never depends on the model being up.
+    let existing: PlannerSession | undefined;
+    if (sessionId) {
+      existing = this.sessions.get(sessionId);
+      if (!existing || existing.userId !== userId) {
+        return null; // unknown / expired / foreign session
+      }
+    }
+
     if (!this.available) {
       throw new AppError({
         category: ErrorCategory.AI_MODEL_FAILURE,
@@ -268,11 +278,7 @@ export class AiPlannerService {
     const todayKey = dateKeyFor(new Date(), 0);
 
     let session: PlannerSession;
-    if (sessionId) {
-      const existing = this.sessions.get(sessionId);
-      if (!existing || existing.userId !== userId) {
-        return null; // unknown / expired / foreign session
-      }
+    if (existing) {
       existing.expiresAt = Date.now() + SESSION_TTL_MS;
       session = existing;
     } else {

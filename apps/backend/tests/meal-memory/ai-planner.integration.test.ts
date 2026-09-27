@@ -7,6 +7,10 @@ import { closeDatabase, initializeDatabase, sequelize } from '../../src/database
 import { registerTestUser } from '../helpers/auth';
 
 const hasDb = Boolean(process.env.TEST_DATABASE_URL);
+// The planner is AI-only by design (see AiPlannerService): with no model key
+// the route answers 503, so the contract test can only run where a key exists.
+// CI has no key — it runs the model-free cases (validation, 404, auth).
+const hasModel = Boolean(process.env.OPENAI_API_KEY);
 const describeDb = hasDb ? describe : describe.skip;
 
 describeDb('AI planner routes (integration)', () => {
@@ -34,46 +38,49 @@ describeDb('AI planner routes (integration)', () => {
     await closeDatabase();
   });
 
-  it('POST /ai-plan starts a session and answers with the expected contract', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/meal-memory/ai-plan',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { text: 'plan me for tomorrow' },
-    });
+  (hasModel ? it : it.skip)(
+    'POST /ai-plan starts a session and answers with the expected contract',
+    async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/meal-memory/ai-plan',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { text: 'plan me for tomorrow' },
+      });
 
-    expect(res.statusCode).toBe(200);
-    const body = res.json() as AiPlannerResponse & { sessionId: string };
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as AiPlannerResponse & { sessionId: string };
 
-    expect(typeof body.sessionId).toBe('string');
-    expect(['ready', 'clarification']).toContain(body.status);
-    expect(typeof body.message).toBe('string');
-    expect(Array.isArray(body.questions)).toBe(true);
-    expect(body.preview === null || typeof body.preview === 'object').toBe(true);
+      expect(typeof body.sessionId).toBe('string');
+      expect(['ready', 'clarification']).toContain(body.status);
+      expect(typeof body.message).toBe('string');
+      expect(Array.isArray(body.questions)).toBe(true);
+      expect(body.preview === null || typeof body.preview === 'object').toBe(true);
 
-    if (body.status === 'clarification') {
-      expect(body.questions.length).toBeGreaterThan(0);
-      expect(body.questions[0]).toHaveProperty('question');
-      expect(body.preview).toBeNull();
-    }
+      if (body.status === 'clarification') {
+        expect(body.questions.length).toBeGreaterThan(0);
+        expect(body.questions[0]).toHaveProperty('question');
+        expect(body.preview).toBeNull();
+      }
 
-    if (body.status === 'ready') {
-      expect(body.preview).not.toBeNull();
-      expect(body.preview!.previewId).toBeTruthy();
-      expect(Array.isArray(body.preview!.days)).toBe(true);
-    }
+      if (body.status === 'ready') {
+        expect(body.preview).not.toBeNull();
+        expect(body.preview!.previewId).toBeTruthy();
+        expect(Array.isArray(body.preview!.days)).toBe(true);
+      }
 
-    // A session token round-trips: answering continues the same session.
-    const reply = await app.inject({
-      method: 'POST',
-      url: '/api/v1/meal-memory/ai-plan',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { sessionId: body.sessionId, text: 'keep it light' },
-    });
-    expect(reply.statusCode).toBe(200);
-    const replyBody = reply.json() as AiPlannerResponse & { sessionId: string };
-    expect(replyBody.sessionId).toBe(body.sessionId);
-  });
+      // A session token round-trips: answering continues the same session.
+      const reply = await app.inject({
+        method: 'POST',
+        url: '/api/v1/meal-memory/ai-plan',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { sessionId: body.sessionId, text: 'keep it light' },
+      });
+      expect(reply.statusCode).toBe(200);
+      const replyBody = reply.json() as AiPlannerResponse & { sessionId: string };
+      expect(replyBody.sessionId).toBe(body.sessionId);
+    },
+  );
 
   it('POST /ai-plan rejects empty text', async () => {
     const res = await app.inject({
