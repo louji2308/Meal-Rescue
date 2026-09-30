@@ -66,13 +66,13 @@ maybeDescribe('rescue allowance engine (integration)', () => {
     }
   }
 
-  it('always allows pro users regardless of daily count', async () => {
+  it('always allows pro users regardless of usage count', async () => {
     const user = await seedUser({ tier: 'pro' });
     await seedRescues(user, 10);
     expect(await consumeRescueAllowance(user)).toEqual({ allowed: true });
   });
 
-  it('allows free users under the daily limit and blocks at the limit', async () => {
+  it('allows free users under the lifetime limit and blocks at the limit', async () => {
     const under = await seedUser();
     await seedRescues(under, 2);
     expect(await consumeRescueAllowance(under)).toEqual({ allowed: true });

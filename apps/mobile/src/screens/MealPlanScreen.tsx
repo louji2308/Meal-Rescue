@@ -23,13 +23,19 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { MealEvent, MealMemoryIntentResponse, MealSlot } from '@meal-rescue/shared-types';
+import type {
+  MealEvent,
+  MealMemoryIntentResponse,
+  MealSlot,
+  PlanPreviewResponse,
+} from '@meal-rescue/shared-types';
 
 import { Text } from '../components/AppText';
 import { TextInput } from '../components/AppTextInput';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PlanReviewPopup } from '../components/PlanReviewPopup';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { LockIcon } from '../components/icons';
 import { MealPlanLoading } from '../components/meal-plan';
 import { FadeInView } from '../components/motion/FadeInView';
 import { Pressable } from '../components/motion/Pressable';
@@ -37,6 +43,8 @@ import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNa
 import { haptics } from '../services/haptics';
 import { useCommonTableStore } from '../stores/common-table.store';
 import { useMealMemoryStore } from '../stores/meal-memory.store';
+import { useMonetization } from '../stores/monetization.store';
+import { usePaywallContext } from '../stores/paywall-context.store';
 import { colors, fonts, spacing, typography } from '../theme';
 
 if (Platform.OS === 'android') UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -103,12 +111,10 @@ function monthDeltaBetween(fromYM: string, toYM: string): number {
   return (ty - fy) * 12 + (tm - fm);
 }
 
-/** First Monday inside the month, so a loaded week always sits in that month. */
-function firstMondayInMonth(ym: string): string {
-  const [y, m] = ym.split('-').map(Number);
-  const dow = new Date(Date.UTC(y ?? 2000, (m ?? 1) - 1, 1)).getUTCDay();
-  const day = 1 + ((8 - dow) % 7);
-  return `${ym}-${String(day).padStart(2, '0')}`;
+/** Monday of the week containing `dateKey` (Mon-start ISO week). */
+function mondayOf(dateKey: string): string {
+  const dow = new Date(`${dateKey}T00:00:00.000Z`).getUTCDay();
+  return addDays(dateKey, dow === 0 ? -6 : 1 - dow);
 }
 
 function prettyMonth(ym: string): string {
@@ -175,6 +181,7 @@ const DayCell = React.memo(function DayCell({
   isToday,
   isSelected,
   hasMeals,
+  locked = false,
   cellW,
   scrollX,
   onPress,
@@ -186,6 +193,8 @@ const DayCell = React.memo(function DayCell({
   isToday: boolean;
   isSelected: boolean;
   hasMeals: boolean;
+  /** Pro-locked plan day — shows a padlock instead of the status dot. */
+  locked?: boolean;
   cellW: number;
   scrollX: SharedValue<number>;
   onPress: (index: number, key: string) => void;
@@ -255,14 +264,18 @@ const DayCell = React.memo(function DayCell({
           </Text>
         </Animated.View>
         <View style={styles.dayDotRow}>
-          <View
-            style={[
-              styles.dayDot,
-              isToday && styles.dotToday,
-              hasMeals && !isToday && styles.dotPlanned,
-              !isToday && !hasMeals && styles.dotEmpty,
-            ]}
-          />
+          {locked ? (
+            <LockIcon size={12} strokeWidth={1.5} color={colors.textSecondary} />
+          ) : (
+            <View
+              style={[
+                styles.dayDot,
+                isToday && styles.dotToday,
+                hasMeals && !isToday && styles.dotPlanned,
+                !isToday && !hasMeals && styles.dotEmpty,
+              ]}
+            />
+          )}
         </View>
       </Animated.View>
     </Pressable>
@@ -292,6 +305,8 @@ export function MealPlanScreen() {
   const planPreview = useMealMemoryStore((s) => s.planPreview);
   const showPlanReview = useMealMemoryStore((s) => s.showPlanReview);
   const aiClarification = useMealMemoryStore((s) => s.aiClarification);
+  const lockedPlanDateKeys = useMealMemoryStore((s) => s.lockedPlanDateKeys);
+  const aiPlanLocked = useMealMemoryStore((s) => s.aiPlanLocked);
   const [refreshing, setRefreshing] = useState(false);
 
   // Actions are stable references — safe to use directly
@@ -306,6 +321,30 @@ export function MealPlanScreen() {
   const answerAiClarification = useMealMemoryStore((s) => s.answerAiClarification);
   const confirmPlan = useMealMemoryStore((s) => s.confirmPlan);
   const cancelPlanReview = useMealMemoryStore((s) => s.cancelPlanReview);
+  const clearAiPlanLocked = useMealMemoryStore((s) => s.clearAiPlanLocked);
+
+  /**
+   * Open the paywall with copy about THIS plan: the free day that exists (or
+   * existed) and the days that stayed locked. Falls back to the dates the
+   * calendar is still teasing when there is no live preview.
+   */
+  const openPaywall = useCallback(
+    (preview?: PlanPreviewResponse | null) => {
+      const ctx = usePaywallContext.getState();
+      if (preview) {
+        ctx.setPlanFromPreview(preview);
+      } else {
+        ctx.setPlan({
+          plannedDateKey: null,
+          plannedMeals: [],
+          lockedDateKeys: lockedPlanDateKeys,
+        });
+      }
+      setPaywallOpen(true);
+      rootNavigation.navigate('Paywall');
+    },
+    [lockedPlanDateKeys, rootNavigation],
+  );
 
   const selectedMemberIds = useCommonTableStore((s) => s.selectedMemberIds);
   const householdMembers = useCommonTableStore((s) => s.members);
@@ -313,6 +352,9 @@ export function MealPlanScreen() {
 
   const today = todayKey();
   const dayScrollRef = useRef<FlatList<string>>(null);
+  // True when the next strip recenter is a user-driven month change (animate),
+  // false for background reindexing (instant).
+  const recenterAnimated = useRef(false);
   const scrollX = useSharedValue(0);
   const [stripWidth, setStripWidth] = useState(0);
 
@@ -355,6 +397,25 @@ export function MealPlanScreen() {
       setPaywallOpen(false);
     }, []),
   );
+
+  // Free allowance spent (server-side gate) — skip the popup, go to the paywall.
+  useEffect(() => {
+    if (!aiPlanLocked) return;
+    clearAiPlanLocked();
+    openPaywall();
+  }, [aiPlanLocked, clearAiPlanLocked, openPaywall]);
+
+  // Pro activated (purchase/restore synced, or entitlement refreshed on app
+  // start): the padlocks and the Pro badge come off the calendar, and the
+  // week is refetched so the days the free gate refused to save come back —
+  // whole and unlocked — instead of a one-day teaser.
+  const isPro = useMonetization((s) => s.isPro);
+  const clearProLockedDays = useMealMemoryStore((s) => s.clearProLockedDays);
+  useEffect(() => {
+    if (!isPro) return;
+    clearProLockedDays();
+    void loadWeek();
+  }, [isPro, clearProLockedDays, loadWeek]);
   useEffect(() => {
     if (weekStart && !busy) {
       lastLoadedAt.current = Date.now();
@@ -362,18 +423,12 @@ export function MealPlanScreen() {
     }
   }, [weekStart, busy]);
 
+  // Default the focus once, on first load. Never re-clamp afterwards — the
+  // user's chosen day must survive background reloads and month navigation.
   useEffect(() => {
-    if (!weekStart) return;
-    if (!focusedKey || focusedKey < weekStart || focusedKey > addDays(weekStart, 6)) {
-      setFocusedKey(today >= weekStart && today <= addDays(weekStart, 6) ? today : weekStart);
-    }
-  }, [weekStart]);
-
-  useEffect(() => {
-    if (!weekStart) return;
-    const wkYM = ymKey(weekStart);
-    setViewedYM((prev) => (prev === wkYM ? prev : wkYM));
-  }, [weekStart]);
+    if (focusedKey || !weekStart) return;
+    setFocusedKey(today >= weekStart && today <= addDays(weekStart, 6) ? today : weekStart);
+  }, [weekStart, focusedKey]);
 
   const monthDays = useMemo(() => {
     return daysInMonth(viewedYM);
@@ -397,9 +452,13 @@ export function MealPlanScreen() {
 
   useEffect(() => {
     if (cellW > 0 && dayScrollRef.current && monthDays.length > 0) {
-      dayScrollRef.current.scrollToOffset({ offset: focusedDayIndex * cellW, animated: false });
+      dayScrollRef.current.scrollToOffset({
+        offset: focusedDayIndex * cellW,
+        animated: recenterAnimated.current,
+      });
+      recenterAnimated.current = false;
     }
-  }, [focusedDayIndex, cellW]);
+  }, [focusedDayIndex, cellW, monthDays]);
 
   async function handleSend() {
     const text = input.trim();
@@ -430,6 +489,18 @@ export function MealPlanScreen() {
     return counts;
   }, [week]);
 
+  const lockedDaySet = useMemo(() => new Set(lockedPlanDateKeys), [lockedPlanDateKeys]);
+
+  /**
+   * Is the focused day's data actually in memory? `weekStart` flips
+   * optimistically when a load starts, so this reads `week` (the real days)
+   * — the strip spinner shows only until the days land, not for background
+   * refreshes of data that is already visible.
+   */
+  const focusLoaded = selectedDay !== null;
+
+  const selectedDayLocked = selectedDay ? lockedDaySet.has(selectedDay.dateKey) : false;
+
   const needsAnswer =
     pendingIntent &&
     (pendingIntent.status === 'awaiting_confirmation' || pendingIntent.status === 'clarification');
@@ -445,10 +516,7 @@ export function MealPlanScreen() {
         setFocusedKey(newKey);
         setExpanded(null);
         if (!weekDaySet.has(newKey)) {
-          const dayDate = new Date(`${newKey}T00:00:00.000Z`);
-          const dow = dayDate.getUTCDay();
-          const mondayOffset = dow === 0 ? -6 : 1 - dow;
-          void loadWeek(addDays(newKey, mondayOffset));
+          void loadWeek(mondayOf(newKey));
         }
       }
     },
@@ -461,10 +529,7 @@ export function MealPlanScreen() {
       setExpanded(null);
       dayScrollRef.current?.scrollToOffset({ offset: index * cellW, animated: true });
       if (!weekDaySet.has(key)) {
-        const dayDate = new Date(`${key}T00:00:00.000Z`);
-        const dow = dayDate.getUTCDay();
-        const mondayOffset = dow === 0 ? -6 : 1 - dow;
-        void loadWeek(addDays(key, mondayOffset));
+        void loadWeek(mondayOf(key));
       }
     },
     [cellW, weekDaySet, loadWeek],
@@ -472,12 +537,16 @@ export function MealPlanScreen() {
 
   function goToMonth(delta: number) {
     const targetYM = addMonthsYM(currentYM, delta);
-    setViewedYM(targetYM);
-    setExpanded(null);
     const days = daysInMonth(targetYM);
-    const focusTarget = days.includes(today) ? today : days[Math.floor(days.length / 2)];
-    if (focusTarget) setFocusedKey(focusTarget);
-    void loadWeek(firstMondayInMonth(targetYM));
+    // Month navigation always lands on the 1st of the target month.
+    const focusTarget = days[0];
+    if (!focusTarget) return;
+    setViewedYM(targetYM);
+    setFocusedKey(focusTarget);
+    setExpanded(null);
+    recenterAnimated.current = true;
+    // Load the week UNDER the focused day — that is what the day card reads.
+    void loadWeek(mondayOf(focusTarget));
   }
 
   if (!weekStart) {
@@ -522,10 +591,7 @@ export function MealPlanScreen() {
         onAnswer={answerAiClarification}
         clarification={aiClarification}
         error={error}
-        onUpgrade={() => {
-          setPaywallOpen(true);
-          rootNavigation.navigate('Paywall');
-        }}
+        onUpgrade={() => openPaywall(planPreview)}
         onCancel={cancelPlanReview}
         busy={busy}
       />
@@ -649,13 +715,14 @@ export function MealPlanScreen() {
                       isToday={key === today}
                       isSelected={key === focusedKey}
                       hasMeals={(plannedCountByDate[key] ?? 0) > 0}
+                      locked={lockedDaySet.has(key)}
                       cellW={cellW}
                       scrollX={scrollX}
                       onPress={handleDayTap}
                     />
                   )}
                 />
-                {busy && (
+                {busy && !focusLoaded && (
                   <View style={styles.dayStripLoading}>
                     <ActivityIndicator size="small" color={colors.primary} />
                   </View>
@@ -678,138 +745,165 @@ export function MealPlanScreen() {
           {selectedDay ? (
             <FadeInView key={selectedDay.dateKey} duration={180} rise={6}>
               <View style={styles.dayCard}>
-                <Text style={styles.dayCardLabel}>{prettyDate(selectedDay.dateKey)}</Text>
-                {SLOT_ORDER.map((slotKey) => {
-                  const slot = selectedDay.slots.find((s) => s.mealSlot === slotKey);
-                  const meal = slot?.planned ?? null;
-                  const isExpanded =
-                    expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
-                  return (
-                    <View key={slotKey}>
-                      <Pressable
-                        tintBorderRadius={8}
-                        style={[styles.slotRow, !meal && styles.slotRowEmpty]}
-                        onPress={() => {
-                          if (!meal) return;
-                          navigation.navigate('DishDetail', {
-                            eventId: meal.id,
-                            concept: meal.concept ?? '',
-                            mealSlot: slotKey,
-                            dateKey: selectedDay.dateKey,
-                          });
-                        }}
-                        onLongPress={() => {
-                          if (!meal) return;
-                          setExpanded(
-                            isExpanded ? null : { dateKey: selectedDay.dateKey, mealSlot: slotKey },
-                          );
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.slotLabel,
-                            isExpanded && styles.slotLabelSelected,
-                            !meal && styles.slotLabelEmpty,
-                          ]}
-                        >
-                          {SLOT_LABELS[slotKey]}
-                        </Text>
-                        {meal ? (
-                          <View style={styles.slotMeal}>
-                            <Text style={styles.slotConcept}>{meal.concept ?? 'Planned meal'}</Text>
-                            <Text style={styles.slotMeta}>
-                              {meal.mealRole?.replaceAll('_', ' ') ?? ''}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.slotOpen}>Nothing planned</Text>
-                        )}
-                        {meal && (
-                          <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
-                        )}
-                      </Pressable>
-
-                      {isExpanded && meal && (
-                        <FadeInView duration={150} rise={4}>
-                          <SlotConceptEditor key={meal.id} meal={meal} />
-                          <View style={styles.slotActions}>
-                            <Pressable
-                              style={styles.slotAction}
-                              disabled={busy}
-                              onPress={() => {
-                                haptics.success();
-                                void markActual({
-                                  dateKey: selectedDay.dateKey,
-                                  mealSlot: slotKey,
-                                  ate: true,
-                                  concept: meal.concept ?? undefined,
-                                }).catch(() => {});
-                              }}
-                            >
-                              <Ionicons name="checkmark" size={14} color={colors.softAlert} />
-                              <Text style={styles.slotActionText}>Cooked it</Text>
-                            </Pressable>
-                            <Pressable
-                              style={styles.slotAction}
-                              disabled={busy}
-                              onPress={() => {
-                                haptics.light();
-                                void markActual({
-                                  dateKey: selectedDay.dateKey,
-                                  mealSlot: slotKey,
-                                  skipped: true,
-                                }).catch(() => {});
-                              }}
-                            >
-                              <Ionicons name="close" size={14} color={colors.softAlert} />
-                              <Text style={styles.slotActionText}>Skipped</Text>
-                            </Pressable>
-                            <Pressable
-                              style={styles.slotAction}
-                              disabled={busy}
-                              onPress={() => {
-                                haptics.success();
-                                void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(
-                                  () => {},
-                                );
-                              }}
-                            >
-                              <Ionicons name="heart" size={14} color={colors.softAlert} />
-                              <Text style={styles.slotActionText}>Loved</Text>
-                            </Pressable>
-                            <Pressable
-                              style={styles.slotAction}
-                              disabled={busy}
-                              onPress={() =>
-                                void moveEvent(
-                                  meal.id,
-                                  addDays(selectedDay.dateKey, 1),
-                                  slotKey,
-                                ).catch(() => {})
-                              }
-                            >
-                              <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
-                              <Text style={styles.slotActionText}>Tomorrow</Text>
-                            </Pressable>
-                            <Pressable
-                              style={[styles.slotAction, styles.slotActionDanger]}
-                              disabled={busy}
-                              onPress={() => {
-                                haptics.warning();
-                                void removeEvent(meal.id).catch(() => {});
-                              }}
-                            >
-                              <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
-                              <Text style={[styles.slotActionText, { color: colors.error }]}>
-                                Remove
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </FadeInView>
-                      )}
+                <View style={styles.dayCardTitleRow}>
+                  <Text style={[styles.dayCardLabel, styles.dayCardTitleLabel]}>
+                    {prettyDate(selectedDay.dateKey)}
+                  </Text>
+                  {selectedDayLocked && (
+                    <View style={styles.lockedTag}>
+                      <LockIcon size={12} strokeWidth={1.5} color={colors.textSecondary} />
+                      <Text style={styles.lockedTagText}>Pro</Text>
                     </View>
-                  );
-                })}
+                  )}
+                </View>
+                {selectedDayLocked ? (
+                  <Pressable
+                    tintBorderRadius={12}
+                    style={styles.unlockDayRow}
+                    onPress={() => openPaywall(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Unlock this day with Pro"
+                  >
+                    <Text style={styles.unlockDayText}>Unlock Pro</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textPrimary} />
+                  </Pressable>
+                ) : (
+                  SLOT_ORDER.map((slotKey) => {
+                    const slot = selectedDay.slots.find((s) => s.mealSlot === slotKey);
+                    const meal = slot?.planned ?? null;
+                    const isExpanded =
+                      expanded?.dateKey === selectedDay.dateKey && expanded?.mealSlot === slotKey;
+                    return (
+                      <View key={slotKey}>
+                        <Pressable
+                          tintBorderRadius={8}
+                          style={[styles.slotRow, !meal && styles.slotRowEmpty]}
+                          onPress={() => {
+                            if (!meal) return;
+                            navigation.navigate('DishDetail', {
+                              eventId: meal.id,
+                              concept: meal.concept ?? '',
+                              mealSlot: slotKey,
+                              dateKey: selectedDay.dateKey,
+                            });
+                          }}
+                          onLongPress={() => {
+                            if (!meal) return;
+                            setExpanded(
+                              isExpanded
+                                ? null
+                                : { dateKey: selectedDay.dateKey, mealSlot: slotKey },
+                            );
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.slotLabel,
+                              isExpanded && styles.slotLabelSelected,
+                              !meal && styles.slotLabelEmpty,
+                            ]}
+                          >
+                            {SLOT_LABELS[slotKey]}
+                          </Text>
+                          {meal ? (
+                            <View style={styles.slotMeal}>
+                              <Text style={styles.slotConcept}>
+                                {meal.concept ?? 'Planned meal'}
+                              </Text>
+                              <Text style={styles.slotMeta}>
+                                {meal.mealRole?.replaceAll('_', ' ') ?? ''}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text style={styles.slotOpen}>Nothing planned</Text>
+                          )}
+                          {meal && (
+                            <Ionicons name="chevron-forward" size={16} color={colors.softAlert} />
+                          )}
+                        </Pressable>
+
+                        {isExpanded && meal && (
+                          <FadeInView duration={150} rise={4}>
+                            <SlotConceptEditor key={meal.id} meal={meal} />
+                            <View style={styles.slotActions}>
+                              <Pressable
+                                style={styles.slotAction}
+                                disabled={busy}
+                                onPress={() => {
+                                  haptics.success();
+                                  void markActual({
+                                    dateKey: selectedDay.dateKey,
+                                    mealSlot: slotKey,
+                                    ate: true,
+                                    concept: meal.concept ?? undefined,
+                                  }).catch(() => {});
+                                }}
+                              >
+                                <Ionicons name="checkmark" size={14} color={colors.softAlert} />
+                                <Text style={styles.slotActionText}>Cooked it</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.slotAction}
+                                disabled={busy}
+                                onPress={() => {
+                                  haptics.light();
+                                  void markActual({
+                                    dateKey: selectedDay.dateKey,
+                                    mealSlot: slotKey,
+                                    skipped: true,
+                                  }).catch(() => {});
+                                }}
+                              >
+                                <Ionicons name="close" size={14} color={colors.softAlert} />
+                                <Text style={styles.slotActionText}>Skipped</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.slotAction}
+                                disabled={busy}
+                                onPress={() => {
+                                  haptics.success();
+                                  void feedBack({ mealEventId: meal.id, rating: 'loved' }).catch(
+                                    () => {},
+                                  );
+                                }}
+                              >
+                                <Ionicons name="heart" size={14} color={colors.softAlert} />
+                                <Text style={styles.slotActionText}>Loved</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.slotAction}
+                                disabled={busy}
+                                onPress={() =>
+                                  void moveEvent(
+                                    meal.id,
+                                    addDays(selectedDay.dateKey, 1),
+                                    slotKey,
+                                  ).catch(() => {})
+                                }
+                              >
+                                <Ionicons name="arrow-forward" size={14} color={colors.softAlert} />
+                                <Text style={styles.slotActionText}>Tomorrow</Text>
+                              </Pressable>
+                              <Pressable
+                                style={[styles.slotAction, styles.slotActionDanger]}
+                                disabled={busy}
+                                onPress={() => {
+                                  haptics.warning();
+                                  void removeEvent(meal.id).catch(() => {});
+                                }}
+                              >
+                                <Ionicons name="trash-outline" size={14} color={colors.softAlert} />
+                                <Text style={[styles.slotActionText, { color: colors.error }]}>
+                                  Remove
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </FadeInView>
+                        )}
+                      </View>
+                    );
+                  })
+                )}
               </View>
             </FadeInView>
           ) : null}
@@ -1056,6 +1150,47 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: spacing.md,
+  },
+  dayCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  dayCardTitleLabel: {
+    marginBottom: 0,
+  },
+  lockedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.softAlert,
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  lockedTagText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  unlockDayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+  },
+  unlockDayText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    letterSpacing: 0.2,
   },
   slotRow: {
     flexDirection: 'row',

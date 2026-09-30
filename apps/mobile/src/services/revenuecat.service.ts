@@ -118,6 +118,31 @@ export async function fetchIsPro(): Promise<boolean> {
   }
 }
 
+/** The SDK's verdict on the Pro entitlement — sent to the backend on sync. */
+export interface EntitlementClaim {
+  active: boolean;
+  expiresAt: string | null;
+}
+
+/**
+ * Reads the entitlement react-native-purchases just confirmed for this
+ * customer. The backend replays it when RevenueCat's REST API cannot verify
+ * the purchase (test-store keys), so a valid purchase actually flips
+ * subscription_tier instead of leaving the app split-brained (client "Pro",
+ * server "free plan · 3 rescues"). `null` means "unknown — ask RevenueCat".
+ */
+export async function fetchEntitlementClaim(): Promise<EntitlementClaim | null> {
+  if (!configured) return null;
+  try {
+    const info = await getPurchases()?.getCustomerInfo();
+    const active = info?.entitlements.active[ENTITLEMENT_ID];
+    if (!active) return { active: false, expiresAt: null };
+    return { active: true, expiresAt: active.expirationDate ?? null };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchOfferings(): Promise<PurchasesOfferings | null> {
   if (!configured) return null;
   try {

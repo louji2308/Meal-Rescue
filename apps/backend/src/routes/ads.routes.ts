@@ -6,12 +6,12 @@ import { env } from '../config/env';
 import { User } from '../database/models/user.model';
 import { AppError, ErrorCategory } from '../lib/errors';
 import {
+  LIFETIME_START,
   countRescuesSince,
   effectiveTier,
   grantCredits,
   grantProPass,
   hasAdCapLeft,
-  startOfLocalDay,
 } from '../services/rescue-allowance.service';
 
 const claimSchema = z.object({
@@ -51,23 +51,20 @@ export async function adsRoutes(app: FastifyInstance): Promise<void> {
     if (tier === 'pro') {
       return {
         tier,
-        rescuesToday: null,
-        dailyLimit: null,
+        rescuesUsed: null,
+        freeRescueLimit: null,
         rescueCredits: 0,
         canWatchRescueFuel: false,
         canWatchProPass: false,
       };
     }
-    const rescuesToday = await countRescuesSince(
-      user.id,
-      startOfLocalDay(user.tzOffsetMinutes ?? 0),
-    );
+    const rescuesUsed = await countRescuesSince(user.id, LIFETIME_START);
     const adCapLeft = await hasAdCapLeft(user);
     const hasActiveProPass = user.proPassUntil != null && user.proPassUntil.getTime() > Date.now();
     return {
       tier,
-      rescuesToday,
-      dailyLimit: RATE_LIMITS.free.rescuesPerDay,
+      rescuesUsed,
+      freeRescueLimit: RATE_LIMITS.free.lifetimeRescues,
       rescueCredits: user.rescueCredits ?? 0,
       canWatchRescueFuel: adCapLeft && !hasActiveProPass,
       canWatchProPass: adCapLeft && !hasActiveProPass,

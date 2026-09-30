@@ -296,6 +296,21 @@ export class AiPlannerService {
       this.sessions.set(session.id, session);
     }
 
+    // Free allowance gate — ONE accepted plan day for the whole account.
+    // Runs before the model call so a locked account never burns an LLM
+    // request; the client opens the paywall on `planLocked`.
+    const limits = await planPreviewService.checkPlanLimit(userId);
+    if (limits.tier === 'free' && limits.daysRemaining <= 0) {
+      return {
+        sessionId: session.id,
+        status: 'ready',
+        message: "You've used your free plan day. Unlock Pro to keep planning your week.",
+        questions: [],
+        preview: null,
+        planLocked: true,
+      };
+    }
+
     session.turns.push({ role: 'user', content: text });
     if (session.turns.length > MAX_TURNS_KEPT) {
       session.turns = session.turns.slice(-MAX_TURNS_KEPT);
@@ -521,10 +536,9 @@ export class AiPlannerService {
 
   async stagePreview(userId: UUID, plan: AiPlannerMeal[]): Promise<PlanPreviewResponse> {
     const days = this.toPlannedDays(plan);
-    const preview = await planPreviewService.generatePreview(userId, {
-      days,
-      daysPlanned: plan.length,
-    });
+    // generatePreview owns the free/Pro lock policy — day 1 free, the rest
+    // locked for free tier — so the client never has to invent lock state.
+    const preview = await planPreviewService.generatePreview(userId, { days });
     return { ...preview, expiresAt: preview.expiresAt.toISOString() };
   }
 
@@ -547,7 +561,7 @@ export class AiPlannerService {
     }
     return Array.from(byDay.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dateKey, meals]) => ({ dateKey, meals }));
+      .map(([dateKey, meals]) => ({ dateKey, meals, locked: false }));
   }
 
   private buildPlanContext(world: FoodWorldState, todayKey: string): Record<string, unknown> {

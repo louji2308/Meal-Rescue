@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, type StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -21,7 +21,9 @@ interface PrimaryButtonProps {
   variant?: 'primary' | 'secondary' | 'ghost' | 'destructive';
   busy?: boolean;
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  /** Background used while `busy` (grey loading state on top of the wave). */
+  busyBackgroundColor?: string;
   /** Optional element rendered to the left of the label (e.g. an outline icon). */
   icon?: React.ReactNode;
 }
@@ -42,6 +44,7 @@ export function PrimaryButton({
   busy = false,
   disabled = false,
   style,
+  busyBackgroundColor,
   icon,
 }: PrimaryButtonProps) {
   const palette = VARIANTS[variant];
@@ -50,14 +53,20 @@ export function PrimaryButton({
   const animated = useAnimatedStyle(() => ({
     transform: [
       {
-        scale: withSpring(pressed.value ? 0.97 : 1, pressed.value ? spring.snappy : spring.gentle),
+        scale: withSpring(pressed.value ? 0.985 : 1, pressed.value ? spring.snappy : spring.gentle),
       },
     ],
     opacity: withTiming(pressed.value ? 0.9 : 1, { duration: 100 }),
   }));
 
+  const busyOpacity = useAnimatedStyle(() => ({
+    opacity: withTiming(busy ? 0 : 1, { duration: 160 }),
+  }));
+
   const disabledOpacity = useAnimatedStyle(() => ({
-    opacity: withTiming(disabled || busy ? 0.4 : 1, { duration: 200 }),
+    // A busy button is also passed `disabled` by callers — keep it at full
+    // strength so the grey loading state and the wave stay visible.
+    opacity: withTiming(disabled && !busy ? 0.4 : 1, { duration: 200 }),
   }));
 
   return (
@@ -85,6 +94,8 @@ export function PrimaryButton({
           animated,
           disabledOpacity,
           style,
+          // Applied last so a caller style can't hide the grey loading state.
+          busy && busyBackgroundColor ? { backgroundColor: busyBackgroundColor } : null,
         ]}
       >
         {busy && (
@@ -93,19 +104,17 @@ export function PrimaryButton({
             entering={FadeIn.duration(200)}
             exiting={FadeOut.duration(120)}
           >
-            <WaveLoading />
+            <WaveLoading showMessage={false} />
           </Animated.View>
         )}
-        {!busy && (
-          <Animated.View
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(120)}
-            style={styles.content}
-          >
-            {icon ? icon : null}
-            <Text style={[styles.label, { color: palette.textColor }]}>{label}</Text>
-          </Animated.View>
-        )}
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(120)}
+          style={[styles.content, busyOpacity]}
+        >
+          {icon ? icon : null}
+          <Text style={[styles.label, { color: palette.textColor }]}>{label}</Text>
+        </Animated.View>
       </Animated.View>
     </Pressable>
   );
@@ -125,6 +134,11 @@ const styles = StyleSheet.create({
     borderColor: colors.text,
   },
   loadingWrap: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

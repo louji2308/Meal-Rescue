@@ -45,8 +45,16 @@ const envSchema = z.object({
 
   // RevenueCat V1 REST API secret key (sk_...) for server-to-server
   // entitlement verification. Optional so dev/test boot without it;
-  // the sync endpoint returns 503 when unset.
+  // /subscription/sync then falls back to the client-entitlement claim
+  // when REVENUECAT_ALLOW_CLIENT_ENTITLEMENT allows it (503 only when
+  // neither path exists).
   REVENUECAT_API_KEY: z.string().optional(),
+
+  // Trust the SDK-reported entitlement when RevenueCat's REST API cannot
+  // verify the purchase (test-store builds, missing/invalid REST key).
+  // 'true' / 'false' override the default; unset = allowed outside
+  // production only, so a real deployment still requires a REST verdict.
+  REVENUECAT_ALLOW_CLIENT_ENTITLEMENT: z.string().optional(),
 
   // OneSignal push engagement engine. Optional - when either value is
   // empty/unset the engine stays in dry-run mode: scheduling, quiet hours
@@ -77,6 +85,11 @@ const envSchema = z.object({
   OPENROUTER_VISION_MODEL: z.string().default('qwen/qwen3-vl-32b-instruct'),
   // OpenRouter for Kitchen intelligence (DeepSeek V4 Flash + free vision)
   OPENROUTER_API_KEY: z.string().optional(),
+  // Feedback -> Taste Journal note writer. Dedicated key so this surface
+  // stays alive even when the other AI keys are dark; without it the note
+  // degrades to a deterministic grounded fallback sentence.
+  FEEDBACK_JOURNAL_API_KEY: z.string().optional(),
+  FEEDBACK_JOURNAL_MODEL: z.string().default('deepseek/deepseek-chat'),
   // Explicit output cap: keeps cost predictable and satisfies providers that
   // reserve the full max_tokens against account credit at request time.
   LLM_MAX_TOKENS: z.coerce.number().int().positive().default(1500),

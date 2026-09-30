@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
-import { Pressable } from '../motion/Pressable';
-import { Text } from '../AppText';
 
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
 
@@ -9,7 +7,9 @@ import { claimProPass, claimRescueFuel, getAdEligibility } from '../../services/
 import { hasAdMobAppId, showRewardedAd } from '../../services/ads.service';
 import { toApiError } from '../../services/api';
 import { colors, spacing, typography } from '../../theme';
+import { Text } from '../AppText';
 import { PrimaryButton } from '../PrimaryButton';
+import { Pressable } from '../motion/Pressable';
 
 interface RescueFuelSheetProps {
   visible: boolean;
@@ -21,9 +21,9 @@ interface RescueFuelSheetProps {
 }
 
 /**
- * Presented when /rescue/generate answers 429 DAILY_RESCUE_LIMIT.
- * Two honest options, zero dark patterns: watch a short ad for +2 rescues
- * today, try Pro free for an hour, or upgrade. Subscribers never see this.
+ * Presented when /rescue/generate answers 429 RESCUE_LIMIT.
+ * Two honest options, zero dark patterns: watch a short ad for +2 rescues,
+ * try Pro free for an hour, or upgrade. Subscribers never see this.
  */
 export function RescueFuelSheet({
   visible,

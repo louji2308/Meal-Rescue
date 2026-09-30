@@ -16,6 +16,16 @@ const feedbackSchema = z.object({
       actualTime: z.number().int().min(0).max(300).optional(),
     })
     .optional(),
+  // What the user actually saw - feeds the journal-note writer so the entry
+  // is grounded in the displayed rescue, not only the stored row.
+  journalContext: z
+    .object({
+      dish: z.string().max(300),
+      ingredients: z.array(z.string().max(100)).max(50),
+      recommendedMove: z.string().max(500),
+      reasoning: z.string().max(500).optional(),
+    })
+    .optional(),
 });
 
 interface FeedbackParams {

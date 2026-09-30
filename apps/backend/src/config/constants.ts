@@ -21,11 +21,12 @@ export const PUBLIC_ROUTES = [
 /** Per-tier rate limits from the architecture doc (security section). */
 export const RATE_LIMITS = {
   free: {
-    rescuesPerDay: 3,
+    // One-time allowance per account — never refreshes (no daily reset).
+    lifetimeRescues: 3,
     requestsPerMinute: 10,
   },
   pro: {
-    rescuesPerDay: Number.POSITIVE_INFINITY,
+    lifetimeRescues: Number.POSITIVE_INFINITY,
     requestsPerMinute: 60,
   },
 } as const;

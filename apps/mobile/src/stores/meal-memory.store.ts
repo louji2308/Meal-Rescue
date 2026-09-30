@@ -60,6 +60,9 @@ let pendingAutosave: {
   before: MealEvent | null;
 } | null = null;
 let shiftSeq = 0;
+let loadWeekSeq = 0;
+const WEEK_CACHE_TTL_MS = 60_000;
+const weekCache = new Map<string, { week: MealMemoryWeekResponse; at: number }>();
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -84,6 +87,19 @@ interface MealMemoryState {
   /** Outstanding AI clarification when the model needs one detail. */
   aiClarification: { message: string; questions: AiPlannerQuestion[] } | null;
   planReviewEpoch: number;
+  /**
+   * DateKeys of the accepted plan's Pro-locked days. They were never saved —
+   * the calendar keeps showing them greyed with a lock + Pro badge.
+   */
+  lockedPlanDateKeys: string[];
+  /** Free allowance spent — the screen reacts by opening the paywall. */
+  aiPlanLocked: boolean;
+  clearAiPlanLocked: () => void;
+  /**
+   * Pro is active (purchase/restore synced): the calendar stops teasing —
+   * padlocks and the Pro badge come off every day.
+   */
+  clearProLockedDays: () => void;
   /** Auto-save flush indicator (debounced cell/ingredient edits). */
   saveStatus: SaveStatus;
 
@@ -214,27 +230,45 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   aiSessionId: null,
   aiClarification: null,
   planReviewEpoch: 0,
+  lockedPlanDateKeys: [],
+  aiPlanLocked: false,
   saveStatus: 'idle',
   busy: false,
   error: null,
 
   loadWeek: async (weekStart) => {
+    // Argless = refresh the week the user is looking at. Falling back to the
+    // server's "current week" used to yank the calendar back to today after
+    // every save / focus / pull-to-refresh reload.
+    const target = weekStart ?? (get().weekStart || undefined);
+    const seq = ++loadWeekSeq;
     const prevWeek = get().week;
     const prevWeekStart = get().weekStart;
-    if (weekStart) {
-      set({ weekStart, busy: true, error: null });
+
+    const cached = target ? weekCache.get(target) : undefined;
+    if (cached && Date.now() - cached.at < WEEK_CACHE_TTL_MS) {
+      // Instant paint from cache (no spinner), then revalidate below.
+      set({ week: cached.week, weekStart: cached.week.weekStart, busy: false, error: null });
+    } else if (target) {
+      set({ weekStart: target, busy: true, error: null });
     } else {
       set({ busy: true, error: null });
     }
+
     try {
-      const week = await getWeek(weekStart, activeSoloMemberId() ?? undefined);
+      const week = await getWeek(target, activeSoloMemberId() ?? undefined);
+      if (seq !== loadWeekSeq) return; // a newer navigation won the race
+      weekCache.set(week.weekStart, { week, at: Date.now() });
+      if (target && target !== week.weekStart) {
+        weekCache.set(target, { week, at: Date.now() });
+      }
       set({ week, weekStart: week.weekStart, busy: false });
     } catch (err) {
+      if (seq !== loadWeekSeq) return;
       if (!get().week && prevWeek) {
-        set({ week: prevWeek, weekStart: prevWeekStart, error: toApiError(err), busy: false });
-      } else {
-        set({ error: toApiError(err), busy: false });
+        set({ week: prevWeek, weekStart: prevWeekStart });
       }
+      set({ error: toApiError(err), busy: false });
     }
   },
 
@@ -353,6 +387,19 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
       });
       if (epoch !== get().planReviewEpoch) return;
 
+      // Free allowance spent — skip the popup, the screen opens the paywall.
+      if (response.planLocked) {
+        set({
+          aiSessionId: response.sessionId,
+          aiPlanLocked: true,
+          showPlanReview: false,
+          planPreview: null,
+          aiClarification: null,
+          lastMessage: response.message,
+        });
+        return;
+      }
+
       if (response.status === 'ready' && response.preview) {
         set({
           aiSessionId: response.sessionId,
@@ -394,6 +441,7 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
   confirmPlan: async (previewId, edits) => {
     set({ busy: true, error: null });
     try {
+      const preview = get().planPreview;
       await postPlanConfirm({ previewId, edits });
       set({
         planPreview: null,
@@ -401,6 +449,10 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
         aiSessionId: null,
         aiClarification: null,
         lastMessage: 'Plan confirmed.',
+        // Locked days were never saved — the calendar keeps teasing them.
+        lockedPlanDateKeys: preview
+          ? preview.days.filter((day) => day.locked).map((day) => day.dateKey)
+          : [],
       });
       await get().loadWeek();
       await get().loadRecents();
@@ -411,6 +463,10 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
       set({ busy: false });
     }
   },
+
+  clearAiPlanLocked: () => set({ aiPlanLocked: false }),
+
+  clearProLockedDays: () => set({ lockedPlanDateKeys: [], aiPlanLocked: false }),
 
   cancelPlanReview: () => {
     set({
@@ -640,6 +696,10 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
     savedTimer = null;
     pendingAutosave = null;
     autosaveHadFailure = false;
+    // New session: no cached weeks may leak to the next login, and any
+    // in-flight load must not land after the reset.
+    loadWeekSeq++;
+    weekCache.clear();
     set({
       week: null,
       weekStart: '',
@@ -649,6 +709,8 @@ export const useMealMemoryStore = create<MealMemoryState>((set, get) => ({
       recentMeals: [],
       planPreview: null,
       showPlanReview: false,
+      lockedPlanDateKeys: [],
+      aiPlanLocked: false,
       saveStatus: 'idle',
       busy: false,
       error: null,

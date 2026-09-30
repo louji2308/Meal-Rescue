@@ -103,7 +103,7 @@ Meal Rescue is a Turborepo + npm-workspaces monorepo with two applications and t
 │   ├── ai-pipeline/             # Standalone AI pipeline package
 │   └── ui-components/           # Shared UI components
 ├── assets/                      # Product / mascot / cuisine assets
-├── docs/                        # Legal, demo script, product & design specs
+├── docs/                        # Legal, product & design specs
 ├── .github/workflows/           # CI
 ├── docker-compose.yml           # PostgreSQL + Redis + backend
 ├── railway.toml                 # Railway deployment configuration
@@ -529,9 +529,36 @@ Taste Journal turns those insights into a user-facing explanation of what the sy
 
 The backend owns allowance state and credit-grant operations rather than trusting the client.
 
+### The free plan — one allowance for the entire time
+
+Every account starts on the same free tier. These are **one-time totals per account — they never refresh**:
+
+| What you get free | Allowance | When it runs out |
+|---|---|---|
+| **AI rescues** | **3 rescues for the lifetime of the account** (no daily reset) | The next rescue needs Pro, an ad-earned Rescue Fuel credit, or the free 1-hour Pro Pass |
+| **Meal Plan** | **1 full plan day for the entire time** (the first day of your plan) | Day 2 of that plan — and every plan after it — requires a Pro subscription |
+| **Cook for the Table** | **1 person can be added** to the household | Every additional person requires Pro (`MEMBER_LIMIT_EXCEEDED` 403) |
+| Rewarded ads | 2 ads/day → **+2 rescue credits** each, or a **60-minute Pro Pass** | The ad cap resets at local midnight — credits themselves never expire |
+
+Pro removes every ceiling: **unlimited rescues, the whole week planned at once, unlimited household members.**
+
+### Pro plans and prices
+
+| Plan | Price | Billed |
+|---|---|---|
+| **Monthly** | **$4.99** | per month |
+| **Yearly** | **$39.99** | per year |
+| **Lifetime** | **$79.99** | once, yours forever |
+
+<p align="center">
+  <img src="assets/Paywall.png" alt="Meal Rescue Pro paywall showing Monthly, Yearly, and Lifetime plans" width="340" height="584" />
+</p>
+
+Purchases run through RevenueCat; the tier is confirmed server-side (`POST /api/v1/subscription/sync`) before Pro unlocks anything. The table above matches the in-app fallback labels shown when store packages are unavailable — live prices come from the store once RevenueCat keys are configured. A free **1-hour Pro Pass** (watch one rewarded ad) is always offered as a no-card alternative.
+
 Current monetization infrastructure includes:
 
-- Free tier allowance
+- Free tier allowance (3 lifetime rescues, 1 lifetime plan day, 1 added household member)
 - Pro subscription state
 - RevenueCat synchronization and webhook handling
 - rewarded-ad Rescue Fuel credits
@@ -783,7 +810,7 @@ PowerShell:
 Copy-Item apps/backend/.env.example apps/backend/.env
 ```
 
-Set at minimum (values below match the Compose stack in step 3):
+Set at minimum (values below work against the Compose stack from step 3, seen from the host):
 
 ```env
 DATABASE_URL=postgresql://meal_rescue:local_password@localhost:5432/meal_rescue_dev
@@ -899,7 +926,7 @@ Targeted backend commands:
 
 ```bash
 npm run test --workspace @meal-rescue/backend
-npm run test:e2e --workspace @meal-rescue/backend
+npm run test:coverage --workspace @meal-rescue/backend
 ```
 
 The repository’s CI workflow currently runs:
@@ -1001,12 +1028,15 @@ The heuristic implementation is intentionally available without network access, 
 
 # Current Implementation Notes
 
-This repository is substantial, but the following boundaries are documented rather than left for a reviewer to discover:
+This repository is substantial, but the following boundaries and known limitations are documented rather than left for a reviewer to discover:
 
 - **Database migrations:** the current code uses Sequelize `sync({ alter: true })`; a dedicated migration runner is not present in this snapshot. This is the development-time schema strategy, and a migration runner is the planned production path.
 - **Mobile CI:** CI runs Expo Doctor rather than a full native release build. Native store packaging is verified separately on release branches.
 - **Release links:** store listing, demo video, and Devpost URLs live in the submission itself rather than in this repository.
-- **Documentation depth:** `docs/legal`, `docs/demo-script.md`, and `docs/superpowers/` (design specs and plans) are populated; `docs/api`, `docs/product`, and `docs/technical` are still namespaces rather than a full documentation site.
+- **Documentation depth:** `docs/legal`, `docs/superpowers/` (design specs and plans), and `docs/pro-page-cat-concepts.md` are populated; `docs/api`, `docs/product`, and `docs/technical` are still namespaces rather than a full documentation site. The demo script (`docs/demo-script.md`) was removed together with the demo build.
+- **RevenueCat keys:** `apps/mobile/.env.example` ships **blank** purchase keys, so in-app purchases are disabled out of the box; the checked-in QA config uses `test_` placeholder keys. Live store purchases require real RevenueCat keys and store products. Until then the paywall renders the static price labels documented in **Monetization**.
+- **Plan-limit 403:** if the backend rejects a plan confirm with `PLAN_LIMIT_EXCEEDED`, the popup shows an inline error banner with an upgrade hint — it does **not** auto-open the paywall (the user taps Unlock/Upgrade themselves).
+- **Taste Journal is read-only output:** journal insights can be dismissed, corrected, or forgotten, but those overrides currently update the journal view only — they do not yet rewire the `taste_memories` rows that the rescue engine reads, so AI personalization is driven by rescue feedback rather than journal edits.
 - **Verification:** lint, typecheck, tests, and build were re-run from a clean checkout and are re-run by CI on every push.
 
 ---

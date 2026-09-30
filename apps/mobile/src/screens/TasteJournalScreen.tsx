@@ -123,8 +123,8 @@ export function TasteJournalScreen() {
     if (mode === 'initial' && !lastLoadedAt.current) setLoading(true);
     try {
       const data = await getJournal();
-      lastLoadedAt.current = Date.now();
       setJournal(data);
+      lastLoadedAt.current = Date.now();
       setError(null);
     } catch (err) {
       setError(toApiError(err));

@@ -13,12 +13,16 @@ import { User } from '../database/models/user.model';
  * Server-authoritative rescue allowance.
  *
  * The client NEVER decides entitlement: every /rescue/generate call passes
- * through consumeRescueAllowance(), which counts today's rescues for the
- * user's local day and spends an ad-earned credit when the free quota is
- * exhausted. Pro status comes from two sources - a paid subscription
- * (RevenueCat webhook -> subscription_tier) or a temporary ad pass
- * (proPassUntil) - whichever is stronger wins.
+ * through consumeRescueAllowance(), which counts the user's rescues over the
+ * account's WHOLE LIFETIME (free tier gets 3 total, never a daily refresh)
+ * and spends an ad-earned credit when the free quota is exhausted. Pro status
+ * comes from two sources - a paid subscription (RevenueCat webhook ->
+ * subscription_tier) or a temporary ad pass (proPassUntil) - whichever is
+ * stronger wins.
  */
+
+/** Epoch instant: rescues are counted from account creation, never reset. */
+export const LIFETIME_START = new Date(0);
 
 export function effectiveTier(
   user: Pick<User, 'subscriptionTier' | 'proPassUntil'>,
@@ -50,8 +54,8 @@ export async function consumeRescueAllowance(
 ): Promise<{ allowed: boolean; reason?: 'limit' }> {
   if (effectiveTier(user) === 'pro') return { allowed: true };
 
-  const used = await countRescuesSince(user.id, startOfLocalDay(user.tzOffsetMinutes ?? 0));
-  if (used < RATE_LIMITS.free.rescuesPerDay) return { allowed: true };
+  const used = await countRescuesSince(user.id, LIFETIME_START);
+  if (used < RATE_LIMITS.free.lifetimeRescues) return { allowed: true };
 
   if ((user.rescueCredits ?? 0) > 0) {
     await user.decrement('rescueCredits');

@@ -30,6 +30,8 @@ const GROQ_URL = `${env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'}/chat/
 const GROQ_KEY = env.GROQ_API_KEY || '';
 const MODEL = env.GROQ_TEXT_MODEL || 'openai/gpt-oss-120b';
 const PROMPT_VERSION = 'v1.0-paywall-teaser';
+const LOVED_PROMPT_VERSION = 'v1.1-paywall-teaser-loved';
+const PLAN_PROMPT_VERSION = 'v1.1-paywall-teaser-plan';
 
 /**
  * The single piece of user context we allow into the paywall teaser.
@@ -52,6 +54,22 @@ export interface PaywallTeaser {
   modelVersion: string;
 }
 
+/** The user's last LOVED rescue — the only fact the loved teaser may use. */
+export interface LovedRescueContext {
+  foods: string[];
+  label?: string;
+}
+
+/**
+ * A plan the user just built (day 1 free, later days behind the lock) — the
+ * only fact the plan teaser may use.
+ */
+export interface PlanTeaserContext {
+  plannedDateKey?: string | null;
+  plannedMeals?: string[];
+  lockedDateKeys?: string[];
+}
+
 /** Injectable provider call so tests can stub the network. */
 export type LlmCall = (systemPrompt: string, userMessage: string) => Promise<string>;
 
@@ -70,6 +88,53 @@ COPY REQUIREMENTS:
 - opener: past-tense curiosity about the last best move, concrete about what was added and what meal. Example of the feeling: "You liked what egg did to the rice." Do not copy that example verbatim — write something fresh in the same spirit.
 - hook: teases a NEW addition that would improve that same meal even further, one NOT in the last move. A reveal line, slightly mysterious, e.g. the feeling of "Wait till you see what garlic does." Never name the ingredient from the last move in the hook.
 - Both lines: one sentence, under 60 characters each, no emojis, no "!", no "Pro"/"subscription"/"unlimited"/"ad-free"/"smart AI"/"price" talk, no health claims, no "you deserve", no corporate platitudes. Concrete nouns beat adjectives.
+
+OUTPUT: ONLY valid JSON, no markdown, no commentary:
+{"opener":"string","hook":"string"}`;
+
+/**
+ * Loved-rescue teaser — what Profile → Upgrade greets the user with.
+ * One fact only: the rescue they explicitly loved (feedback "Better" / the
+ * "Exactly" check-in). The opener looks back at it, the hook teases the next
+ * combination they have not had yet.
+ */
+const LOVED_TEASER_SYSTEM_PROMPT = `You write the two curiosity lines for a paid upgrade screen in a meal app called Meal Rescue. This one greets a user who LOVED a rescue they made earlier.
+
+STYLE: dry, appetite-first, human, zero corporate voice. Every copy line is ONE short sentence.
+
+CONTEXT RULE (STRICT — the whole point):
+- You will be sent exactly ONE user fact: their LAST LOVED rescue, as a "lastLovedRescue" JSON object (the meal's foods + the plain-text label of that rescue).
+- That single rescue is the ONLY personalization you are allowed. No other meals, no favorites list, no cuisines, no habits, no dislikes.
+- The opener looks BACK at that rescue in the past tense and may name its dish: the user genuinely loved it.
+- The hook looks FORWARD at a NEW combination they have not had yet. It must never repeat the dish or its ingredients, and must never invent any other meal.
+
+COPY REQUIREMENTS:
+- opener: past-tense curiosity about the loved rescue, concrete about the dish. Example of the feeling: "You loved what the noodles did." Do not copy that example verbatim — write something fresh in the same spirit.
+- hook: teases the NEXT combination from Meal Rescue, one not in the rescue they already loved. Example of the feeling: "Wait till you see what comes next." Never name an ingredient from the loved rescue in the hook.
+- Both lines: one sentence, under 60 characters each, no emojis, no "!", no "Pro"/"subscription"/"unlimited"/"ad-free"/"smart AI"/"price" talk, no health claims, no "you deserve", no corporate platitudes. Concrete nouns beat adjectives.
+
+OUTPUT: ONLY valid JSON, no markdown, no commentary:
+{"opener":"string","hook":"string"}`;
+
+/**
+ * Plan teaser — what the Meal Plan tab greets the user with after day 1 is
+ * planned and the rest of the week sits behind the lock. One fact only: the
+ * real weekday names from that preview.
+ */
+const PLAN_TEASER_SYSTEM_PROMPT = `You write the two curiosity lines for a paid upgrade screen in a meal app called Meal Rescue. This one opens right after the user planned ONE free day of their week; the remaining days sit behind the upgrade.
+
+STYLE: dry, appetite-first, human, zero corporate voice. Every copy line is ONE short sentence.
+
+CONTEXT RULE (STRICT — the whole point):
+- You will be sent exactly ONE user fact: their plan, as a "plan" JSON object — the weekday of the free day they planned (plannedWeekday) and the weekdays still locked (lockedWeekdays).
+- Those real weekday names are the ONLY personalization you are allowed. Do not invent meals, ingredients, cuisines, or habits. plannedMeals, when present, are the names of the meals on the free day — you may reference at most one of them, plainly.
+- The opener names the real days: what is already planned, and what is one tap away.
+- The hook sells finishing the week's plan, not the subscription.
+
+COPY REQUIREMENTS:
+- opener: concrete about the days, e.g. the feeling of "Day 1 planned for Tuesday. Wednesday & Thursday are one tap away." Do not copy that example verbatim — write something fresh in the same spirit. When plannedWeekday is null (free day already spent), say so plainly and still name the locked days.
+- hook: one warm, practical line about planning the rest of the week (busy days, chaotic days, one tap). Never the same sentence as the opener.
+- Both lines: one sentence, under 60 characters each, no emojis, no "!", no "Pro"/"subscription"/"unlimited"/"ad-free"/"smart AI"/"price" talk, no health claims, no "you deserve", no corporate platitudes.
 
 OUTPUT: ONLY valid JSON, no markdown, no commentary:
 {"opener":"string","hook":"string"}`;
@@ -254,6 +319,163 @@ function heuristicTeaser(move: LastBestMoveContext | null): PaywallTeaser {
   return { opener, hook, source: 'fallback', modelVersion: 'heuristic' };
 }
 
+/** Weekday name for a YYYY-MM-DD key (UTC — date keys are calendar days). */
+function weekdayOfKey(dateKey: string): string {
+  const parsed = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+}
+
+/** Eager normalize — garbage from the wire never reaches the prompt. */
+function normalizeLoved(input: unknown): LovedRescueContext | null {
+  if (!input || typeof input !== 'object') return null;
+  const raw = input as Record<string, unknown>;
+  const foods = Array.isArray(raw.foods)
+    ? raw.foods
+        .map((f) => String(f).trim())
+        .filter((s) => s.length > 0)
+        .slice(0, 8)
+    : [];
+  const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 300) : undefined;
+  if (foods.length === 0 && !label) return null;
+  return { foods, label };
+}
+
+/** Eager normalize of the plan fact (real weekdays only — no meals needed). */
+function normalizePlan(input: unknown): PlanTeaserContext | null {
+  if (!input || typeof input !== 'object') return null;
+  const raw = input as Record<string, unknown>;
+  const dateKey = typeof raw.plannedDateKey === 'string' ? raw.plannedDateKey.trim() : '';
+  const locked = Array.isArray(raw.lockedDateKeys)
+    ? raw.lockedDateKeys
+        .map((k) => String(k).trim())
+        .filter((k) => k.length > 0)
+        .slice(0, 7)
+    : [];
+  const plannedMeals = Array.isArray(raw.plannedMeals)
+    ? raw.plannedMeals
+        .map((m) => String(m).trim())
+        .filter((m) => m.length > 0)
+        .slice(0, 6)
+    : [];
+  if (!dateKey && locked.length === 0) return null;
+  return {
+    plannedDateKey: dateKey || null,
+    plannedMeals,
+    lockedDateKeys: locked,
+  };
+}
+
+// --- Loved-rescue fallback pools (hardcoded until the model copy lands) ----
+
+const LOVED_OPENERS_FOOD = [
+  (dish: string) => `You loved what the ${dish} did.`,
+  (dish: string) => `The ${dish} rescue is the one you loved.`,
+  (dish: string) => `You came back for the ${dish} one.`,
+  (dish: string) => `That ${dish} one hit the spot.`,
+  (dish: string) => `You loved the ${dish} rescue.`,
+  (dish: string) => `The ${dish} one earned a repeat.`,
+];
+
+const LOVED_OPENERS_LABEL = [
+  'Your loved the noodles with scrambled egg and spring onion with black pepper combination.',
+];
+
+const LOVED_HOOKS = [
+  "Wait till you see what we'd combine with it.",
+  'Wait till you see the next combination.',
+  'Meal Rescue has a new combination waiting.',
+  "Wait till you see what we'd cook up with it.",
+  'There is a new combination ready for you.',
+  'Wait till you see what comes next.',
+];
+
+function heuristicLovedTeaser(loved: LovedRescueContext | null): PaywallTeaser {
+  const dish = loved?.foods[0]?.trim().toLowerCase() ?? null;
+  const key = [loved?.foods.join('|') ?? '', loved?.label ?? '', 'loved'].join('#').toLowerCase();
+  const opener = dish
+    ? pickStable(LOVED_OPENERS_FOOD, key)(dish)
+    : pickStable(LOVED_OPENERS_LABEL, key);
+  const hook = pickStable(LOVED_HOOKS, key);
+  return { opener, hook, source: 'fallback', modelVersion: 'loved-heuristic' };
+}
+
+// --- Plan fallback pools ---------------------------------------------------
+
+function joinDays(days: string[]): string {
+  if (days.length <= 1) return days[0] ?? '';
+  return `${days.slice(0, -1).join(', ')} & ${days[days.length - 1]}`;
+}
+
+const PLAN_HOOKS = [
+  'Easily plan meals for your busy days, even the chaotic ones.',
+  'Two more days, planned as easily as the first.',
+  'The rest of your week, planned in a single tap.',
+  'Plan the rest of the week without the mental load.',
+];
+
+function heuristicPlanTeaser(plan: PlanTeaserContext | null): PaywallTeaser {
+  const planned = plan?.plannedDateKey ? weekdayOfKey(plan.plannedDateKey) : '';
+  const locked = (plan?.lockedDateKeys ?? []).map(weekdayOfKey).filter(Boolean);
+  const key = [plan?.plannedDateKey ?? '', ...(plan?.lockedDateKeys ?? [])].join('|');
+  const many = locked.length > 1;
+  const lockedLine = joinDays(locked);
+
+  let opener: string;
+  if (planned && lockedLine) {
+    const templates = [
+      `Day 1 planned for ${planned}. ${lockedLine} ${many ? 'are' : 'is'} one tap away.`,
+      `${lockedLine} ${many ? 'are' : 'is'} one tap away — ${planned} is already planned.`,
+      `Your week has a start: ${planned}. ${lockedLine} ${many ? 'are' : 'is'} one tap away.`,
+    ];
+    opener = pickStable(templates, key);
+  } else if (planned) {
+    const templates = [
+      `Day 1 planned for ${planned}. The rest of your week is one tap away.`,
+      `${planned} is planned. The rest of your week is one tap away.`,
+      `Your week has a start: ${planned}. The rest is one tap away.`,
+    ];
+    opener = pickStable(templates, key);
+  } else {
+    opener = pickStable(
+      [
+        'Your one free plan day is used. The rest of your week is one tap away.',
+        'Day 1 is in the books. The rest of your week is one tap away.',
+        'Your week has a start — the remaining days are one tap away.',
+      ],
+      key,
+    );
+  }
+
+  return {
+    opener,
+    hook: pickStable(PLAN_HOOKS, key),
+    source: 'fallback',
+    modelVersion: 'plan-heuristic',
+  };
+}
+
+/**
+ * Shared guardrail for the loved / plan teasers: format, tone, banned words.
+ * (The move teaser keeps its stricter `validateCandidate` — it also enforces
+ * the "never repeat the last move" rule.)
+ */
+function validateLines(candidate: { opener?: string; hook?: string }): {
+  opener: string;
+  hook: string;
+} | null {
+  const opener = (candidate.opener ?? '').trim();
+  const hook = (candidate.hook ?? '').trim();
+  if (!opener || !hook || opener.length < 4 || hook.length < 4) return null;
+  if (opener.length > 70 || hook.length > 70) return null;
+  if (opener === hook) return null;
+  const both = `${opener} ${hook}`;
+  if (EMOJI_RE.test(both)) return null;
+  if (/[[\]{}%]|`/.test(both)) return null;
+  if (BANNED_WORDS_RE.test(both)) return null;
+  return { opener, hook };
+}
+
 /** Parse the model's markdown-tolerant JSON blob into a candidate teaser. */
 function parseCandidate(raw: string): { opener?: string; hook?: string } {
   // Strip fences ONLY around the payload. Fences that live inside a JSON
@@ -404,6 +626,99 @@ export class PaywallTeaserService {
     }
 
     return heuristicTeaser(move);
+  }
+
+  /**
+   * Loved-rescue teaser (Profile → Upgrade). Same Groq cell, its own prompt:
+   * one fact (the rescue they loved), a look-back opener, a look-forward hook.
+   * Always resolves — a missing key serves the deterministic pool.
+   */
+  async generateLoved(input: unknown): Promise<PaywallTeaser> {
+    const loved = normalizeLoved(input);
+    if (!loved) return heuristicLovedTeaser(null);
+
+    try {
+      const userMessage = JSON.stringify({
+        lastLovedRescue: { foods: loved.foods, label: loved.label ?? null },
+      });
+      const raw = await this.provider(LOVED_TEASER_SYSTEM_PROMPT, userMessage);
+      const candidate = validateLines(parseCandidate(raw));
+      if (candidate) {
+        return {
+          opener: candidate.opener,
+          hook: candidate.hook,
+          source: 'ai',
+          modelVersion: `${LOVED_PROMPT_VERSION}::${MODEL}`,
+        };
+      }
+      // eslint-disable-next-line no-console
+      console.warn(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'Loved-rescue teaser model output failed validation — served deterministic copy',
+          model: MODEL,
+        }),
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'Loved-rescue teaser provider failed — served deterministic copy',
+          reason: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+
+    return heuristicLovedTeaser(loved);
+  }
+
+  /**
+   * Plan teaser (Meal Plan tab → locked day). Same Groq cell, its own prompt:
+   * one fact (the real weekdays of the preview). Always resolves.
+   */
+  async generatePlan(input: unknown): Promise<PaywallTeaser> {
+    const plan = normalizePlan(input);
+    if (!plan) return heuristicPlanTeaser(null);
+
+    try {
+      const userMessage = JSON.stringify({
+        plan: {
+          plannedWeekday: plan.plannedDateKey ? weekdayOfKey(plan.plannedDateKey) : null,
+          lockedWeekdays: (plan.lockedDateKeys ?? []).map(weekdayOfKey).filter(Boolean),
+          plannedMeals: plan.plannedMeals ?? [],
+        },
+      });
+      const raw = await this.provider(PLAN_TEASER_SYSTEM_PROMPT, userMessage);
+      const candidate = validateLines(parseCandidate(raw));
+      if (candidate) {
+        return {
+          opener: candidate.opener,
+          hook: candidate.hook,
+          source: 'ai',
+          modelVersion: `${PLAN_PROMPT_VERSION}::${MODEL}`,
+        };
+      }
+      // eslint-disable-next-line no-console
+      console.warn(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'Plan teaser model output failed validation — served deterministic copy',
+          model: MODEL,
+        }),
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'Plan teaser provider failed — served deterministic copy',
+          reason: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+
+    return heuristicPlanTeaser(plan);
   }
 }
 

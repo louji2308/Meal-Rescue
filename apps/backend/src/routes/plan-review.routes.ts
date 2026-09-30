@@ -5,15 +5,15 @@ import type { MealSlot, UUID } from '@meal-rescue/shared-types';
 
 import { dbModels } from '../database/models';
 import { AppError, ErrorCategory } from '../lib/errors';
+import { HouseholdTasteService } from '../services/common-table/household-taste.service';
 import { buildServices } from '../services/composition';
-import { planPreviewService } from '../services/plan-preview.service';
-import type { PlannedDay, PlannedMeal } from '../services/plan-preview.service';
+import { dateKeyFor, weekStartFor } from '../services/meal-memory/date-utils';
 import { PlanningEngine } from '../services/meal-memory/planning-engine';
 import type { PlanParams, PlanStrategy } from '../services/meal-memory/planning-engine';
-import { dateKeyFor, weekStartFor } from '../services/meal-memory/date-utils';
 import { WorldStateService } from '../services/meal-memory/world-state.service';
 import { PantryService } from '../services/pantry.service';
-import { HouseholdTasteService } from '../services/common-table/household-taste.service';
+import { planPreviewService } from '../services/plan-preview.service';
+import type { PlannedDay, PlannedMeal } from '../services/plan-preview.service';
 import { TasteExposureService } from '../services/taste-exposure.service';
 
 const planPreviewSchema = z
@@ -32,7 +32,13 @@ const planConfirmSchema = z
 const DEFAULT_WEEK_MEAL_SLOTS: MealSlot[] = ['dinner', 'lunch'];
 
 function convertEventsToPlannedDays(
-  meals: Array<{ dateKey: string | null; concept: string | null; ingredients: string[] | null; id: UUID; mealSlot: MealSlot }>
+  meals: Array<{
+    dateKey: string | null;
+    concept: string | null;
+    ingredients: string[] | null;
+    id: UUID;
+    mealSlot: MealSlot;
+  }>,
 ): PlannedDay[] {
   const dayMap = new Map<string, PlannedMeal[]>();
 
@@ -57,7 +63,7 @@ function convertEventsToPlannedDays(
 
   return Array.from(dayMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dateKey, meals]) => ({ dateKey, meals }));
+    .map(([dateKey, meals]) => ({ dateKey, meals, locked: false }));
 }
 
 function validationError(message: string): AppError {
@@ -129,10 +135,7 @@ export async function planReviewRoutes(app: FastifyInstance): Promise<void> {
     const events = result.plan?.meals ?? [];
     const days = convertEventsToPlannedDays(events);
 
-    const previewResponse = await planPreviewService.generatePreview(userId, {
-      days,
-      daysPlanned: events.length,
-    });
+    const previewResponse = await planPreviewService.generatePreview(userId, { days });
 
     return reply.send(previewResponse);
   });

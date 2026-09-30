@@ -41,6 +41,7 @@ import { getTasteBundle } from '../services/taste.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useCommonTableStore } from '../stores/common-table.store';
 import { useMonetization } from '../stores/monetization.store';
+import { usePaywallContext } from '../stores/paywall-context.store';
 import { colors, fonts, spacing, typography } from '../theme';
 
 const APK_VERSION = Constants.expoConfig?.version ?? Constants.nativeApplicationVersion ?? '0.1.0';
@@ -175,7 +176,7 @@ export function ProfileScreen() {
                 <Text style={typography.caption}>
                   {isEffectivePro
                     ? 'Pro plan'
-                    : `Free plan \u2022 3 rescues/day${rescueCredits > 0 ? ` \u2022 +${rescueCredits} bonus` : ''}`}
+                    : `Free plan \u2022 3 rescues${rescueCredits > 0 ? ` \u2022 +${rescueCredits} bonus` : ''}`}
                 </Text>
               </View>
             </View>
@@ -184,7 +185,12 @@ export function ProfileScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Upgrade to Meal Rescue Pro"
-                onPress={() => navigation.navigate('Paywall')}
+                onPress={() => {
+                  // Not a plan unlock — drop any plan context so the teaser
+                  // greets them with the rescue they loved instead.
+                  usePaywallContext.getState().clearPlan();
+                  navigation.navigate('Paywall');
+                }}
                 style={styles.proRow}
                 tintBorderRadius={12}
               >
@@ -193,9 +199,7 @@ export function ProfileScreen() {
                   <View>
                     <Text style={styles.proTitle}>Meal Rescue Pro</Text>
                     <Text style={styles.proSub}>
-                      {rescueCredits > 0
-                        ? `${rescueCredits} rescue credits`
-                        : 'Unlimited daily rescues'}
+                      {rescueCredits > 0 ? `${rescueCredits} rescue credits` : 'Unlimited rescues'}
                     </Text>
                   </View>
                 </View>

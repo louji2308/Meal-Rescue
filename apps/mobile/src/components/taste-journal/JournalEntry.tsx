@@ -36,7 +36,33 @@ function learnedFrom(sources: TasteSignalSource[]): string {
   return labels.length === 0 ? 'our observations' : labels.join(' and ');
 }
 
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const diff = Date.now() - then;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** Relative time for a feedback note entry; live notes are real. */
+function feedbackNoteTime(insight: TasteJournalInsight): string {
+  return insight.lastObservedAt ? relativeTime(insight.lastObservedAt) : '';
+}
+
 function formatMeta(insight: TasteJournalInsight): string {
+  if (insight.feedbackNote) {
+    const parts: string[] = ['From your feedback'];
+    const rel = feedbackNoteTime(insight);
+    if (rel) parts.push(rel);
+    if (insight.evidenceCount > 0) {
+      parts.push(
+        `${insight.evidenceCount} ${insight.evidenceCount === 1 ? 'observation' : 'observations'}`,
+      );
+    }
+    return parts.join(' · ');
+  }
   const parts: string[] = [];
   parts.push(`Learned from ${learnedFrom(insight.sourceTypes)}`);
   if (insight.lastObservedAt) {
@@ -71,13 +97,16 @@ export function JournalEntry({
   const [correctVisible, setCorrectVisible] = useState(false);
   const chevron = useSharedValue(0);
   const busy = handlers.busyId === insight.id;
+  // An editorial note with no live evidence has nothing to expand or manage.
+  const evidencelessNote = Boolean(insight.feedbackNote) && insight.evidenceCount === 0;
 
   const toggle = useCallback(() => {
+    if (evidencelessNote) return;
     setExpanded((prev) => {
       chevron.value = withTiming(prev ? 0 : 1, { duration: 200 });
       return !prev;
     });
-  }, [chevron]);
+  }, [chevron, evidencelessNote]);
 
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${chevron.value * 180}deg` }],
@@ -104,26 +133,28 @@ export function JournalEntry({
           </View>
         </Pressable>
 
-        <View style={styles.controls}>
-          {busy ? (
-            <View style={styles.busy} accessibilityLabel="Working…">
-              <ActivityIndicator size="small" color={colors.homeTextTertiary} />
-            </View>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`More options for ${insight.title}`}
-              onPress={() => setMoreVisible(true)}
-              style={styles.more}
-              tintBorderRadius={999}
-            >
-              <EllipsisIcon size={18} color={colors.homeTextQuiet} />
-            </Pressable>
-          )}
-          <Animated.View style={[styles.caret, chevronStyle]}>
-            <ChevronDownIcon size={16} color={colors.homeTextTertiary} />
-          </Animated.View>
-        </View>
+        {!evidencelessNote && (
+          <View style={styles.controls}>
+            {busy ? (
+              <View style={styles.busy} accessibilityLabel="Working…">
+                <ActivityIndicator size="small" color={colors.homeTextTertiary} />
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`More options for ${insight.title}`}
+                onPress={() => setMoreVisible(true)}
+                style={styles.more}
+                tintBorderRadius={999}
+              >
+                <EllipsisIcon size={18} color={colors.homeTextQuiet} />
+              </Pressable>
+            )}
+            <Animated.View style={[styles.caret, chevronStyle]}>
+              <ChevronDownIcon size={16} color={colors.homeTextTertiary} />
+            </Animated.View>
+          </View>
+        )}
       </View>
 
       {expanded ? (

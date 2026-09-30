@@ -112,7 +112,12 @@ export function HowDidItGoScreen() {
     return (
       <View style={styles.doneCenter}>
         <FadeInView>
-          <Ionicons name="checkmark-circle" size={56} color={colors.softAlert} />
+          <Ionicons
+            name="checkmark-circle"
+            size={56}
+            color={colors.softAlert}
+            style={styles.doneIcon}
+          />
           <Text style={styles.doneTitle}>Meal recorded!</Text>
           <Text style={styles.doneText}>
             We saved what worked so the next table planning starts smarter.
@@ -261,10 +266,14 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
   },
+  doneIcon: {
+    alignSelf: 'center',
+  },
   doneTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: colors.text,
+    textAlign: 'center',
   },
   doneText: {
     fontSize: 14,

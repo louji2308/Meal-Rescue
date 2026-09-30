@@ -15,10 +15,12 @@ import { PrimaryButton } from '../../components/PrimaryButton';
 import { CameraIcon } from '../../components/icons';
 import { FadeInView } from '../../components/motion/FadeInView';
 import { Pressable } from '../../components/motion/Pressable';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { loadPeoplePhotos, savePeoplePhoto } from '../../services/people-photos';
-import { useCommonTableStore } from '../../stores/common-table.store';
+import { FREE_ADDED_MEMBERS, useCommonTableStore } from '../../stores/common-table.store';
+import { useMonetization } from '../../stores/monetization.store';
 import { colors, fonts, spacing } from '../../theme';
 
 const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
@@ -34,13 +36,23 @@ const AGE_GROUPS: { key: HouseholdAgeGroup; label: string; emoji: string }[] = [
  */
 export function AddPeopleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<CommonTableStackParamList, 'AddPeople'>>();
   const memberId = route.params?.memberId;
   const members = useCommonTableStore((s) => s.members);
   const addMember = useCommonTableStore((s) => s.addMember);
   const updateMember = useCommonTableStore((s) => s.updateMember);
+  const isPro = useMonetization((s) => s.isPro);
 
   const target = memberId ? members.find((m) => m.id === memberId) : undefined;
+
+  // Same rule as the roster: one free person, the next one is Pro. Editing
+  // an existing profile is always free.
+  const hasOwner = members.some((m) => m.isOwner);
+  const addedPeople = hasOwner
+    ? members.filter((m) => !m.isOwner).length
+    : Math.max(0, members.length - 1);
+  const addLocked = !isPro && addedPeople >= FREE_ADDED_MEMBERS;
 
   const [displayName, setDisplayName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -109,6 +121,10 @@ export function AddPeopleScreen() {
     if (savingRef.current) return;
     const name = displayName.trim();
     if (!name) return;
+    if (!target && addLocked) {
+      rootNavigation.navigate('Paywall', { minimal: true });
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setError(null);

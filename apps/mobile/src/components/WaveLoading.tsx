@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
+  Easing,
   type SharedValue,
   cancelAnimation,
   useAnimatedStyle,
@@ -31,7 +32,14 @@ const DOT_GAP = 6;
 const CYCLE_MS = 1400;
 const STAGGER_DELAY = 180;
 
-export function WaveLoading({ style }: { style?: object }) {
+export function WaveLoading({
+  style,
+  showMessage = true,
+}: {
+  style?: object;
+  /** Hide the rotating analysis line (e.g. inside a fixed-size button). */
+  showMessage?: boolean;
+}) {
   const sv0 = useSharedValue(0);
   const sv1 = useSharedValue(0);
   const sv2 = useSharedValue(0);
@@ -47,13 +55,15 @@ export function WaveLoading({ style }: { style?: object }) {
         i * STAGGER_DELAY,
         withRepeat(
           withSequence(
-            withTiming(1, { duration: CYCLE_MS / 2 }),
-            withTiming(0, { duration: CYCLE_MS / 2 }),
+            withTiming(1, { duration: CYCLE_MS / 2, easing: Easing.inOut(Easing.cubic) }),
+            withTiming(0, { duration: CYCLE_MS / 2, easing: Easing.inOut(Easing.cubic) }),
           ),
           -1,
         ),
       );
     });
+
+    if (!showMessage) return () => progressValues.forEach((progress) => cancelAnimation(progress));
 
     const msgTimer = setInterval(() => {
       setMsgIdx((prev) => (prev + 1) % ANALYSIS_MESSAGES.length);
@@ -63,7 +73,7 @@ export function WaveLoading({ style }: { style?: object }) {
       progressValues.forEach((progress) => cancelAnimation(progress));
       clearInterval(msgTimer);
     };
-  }, []);
+  }, [showMessage]);
 
   return (
     <View style={[styles.wrap, style]}>
@@ -72,7 +82,7 @@ export function WaveLoading({ style }: { style?: object }) {
           <AnimatedDot key={i} progress={progress} />
         ))}
       </View>
-      <MessageCrossFade messages={ANALYSIS_MESSAGES} index={msgIdx} />
+      {showMessage ? <MessageCrossFade messages={ANALYSIS_MESSAGES} index={msgIdx} /> : null}
     </View>
   );
 }

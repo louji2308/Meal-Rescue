@@ -3,8 +3,10 @@ import { z } from 'zod';
 
 import { ErrorCategory } from '@meal-rescue/shared-types';
 
+import { User } from '../database/models/user.model';
 import { AppError } from '../lib/errors';
 import { buildServices } from '../services/composition';
+import { effectiveTier } from '../services/rescue-allowance.service';
 
 const createHouseholdSchema = z.object({
   name: z.string().min(1).max(60).optional(),
@@ -41,12 +43,15 @@ const updateMemberSchema = createMemberSchema.partial().extend({
 
 const memberIdParam = z.object({ id: z.string().uuid() });
 
+/** Free tier: ONE added person (the owner never counts). Everything after that is Pro. */
+const FREE_ADDED_MEMBER_LIMIT = 1;
+
 /**
  * Household routes — the human table a Common Table session is planned for.
  *
  * GET    /api/v1/households/current - current user's household (or null)
  * POST   /api/v1/households          - idempotently get or create a household
- * POST   /api/v1/households/members  - add a member profile
+ * POST   /api/v1/households/members  - add a member profile (first one free, Pro after that)
  * PATCH  /api/v1/households/members/:id - update constraints/preferences
  * DELETE /api/v1/households/members/:id - remove a non-owner member
  */
@@ -88,6 +93,27 @@ export async function householdRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const household = await households.getOrCreateForUser(userId);
+
+    // Free tier: one added person. The roster opens the paywall instead of
+    // this call once that limit is reached — this is the server-side backstop.
+    const currentMembers = await householdMembers.listForHousehold(household.id);
+    const addedMembers = currentMembers.filter((member) => !member.isOwner).length;
+    if (addedMembers >= FREE_ADDED_MEMBER_LIMIT) {
+      const user = await User.findByPk(userId, {
+        attributes: ['subscriptionTier', 'proPassUntil'],
+      });
+      if (!user || effectiveTier(user) !== 'pro') {
+        throw new AppError({
+          category: ErrorCategory.FORBIDDEN,
+          code: 'MEMBER_LIMIT_EXCEEDED',
+          message: 'Adding another person requires Pro.',
+          statusCode: 403,
+          recoverable: false,
+          suggestedAction: 'Upgrade to Pro plan',
+        });
+      }
+    }
+
     const member = await householdMembers.create(household.id, parsed.data);
     return reply.send({ member });
   });

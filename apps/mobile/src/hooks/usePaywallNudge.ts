@@ -14,11 +14,12 @@ export function usePaywallNudge(): string | null {
     getAdEligibility()
       .then((eligibility) => {
         if (cancelled) return;
-        const used = eligibility.rescuesToday ?? 0;
+        const used = eligibility.rescuesUsed ?? 0;
+        const limit = eligibility.freeRescueLimit ?? 3;
         if (eligibility.tier !== 'free') {
           setNudge(null);
-        } else if (used >= 3) {
-          setNudge("You've hit today's limit - unlimited is one tap away.");
+        } else if (used >= limit) {
+          setNudge("You've used your free rescues - unlimited is one tap away.");
         } else {
           setNudge(null);
         }

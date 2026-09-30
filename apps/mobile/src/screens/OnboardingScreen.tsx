@@ -20,7 +20,6 @@ import type { CulinaryFamily } from '@meal-rescue/shared-types';
 
 import { Text } from '../components/AppText';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { ConfettiBurst } from '../components/effects/ConfettiBurst';
 import { FoodIcon } from '../components/icons/FoodIcon';
 import { FadeInView } from '../components/motion/FadeInView';
 import { Pressable } from '../components/motion/Pressable';
@@ -759,7 +758,7 @@ export function OnboardingScreen() {
   const [displayName, setDisplayName] = useState('');
   const [_submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const enteredRef = useRef(false);
 
   const currentStep = ALL_STEPS[stepIndex];
 
@@ -943,12 +942,14 @@ export function OnboardingScreen() {
       setOnboardingCompleted(true);
       haptics.success();
       setCompleted(true);
-      setConfettiTrigger((t) => t + 1);
     }
   }
 
   function handleEnterApp() {
-    navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+    if (enteredRef.current) return;
+    enteredRef.current = true;
+    haptics.light();
+    navigation.replace('Tabs');
   }
 
   // ------- Flavor personality options -------
@@ -1000,7 +1001,6 @@ export function OnboardingScreen() {
     <SafeAreaView style={styles.container}>
       {completed ? (
         <View style={styles.completionContainer}>
-          <ConfettiBurst trigger={confettiTrigger} />
           <FadeInView rise={10} duration={400} style={styles.completionContent}>
             <Image
               source={require('../../assets/logo.png')}

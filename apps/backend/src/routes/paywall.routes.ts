@@ -3,13 +3,17 @@
  *
  * POST /api/v1/paywall/teaser
  *
- * The AI is scoped to EXACTLY ONE user fact: the last best move. The client
- * sends it (from its local rescues history) so anonymous/edge users work
- * too; when the client sends nothing and the user is authenticated, the
- * route falls back to the most recent decided Rescue row in the database.
+ * One endpoint, three teasers — each AI call is scoped to EXACTLY ONE user
+ * fact, sent by the client (so anonymous/edge users work too):
+ *   default      → the last best move   (the original teaser)
+ *   mode: 'loved' → the last LOVED rescue (Profile → Upgrade)
+ *   mode: 'plan'  → the real weekdays of a locked plan (Meal Plan → paywall)
+ *
+ * When the client sends no move and the user is authenticated, the route
+ * falls back to the most recent decided Rescue row in the database.
  *
  * Always 200: a missing Groq key / provider failure serves deterministic
- * copy with `source: "fallback"` — the paywall must never Surface an error.
+ * copy with `source: "fallback"` — the paywall must never surface an error.
  */
 import type { FastifyInstance } from 'fastify';
 import { Op } from 'sequelize';
@@ -90,7 +94,22 @@ export async function paywallRoutes(app: FastifyInstance) {
       });
     }
 
-    const body = (request.body ?? {}) as { lastMove?: unknown };
+    const body = (request.body ?? {}) as {
+      lastMove?: unknown;
+      mode?: string;
+      lastLovedRescue?: unknown;
+      plan?: unknown;
+    };
+
+    // Profile → Upgrade: the rescue they loved (one fact, own prompt).
+    if (body.mode === 'loved') {
+      return { success: true, data: await paywallTeaser.generateLoved(body.lastLovedRescue) };
+    }
+    // Meal Plan → locked day: the real weekdays of that preview.
+    if (body.mode === 'plan') {
+      return { success: true, data: await paywallTeaser.generatePlan(body.plan) };
+    }
+
     const hasClientMove = body.lastMove !== undefined && body.lastMove !== null;
     const context = hasClientMove || !userId ? body.lastMove : await lastMoveFromDatabase(userId);
 

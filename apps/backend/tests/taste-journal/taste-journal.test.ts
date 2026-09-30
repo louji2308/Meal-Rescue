@@ -12,9 +12,12 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import type { TasteSignal, TasteSignalSource } from '@meal-rescue/shared-types';
+
 import type { Db } from '../../src/database/models';
-import { PreferenceAggregationService } from '../../src/services/taste-journal/preference-aggregation.service';
+import { AppError } from '../../src/lib/errors';
 import { ContextualPatternService } from '../../src/services/taste-journal/contextual-pattern.service';
+import { PreferenceAggregationService } from '../../src/services/taste-journal/preference-aggregation.service';
 import { TasteInsightService } from '../../src/services/taste-journal/taste-insight.service';
 import { TasteJournalService } from '../../src/services/taste-journal/taste-journal.service';
 import {
@@ -23,11 +26,6 @@ import {
   computeStatus,
   round2,
 } from '../../src/services/taste-journal/taste-signal.service';
-import { AppError } from '../../src/lib/errors';
-import type {
-  TasteSignal,
-  TasteSignalSource,
-} from '@meal-rescue/shared-types';
 
 // ---------------------------------------------------------------------------
 // In-memory store so the whole evidence -> journal pipeline runs without a DB.
@@ -40,7 +38,10 @@ function matches(row: Record<string, unknown>, where: Where): boolean {
   return Object.entries(where).every(([key, value]) => row[key] === value);
 }
 
-function orderRows(list: Array<Record<string, unknown>>, order?: OrderEntry[]): Array<Record<string, unknown>> {
+function orderRows(
+  list: Array<Record<string, unknown>>,
+  order?: OrderEntry[],
+): Array<Record<string, unknown>> {
   if (!order) return list;
   return [...list].sort((a, b) => {
     for (const [raw, dir] of order) {
@@ -48,7 +49,10 @@ function orderRows(list: Array<Record<string, unknown>>, order?: OrderEntry[]): 
       const av = a[key];
       const bv = b[key];
       if (av === bv) continue;
-      const cmp = av instanceof Date && bv instanceof Date ? av.getTime() - bv.getTime() : (av as number) - (bv as number);
+      const cmp =
+        av instanceof Date && bv instanceof Date
+          ? av.getTime() - bv.getTime()
+          : (av as number) - (bv as number);
       return dir === 'ASC' ? cmp : -cmp;
     }
     return 0;
@@ -85,7 +89,10 @@ class MemStore {
   }
 
   all(table: string, where: Where = {}, order?: OrderEntry[]): ReturnType<MemStore['wrap']>[] {
-    const backing = orderRows((this.rows[table] ?? []).filter((r) => matches(r, where)), order);
+    const backing = orderRows(
+      (this.rows[table] ?? []).filter((r) => matches(r, where)),
+      order,
+    );
     return backing.map((b) => this.wrap(table, b));
   }
 
@@ -182,6 +189,15 @@ function buildModels(store: MemStore): Db['models'] {
     },
   };
 
+  const FeedbackJournalNote = {
+    async findAll({ where, order }: { where: Where; order?: OrderEntry[] }) {
+      return store.all('FeedbackJournalNote', where, order);
+    },
+    async destroy({ where }: { where: Where }) {
+      return store.delete('FeedbackJournalNote', where);
+    },
+  };
+
   return {
     TasteSignal,
     TasteSignalEvidence,
@@ -190,6 +206,7 @@ function buildModels(store: MemStore): Db['models'] {
     TasteMemory,
     TasteEvent,
     AdditionEvent,
+    FeedbackJournalNote,
   } as unknown as Db['models'];
 }
 
@@ -259,14 +276,18 @@ describe('journal math', () => {
   it('confidence grows with evidence but never reaches 1', () => {
     expect(computeConfidence([])).toBe(0);
     const weak = computeConfidence([piece('positive', 'BEHAVIOR', 1)]);
-    const strong = computeConfidence(Array.from({ length: 10 }, () => piece('positive', 'BEHAVIOR', 1)));
+    const strong = computeConfidence(
+      Array.from({ length: 10 }, () => piece('positive', 'BEHAVIOR', 1)),
+    );
     expect(weak).toBeGreaterThan(0);
     expect(strong).toBeGreaterThan(weak);
     expect(strong).toBeLessThan(1);
   });
 
   it('neutral-heavy evidence is discounted', () => {
-    const allNeutral = computeConfidence(Array.from({ length: 4 }, () => piece('neutral', 'BEHAVIOR', 1)));
+    const allNeutral = computeConfidence(
+      Array.from({ length: 4 }, () => piece('neutral', 'BEHAVIOR', 1)),
+    );
     const halfNeutral = computeConfidence([
       piece('positive', 'BEHAVIOR', 1),
       piece('positive', 'BEHAVIOR', 1),
@@ -277,8 +298,12 @@ describe('journal math', () => {
   });
 
   it('polarity: majority, minority conflict, and neutral', () => {
-    expect(computePolarity([piece('positive', 'BEHAVIOR', 1), piece('positive', 'BEHAVIOR', 1)])).toBe('positive');
-    expect(computePolarity([piece('negative', 'BEHAVIOR', 1), piece('negative', 'BEHAVIOR', 1)])).toBe('negative');
+    expect(
+      computePolarity([piece('positive', 'BEHAVIOR', 1), piece('positive', 'BEHAVIOR', 1)]),
+    ).toBe('positive');
+    expect(
+      computePolarity([piece('negative', 'BEHAVIOR', 1), piece('negative', 'BEHAVIOR', 1)]),
+    ).toBe('negative');
     expect(
       computePolarity([piece('positive', 'BEHAVIOR', 1), piece('negative', 'BEHAVIOR', 1)]),
     ).toBe('mixed');
@@ -292,7 +317,9 @@ describe('journal math', () => {
     const three = Array.from({ length: 3 }, () => piece('positive', 'BEHAVIOR', 1));
     expect(computeStatus(three, 0.82)).toBe('ESTABLISHED');
 
-    const threeExplicit = Array.from({ length: 3 }, () => piece('positive', 'EXPLICIT_FEEDBACK', 1.5));
+    const threeExplicit = Array.from({ length: 3 }, () =>
+      piece('positive', 'EXPLICIT_FEEDBACK', 1.5),
+    );
     expect(computeStatus(threeExplicit, 0.82)).toBe('EXPLICIT');
   });
 
@@ -325,7 +352,12 @@ describe('PreferenceAggregationService.buildLandscape', () => {
 
   it('caps patterns at 5, ranks by confidence, positive only', () => {
     const signals = Array.from({ length: 8 }, (_, i) =>
-      signal({ value: `ing${i}`, status: 'ESTABLISHED', confidence: 0.5 + i / 20, polarity: 'positive' }),
+      signal({
+        value: `ing${i}`,
+        status: 'ESTABLISHED',
+        confidence: 0.5 + i / 20,
+        polarity: 'positive',
+      }),
     );
     const landscape = agg.buildLandscape('u', signals);
     expect(landscape.patterns).toHaveLength(5);
@@ -381,8 +413,20 @@ describe('ContextualPatternService', () => {
         value: 'spice',
         status: 'CONTEXTUAL',
         contexts: [
-          { contextType: 'cuisine', contextValue: 'mexican', count: 3, share: 0.5, polarity: 'positive' },
-          { contextType: 'cuisine', contextValue: 'italian', count: 3, share: 0.5, polarity: 'negative' },
+          {
+            contextType: 'cuisine',
+            contextValue: 'mexican',
+            count: 3,
+            share: 0.5,
+            polarity: 'positive',
+          },
+          {
+            contextType: 'cuisine',
+            contextValue: 'italian',
+            count: 3,
+            share: 0.5,
+            polarity: 'negative',
+          },
         ],
       }),
     ]);
@@ -396,7 +440,13 @@ describe('ContextualPatternService', () => {
         value: 'sweet',
         status: 'CONTEXTUAL',
         contexts: [
-          { contextType: 'cuisine', contextValue: 'mexican', count: 2, share: 1, polarity: 'positive' },
+          {
+            contextType: 'cuisine',
+            contextValue: 'mexican',
+            count: 2,
+            share: 1,
+            polarity: 'positive',
+          },
         ],
       }),
     ]);
@@ -420,7 +470,12 @@ describe('TasteInsightService templates', () => {
   });
 
   it('same evidence produces identical copy (determinism)', () => {
-    const s = signal({ value: 'tangy', status: 'ESTABLISHED', confidence: 0.8, polarity: 'positive' });
+    const s = signal({
+      value: 'tangy',
+      status: 'ESTABLISHED',
+      confidence: 0.8,
+      polarity: 'positive',
+    });
     const a = insights.renderPattern(s);
     const b = insights.renderPattern(s);
     expect(a).toEqual(b);
@@ -435,7 +490,12 @@ describe('TasteInsightService templates', () => {
   });
 
   it('an insight card must not carry a fake percentage', () => {
-    const s = signal({ value: 'olives', status: 'ESTABLISHED', confidence: 0.71, polarity: 'positive' });
+    const s = signal({
+      value: 'olives',
+      status: 'ESTABLISHED',
+      confidence: 0.71,
+      polarity: 'positive',
+    });
     const body = insights.renderPattern(s).body;
     expect(body).not.toMatch(/\d+%/);
   });
@@ -467,7 +527,8 @@ describe('TasteJournalService pipeline', () => {
           value: ingredient,
           polarity,
           source,
-          sourceLabel: source === 'EXPLICIT_FEEDBACK' ? 'How you rated a rescue' : 'Your rescue choice',
+          sourceLabel:
+            source === 'EXPLICIT_FEEDBACK' ? 'How you rated a rescue' : 'Your rescue choice',
           sourceEventKey: `test:${ingredient}:${i}`,
         }),
       );
@@ -480,7 +541,12 @@ describe('TasteJournalService pipeline', () => {
   });
 
   it('three explicit ratings make an ESTABLISHED pattern', async () => {
-    await addLive({ ingredient: 'kale', count: 3, polarity: 'positive', source: 'EXPLICIT_FEEDBACK' });
+    await addLive({
+      ingredient: 'kale',
+      count: 3,
+      polarity: 'positive',
+      source: 'EXPLICIT_FEEDBACK',
+    });
     const journalOf = await journal.getJournal(u);
     const kale = journalOf.patterns.find((p) => p.value === 'kale');
     expect(kale).toBeDefined();
@@ -578,7 +644,9 @@ describe('TasteJournalService pipeline', () => {
     await addLive({ ingredient: 'cilantro', count: 3, polarity: 'negative' });
     let journalOf = await journal.getJournal(u);
     expect(
-      journalOf.boundaries.find((b) => b.group === 'USUALLY_AVOID')!.items.some((i) => i.value === 'cilantro'),
+      journalOf.boundaries
+        .find((b) => b.group === 'USUALLY_AVOID')!
+        .items.some((i) => i.value === 'cilantro'),
     ).toBe(true);
 
     await journal.override(u, 'STRAND:ingredient:cilantro', { action: 'DISMISS' });
@@ -596,7 +664,9 @@ describe('TasteJournalService pipeline', () => {
 
     const forgottenJournal = await journal.getJournal(u);
     expect(
-      forgottenJournal.boundaries.find((b) => b.group === 'USUALLY_AVOID')!.items.some((i) => i.value === 'tripe'),
+      forgottenJournal.boundaries
+        .find((b) => b.group === 'USUALLY_AVOID')!
+        .items.some((i) => i.value === 'tripe'),
     ).toBe(false);
     expect(forgottenJournal.patterns.some((i) => i.value === 'tripe')).toBe(false);
 
@@ -639,7 +709,12 @@ describe('TasteJournalService pipeline', () => {
   });
 
   it('evidence trail is raw and attributable', async () => {
-    await addLive({ ingredient: 'basil', count: 2, polarity: 'positive', source: 'EXPLICIT_FEEDBACK' });
+    await addLive({
+      ingredient: 'basil',
+      count: 2,
+      polarity: 'positive',
+      source: 'EXPLICIT_FEEDBACK',
+    });
     const detail = await journal.getEvidence(u, 'STRAND:ingredient:basil');
     expect(detail.evidence).toHaveLength(2);
     for (const e of detail.evidence) {

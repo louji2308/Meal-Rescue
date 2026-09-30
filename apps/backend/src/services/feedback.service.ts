@@ -4,6 +4,7 @@ import type { FeedbackRequest, FeedbackResponse, UUID } from '@meal-rescue/share
 
 import type { Db } from '../database/models';
 import { AppError, ErrorCategory } from '../lib/errors';
+import { FeedbackJournalService } from './feedback-journal.service';
 import { PreferenceLearningService } from './preference-learning.service';
 import { TasteEventService } from './taste-event.service';
 import { TasteJournalService } from './taste-journal/taste-journal.service';
@@ -28,6 +29,7 @@ export class FeedbackService {
   private readonly tasteSensory: TasteSensoryService;
   private readonly tasteTreatment: TasteTreatmentService;
   private readonly tasteJournal: TasteJournalService;
+  private readonly feedbackJournal: FeedbackJournalService;
 
   constructor(
     models: Db['models'],
@@ -42,6 +44,7 @@ export class FeedbackService {
     this.tasteSensory = tasteSensory;
     this.tasteTreatment = tasteTreatment;
     this.tasteJournal = new TasteJournalService(models);
+    this.feedbackJournal = new FeedbackJournalService(models);
   }
 
   async submitFeedback(
@@ -253,10 +256,24 @@ export class FeedbackService {
       );
     }
 
+    // --- Editorial journal note (feedback -> Taste Journal) ---
+    // Uses what the user SAW when the client passed journalContext (the demo
+    // flow diverges from the stored row), else derives it from the rescue.
+    // Never throws: a successful submit is never failed by the note writer.
+    const journalNote = await this.feedbackJournal.generate({
+      userId,
+      rescueId,
+      context: payload.journalContext,
+      rescue,
+      satisfaction,
+      feedbackText,
+    });
+
     return {
       success: true,
       personalizationUpdated: insights.length > 0,
       insights,
+      ...(journalNote ? { journalNote } : {}),
     };
   }
 }

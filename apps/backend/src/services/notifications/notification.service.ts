@@ -108,6 +108,12 @@ export interface SendPushInput {
   buttons?: PushButton[];
   /** Extra client-read keys, e.g. rescueId for action-button feedback. */
   data?: Record<string, unknown>;
+  /**
+   * Bypass quiet hours, snooze and the once-per-kind-per-day ledger.
+   * Reserved for user-initiated immediate sends (the "Do this" aftercare
+   * check-in); schedulers never set it so anti-fatigue stays intact.
+   */
+  force?: boolean;
 }
 
 function logLine(level: 'info' | 'warn' | 'error', payload: Record<string, unknown>): void {
@@ -130,15 +136,17 @@ function logLine(level: 'info' | 'warn' | 'error', payload: Record<string, unkno
  * can still fire after quiet hours end... once per local day max.
  */
 export async function sendToUser(input: SendPushInput): Promise<PushOutcome> {
-  const { user, kind, title, body, deepLink, buttons, data } = input;
+  const { user, kind, title, body, deepLink, buttons, data, force } = input;
   const tz = user.tzOffsetMinutes ?? 0;
   const dayKey = localDayKey(tz);
 
-  if (isQuietHours(user)) return 'skipped_quiet';
+  if (!force) {
+    if (isQuietHours(user)) return 'skipped_quiet';
 
-  const row = await NotificationLog.findOne({ where: { userId: user.id, kind, dayKey } });
-  if (row?.suppressedUntil && row.suppressedUntil.getTime() > Date.now()) return 'snoozed';
-  if (row) return 'deduped';
+    const row = await NotificationLog.findOne({ where: { userId: user.id, kind, dayKey } });
+    if (row?.suppressedUntil && row.suppressedUntil.getTime() > Date.now()) return 'snoozed';
+    if (row) return 'deduped';
+  }
 
   const enabled = Boolean(env.ONESIGNAL_REST_KEY && env.ONESIGNAL_APP_ID);
   let outcome: PushOutcome = enabled ? 'sent' : 'dry_run';

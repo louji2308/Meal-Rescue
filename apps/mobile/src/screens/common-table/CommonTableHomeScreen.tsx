@@ -17,14 +17,17 @@ import { AppImage, prefetchImages } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { LockIcon, PlusIcon } from '../../components/icons';
 import { FadeInView } from '../../components/motion/FadeInView';
 import { Pressable } from '../../components/motion/Pressable';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { getSharedMeal, startCooking as startCookingApi } from '../../services/common-table.api';
 import { loadPeoplePhotos } from '../../services/people-photos';
-import { useCommonTableStore } from '../../stores/common-table.store';
-import { colors, fonts, spacing } from '../../theme';
+import { FREE_ADDED_MEMBERS, useCommonTableStore } from '../../stores/common-table.store';
+import { useMonetization } from '../../stores/monetization.store';
+import { colors, fonts, radius, spacing } from '../../theme';
 
 /**
  * Common Table home — one unified "Your Table" screen.
@@ -94,6 +97,8 @@ function MemberRow({
 
 export function CommonTableHomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const isPro = useMonetization((s) => s.isPro);
   const household = useCommonTableStore((s) => s.household);
   const members = useCommonTableStore((s) => s.members);
   const selected = useCommonTableStore((s) => s.selectedMemberIds);
@@ -179,6 +184,22 @@ export function CommonTableHomeScreen() {
   const activeMembers = members.filter((m) => m.active);
   const activeSorted = [...activeMembers].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
   const hasTable = activeMembers.length > 0;
+
+  // Free tier: the table starts with you, ONE more person is free - after
+  // that the add button becomes a lock that opens the paywall.
+  const hasOwner = members.some((m) => m.isOwner);
+  const addedPeople = hasOwner
+    ? members.filter((m) => !m.isOwner).length
+    : Math.max(0, members.length - 1);
+  const addLocked = !isPro && addedPeople >= FREE_ADDED_MEMBERS;
+
+  function handleAddSomeone() {
+    if (addLocked) {
+      rootNavigation.navigate('Paywall', { minimal: true });
+      return;
+    }
+    navigation.navigate('AddPeople');
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -279,14 +300,29 @@ export function CommonTableHomeScreen() {
               />
 
               <Pressable
-                onPress={() => navigation.navigate('AddPeople')}
-                style={styles.addSomeoneButton}
+                onPress={handleAddSomeone}
                 accessibilityRole="button"
+                accessibilityLabel={
+                  addLocked ? 'Subscribe to add more people to your table' : 'Add someone'
+                }
+                style={[styles.addSomeoneCta, addLocked && styles.addSomeoneCtaLocked]}
+                tintBorderRadius={999}
               >
-                <View style={styles.addCircle}>
-                  <Ionicons name="add-outline" size={18} color={colors.text} />
+                <View style={styles.addSomeoneRow}>
+                  {addLocked ? (
+                    <LockIcon size={18} color={colors.surface} strokeWidth={1.7} />
+                  ) : (
+                    <PlusIcon size={18} color={colors.surface} strokeWidth={1.7} />
+                  )}
+                  <Text style={styles.addSomeoneLabel}>
+                    {addLocked ? 'Subscribe to add more people' : 'Add someone'}
+                  </Text>
+                  {addLocked ? (
+                    <View style={styles.proBadge}>
+                      <Text style={styles.proBadgeText}>PRO</Text>
+                    </View>
+                  ) : null}
                 </View>
-                <Text style={styles.addSomeoneText}>Add someone</Text>
               </Pressable>
             </>
           ) : (
@@ -493,27 +529,46 @@ const styles = StyleSheet.create({
   },
 
   // ── Add someone ─────────────────────────────────────────
-  addSomeoneButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  addSomeoneCta: {
     marginTop: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  addCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.border,
+    alignSelf: 'center',
+    width: '100%',
+    minHeight: 50,
+    borderRadius: radius.pill,
+    backgroundColor: colors.homeButton,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  addSomeoneText: {
-    fontSize: 14,
+  addSomeoneCtaLocked: {
+    minHeight: 62,
+    paddingVertical: 18,
+    backgroundColor: colors.softAlert,
+  },
+  addSomeoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  addSomeoneLabel: {
+    fontSize: 15,
     fontWeight: '600',
-    color: colors.text,
+    fontFamily: fonts.semiBold,
+    color: colors.surface,
+  },
+  proBadge: {
+    backgroundColor: colors.borderStrong,
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  proBadgeText: {
+    color: colors.softAlert,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
 
   // ── Empty state ─────────────────────────────────────────

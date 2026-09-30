@@ -167,7 +167,7 @@ describe('aftercare copy model validation', () => {
 describe('aftercare buttons', () => {
   it('are exactly the three fixed answers with fitting ids', () => {
     expect(AFTERCARE_BUTTONS).toEqual([
-      { id: 'loved_it', text: 'Loved the change.' },
+      { id: 'loved_it', text: 'Loved it!' },
       { id: 'was_ok', text: 'It worked.' },
       { id: 'not_great', text: 'Not really.' },
     ]);

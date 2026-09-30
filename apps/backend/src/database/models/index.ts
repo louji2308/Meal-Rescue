@@ -2,6 +2,7 @@ import { Sequelize } from 'sequelize';
 
 import { AdditionEvent, defineAdditionEventModel } from './addition-event.model';
 import { DecisionEvent, defineDecisionEventModel } from './decision-event.model';
+import { FeedbackJournalNote, defineFeedbackJournalNoteModel } from './feedback-journal-note.model';
 import { Feedback, defineFeedbackModel } from './feedback.model';
 import { HouseholdMember, defineHouseholdMemberModel } from './household-member.model';
 import { HouseholdPreference, defineHouseholdPreferenceModel } from './household-preference.model';
@@ -76,6 +77,7 @@ export interface DbModels {
   TasteSignalEvidence: typeof TasteSignalEvidence;
   TasteInsightOverride: typeof TasteInsightOverride;
   TasteJournalMeta: typeof TasteJournalMeta;
+  FeedbackJournalNote: typeof FeedbackJournalNote;
   AdditionEvent: typeof AdditionEvent;
   SatisfactionRecord: typeof SatisfactionRecordModel;
   DecisionEvent: typeof DecisionEvent;
@@ -124,6 +126,7 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     TasteSignalEvidence: defineTasteSignalEvidenceModel(sequelize),
     TasteInsightOverride: defineTasteInsightOverrideModel(sequelize),
     TasteJournalMeta: defineTasteJournalMetaModel(sequelize),
+    FeedbackJournalNote: defineFeedbackJournalNoteModel(sequelize),
     AdditionEvent: defineAdditionEventModel(sequelize),
     SatisfactionRecord: defineSatisfactionRecordModel(sequelize),
     DecisionEvent: defineDecisionEventModel(sequelize),
@@ -249,6 +252,13 @@ export function initializeModels(sequelize: Sequelize): DbModels {
     foreignKey: { name: 'userId', allowNull: false },
   });
   models.TasteJournalMeta.belongsTo(models.User, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+
+  models.User.hasMany(models.FeedbackJournalNote, {
+    foreignKey: { name: 'userId', allowNull: false },
+  });
+  models.FeedbackJournalNote.belongsTo(models.User, {
     foreignKey: { name: 'userId', allowNull: false },
   });
 
@@ -439,6 +449,7 @@ export const dbModels = {
   TasteSignalEvidence,
   TasteInsightOverride,
   TasteJournalMeta,
+  FeedbackJournalNote,
   AdditionEvent,
   SatisfactionRecord: SatisfactionRecordModel,
   DecisionEvent,

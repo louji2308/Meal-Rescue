@@ -14,7 +14,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { MealAnalysisResponse, RescueGenerateResponse } from '@meal-rescue/shared-types';
+import type {
+  FeedbackJournalContext,
+  MealAnalysisResponse,
+  RescueGenerateResponse,
+} from '@meal-rescue/shared-types';
 
 import {
   SatisfactionCheckinParams,
@@ -246,7 +250,12 @@ export type HomeStackParamList = {
   Craving: { mealId: string; foods: string[] };
   RescueLoading: { mealId: string; foods: string[] };
   RescueResult: { result: RescueGenerateResponse; rescueId?: string };
-  Feedback: { rescueId: string; recommendation: string };
+  Feedback: {
+    rescueId: string;
+    recommendation: string;
+    /** What the user actually saw - grounds the AI journal note writer. */
+    journalContext?: FeedbackJournalContext;
+  };
   Notifications: undefined;
   [SATISFACTION_ROUTE]: SatisfactionCheckinParams;
 };
@@ -271,7 +280,8 @@ const RootStack = createNativeStackNavigator<RootStackParamList>();
 export type RootStackParamList = {
   Tabs: undefined;
   Onboarding: undefined;
-  Paywall: undefined;
+  /** `minimal: true` renders the copy-free paywall (cat + buttons only). */
+  Paywall: { minimal?: boolean } | undefined;
   TasteJournal: undefined;
   CommonTableStack: undefined;
 };
@@ -416,11 +426,22 @@ export function AppNavigator() {
     <NavigationContainer ref={navigationRef}>
       {token ? (
         <RootStack.Navigator
-          screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade_from_bottom',
+            animationDuration: 300,
+            contentStyle: { backgroundColor: colors.background },
+          }}
           initialRouteName={needsOnboarding ? 'Onboarding' : 'Tabs'}
         >
-          <RootStack.Screen name="Tabs">{() => <AuthenticatedTabs />}</RootStack.Screen>
-          <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
+          <RootStack.Screen name="Tabs" options={{ animation: 'fade', animationDuration: 220 }}>
+            {() => <AuthenticatedTabs />}
+          </RootStack.Screen>
+          <RootStack.Screen
+            name="Onboarding"
+            component={OnboardingScreen}
+            options={{ animation: 'fade', animationDuration: 220 }}
+          />
           <RootStack.Screen
             name="Paywall"
             component={PaywallScreen}

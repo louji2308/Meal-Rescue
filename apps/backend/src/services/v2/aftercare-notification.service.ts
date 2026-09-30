@@ -46,7 +46,7 @@ export const PUSH_BODY_MAX = 90;
  * answer (loved_it -> better, was_ok -> same, not_great -> not_for_me).
  */
 export const AFTERCARE_BUTTONS: PushButton[] = [
-  { id: 'loved_it', text: 'Loved the change.' },
+  { id: 'loved_it', text: 'Loved it!' },
   { id: 'was_ok', text: 'It worked.' },
   { id: 'not_great', text: 'Not really.' },
 ];
@@ -207,11 +207,18 @@ export type AftercareSendResult =
  * eligibility service defines (MEAL_COMPLETED, one push per rescue,
  * cooldown, FEEDBACK_DISABLED) plus the sendToUser governance gate.
  * Never throws.
+ *
+ * `opts.immediate` is the user-initiated path (client fires it right after
+ * the "Do this" commit): it skips the 30-minute cooldown and forces past
+ * quiet hours/snooze/day-dedupe so the demo always lands in seconds. The
+ * one-push-per-rescue ledger still applies, so the hourly cron never
+ * double-sends.
  */
 export async function sendAftercareForRescue(
   models: Pick<DbModels, 'Rescue' | 'User' | 'DecisionEvent'>,
   rescueId: UUID,
   now: Date = new Date(),
+  opts: { immediate?: boolean } = {},
 ): Promise<AftercareSendResult> {
   const rescue = await models.Rescue.findByPk(rescueId, {
     attributes: ['id', 'userId', 'originalMeal', 'detectedIngredients', 'selectedRecommendation'],
@@ -233,7 +240,7 @@ export async function sendAftercareForRescue(
   const completedAt = completion?.createdAt
     ? new Date(completion.createdAt).getTime()
     : ((rescue as unknown as { createdAt: Date }).createdAt?.getTime() ?? Date.now());
-  if (now.getTime() - completedAt < AFTERCARE_COOLDOWN_MS) {
+  if (!opts.immediate && now.getTime() - completedAt < AFTERCARE_COOLDOWN_MS) {
     return { outcome: 'skipped', reason: 'COOLDOWN' };
   }
 
@@ -248,6 +255,7 @@ export async function sendAftercareForRescue(
     deepLink: AFTERCARE_DEEP_LINK,
     buttons: AFTERCARE_BUTTONS,
     data: { rescueId, recommendation: ctx.change ?? ctx.dish },
+    force: opts.immediate,
   });
 
   if (outcome === 'sent' || outcome === 'dry_run') {

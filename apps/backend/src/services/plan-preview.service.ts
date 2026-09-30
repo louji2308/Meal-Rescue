@@ -27,6 +27,8 @@ export interface PlannedMeal {
 export interface PlannedDay {
   dateKey: string;
   meals: PlannedMeal[];
+  /** Pro teaser day — rendered locked/greyed, never persisted on confirm. */
+  locked: boolean;
 }
 
 export interface PlanPreview {
@@ -64,7 +66,13 @@ export interface PlanLimitInfo {
 export class PlanPreviewService {
   private static readonly PREVIEW_TTL_MS = 15 * 60 * 1000; // 15 minutes
   private static readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-  private static readonly FREE_PLAN_DAY_LIMIT = 3;
+  /**
+   * Free tier allowance: ONE accepted plan day, for the life of the account.
+   * Every preview shows up to 3 days, but only the first is free — the rest
+   * are locked as a Pro teaser and never persisted. `planDaysUsed` never
+   * resets, so a free user cannot re-plan day after day.
+   */
+  private static readonly FREE_PLAN_DAY_LIMIT = 1;
 
   private readonly store = new Map<string, PlanPreview>();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -124,17 +132,31 @@ export class PlanPreviewService {
   }
 
   /**
-   * Generate a plan preview and store it temporarily
+   * Generate a plan preview and store it temporarily.
+   *
+   * Applies the free/Pro lock policy here so every caller (AI planner and the
+   * deterministic engine) gets identical behaviour: Pro sees all days
+   * unlocked, free plans the FIRST day and the rest come back `locked: true`
+   * (greyed lock + Pro badge in the UI, never written on confirm).
    */
   async generatePreview(
     userId: UUID,
-    planningResult: { days: PlannedDay[]; daysPlanned: number },
+    planningResult: { days: PlannedDay[] },
   ): Promise<PlanPreviewResponse> {
     const previewId = randomUUID() as UUID;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + PlanPreviewService.PREVIEW_TTL_MS);
 
-    const days = planningResult.days;
+    const limitInfo = await this.checkPlanLimit(userId);
+
+    // Pro unlocks EVERY day of the preview; free unlocks only the first one
+    // (and none at all once the one-time allowance is spent).
+    const isPro = limitInfo.tier === 'pro';
+    const canPlanFirstDay = isPro || limitInfo.daysRemaining > 0;
+    const days: PlannedDay[] = planningResult.days.map((day, index) => ({
+      ...day,
+      locked: isPro ? false : !canPlanFirstDay || index > 0,
+    }));
 
     const preview: PlanPreview = {
       id: previewId,
@@ -147,14 +169,13 @@ export class PlanPreviewService {
 
     this.store.set(previewId, preview);
 
-    // Get current limit info
-    const limitInfo = await this.checkPlanLimit(userId);
-
-    const daysPlanned = planningResult.daysPlanned;
-    const requiresPayment = limitInfo.tier === 'free' && limitInfo.daysRemaining < daysPlanned;
+    const unlockedCount = days.filter((day) => !day.locked).length;
+    const requiresPayment = days.length > 0 && unlockedCount === 0;
     const message = requiresPayment
-      ? 'Free plan limit exceeded. Upgrade to Pro to confirm this plan.'
-      : 'Plan preview generated. Review and confirm to save.';
+      ? "You've used your free plan day. Upgrade to Pro to keep planning."
+      : unlockedCount < days.length
+        ? 'Day 1 is ready — the rest of your plan unlocks with Pro.'
+        : 'Plan preview generated. Review and confirm to save.';
 
     return {
       previewId,
@@ -200,11 +221,14 @@ export class PlanPreviewService {
       throw AppError.notFound('Plan preview');
     }
 
+    // Locked days are a teaser only — they are NEVER persisted.
+    const unlockedDays = preview.days.filter((day) => !day.locked);
+
     // Check plan limit before confirming
     const limitInfo = await this.checkPlanLimit(preview.userId);
 
-    const daysCount = preview.days.length;
-    if (limitInfo.daysRemaining < daysCount && limitInfo.tier === 'free') {
+    const daysCount = unlockedDays.length;
+    if (daysCount === 0 || (limitInfo.daysRemaining < daysCount && limitInfo.tier === 'free')) {
       throw new AppError({
         category: ErrorCategory.FORBIDDEN,
         code: 'PLAN_LIMIT_EXCEEDED',
@@ -237,8 +261,8 @@ export class PlanPreviewService {
 
     const householdId = household.id;
 
-    // Determine weekStart from the first day
-    const weekStart = preview.days[0]?.dateKey;
+    // Determine weekStart from the first unlocked day
+    const weekStart = unlockedDays[0]?.dateKey;
     if (!weekStart) {
       throw new AppError({
         category: ErrorCategory.INPUT_VALIDATION,
@@ -276,8 +300,9 @@ export class PlanPreviewService {
       createdAt: new Date(),
     });
 
-    // Create MealEvent rows for each meal
-    for (const day of preview.days) {
+    // Create MealEvent rows for each unlocked meal (locked days stay out of
+    // the database entirely — they exist only as the Pro teaser).
+    for (const day of unlockedDays) {
       for (const meal of day.meals) {
         await MealEvent.create({
           id: meal.id,

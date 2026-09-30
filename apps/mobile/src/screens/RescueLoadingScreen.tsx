@@ -2,21 +2,22 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text } from '../components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RescueGenerateResponse } from '@meal-rescue/shared-types';
 
+import { Text } from '../components/AppText';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
 import { WaveLoading } from '../components/WaveLoading';
+import { RescueFuelSheet } from '../components/ads/RescueFuelSheet';
 import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList, RootStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { generateRescueV2 } from '../services/rescue.api';
 import { useAuthStore } from '../stores/auth.store';
 import { useDecisionStore } from '../stores/decision.store';
+import { usePaywallContext } from '../stores/paywall-context.store';
 import { colors, spacing, typography } from '../theme';
 
 /**
@@ -54,7 +55,7 @@ export function RescueLoadingScreen({
       return result;
     } catch (err) {
       const apiErr = toApiError(err);
-      if (apiErr.code === 'DAILY_RESCUE_LIMIT') {
+      if (apiErr.code === 'RESCUE_LIMIT') {
         setFuelVisible(true);
       } else {
         setError(apiErr);
@@ -105,7 +106,12 @@ export function RescueLoadingScreen({
           navigation.replace('RescueResult', { result, rescueId: result.rescueId });
           reset();
         }}
-        onGoPro={() => rootNavigation.navigate('Paywall')}
+        onGoPro={() => {
+          // Mid-rescue upgrade is not a plan unlock — clear any plan context
+          // so the teaser greets them with their loved rescue instead.
+          usePaywallContext.getState().clearPlan();
+          rootNavigation.navigate('Paywall');
+        }}
       />
     </SafeAreaView>
   );

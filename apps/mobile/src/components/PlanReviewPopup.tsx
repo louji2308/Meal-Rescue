@@ -10,12 +10,13 @@ import Animated, {
 import type { AiPlannerQuestion, PlanPreviewResponse } from '@meal-rescue/shared-types';
 
 import type { ApiError } from '../services/api';
-import { colors, spacing, typography } from '../theme';
+import { colors, fonts, radius, spacing, typography } from '../theme';
 import { spring } from '../theme/motion';
 import { Text } from './AppText';
 import { ErrorBanner } from './ErrorBanner';
 import { PrimaryButton } from './PrimaryButton';
-import { XIcon } from './icons';
+import { ChevronRightIcon, LockIcon, XIcon } from './icons';
+import { Pressable as MotionPressable } from './motion/Pressable';
 
 interface PlanReviewPopupProps {
   visible: boolean;
@@ -49,7 +50,7 @@ export function PlanReviewPopup({
   useEffect(() => {
     if (visible) {
       scale.value = withSpring(1, spring.gentle);
-      overlayOpacity.value = withTiming(0.5, { duration: 200 });
+      overlayOpacity.value = withTiming(1, { duration: 200 });
     } else {
       scale.value = withSpring(0.8, spring.gentle);
       overlayOpacity.value = withTiming(0, { duration: 150 });
@@ -85,6 +86,13 @@ export function PlanReviewPopup({
   const formatSlot = (slot: string) => {
     return slot.charAt(0).toUpperCase() + slot.slice(1);
   };
+
+  const dayLabel = (dateKey: string) =>
+    new Date(dateKey).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
 
   const animatedOverlay = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
@@ -164,33 +172,56 @@ export function PlanReviewPopup({
                 )}
 
                 <View style={styles.mealsSection}>
-                  {preview.days.map((day) => (
-                    <View key={day.dateKey} style={styles.dayCard}>
-                      <Text style={styles.dayHeader}>
-                        {new Date(day.dateKey).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </Text>
-                      {day.meals.map((meal) => (
-                        <View key={meal.id} style={styles.mealRow}>
-                          <View style={styles.mealSlot}>
-                            <Text style={styles.mealSlotLabel}>{formatSlot(meal.mealSlot)}</Text>
-                          </View>
-                          <View style={styles.mealInfo}>
-                            <Text style={styles.mealConcept}>{meal.name || meal.recipeName}</Text>
-                            {meal.ingredients && meal.ingredients.length > 0 && (
-                              <Text style={styles.mealReason}>
-                                {meal.ingredients.slice(0, 3).join(', ')}
-                                {meal.ingredients.length > 3 ? '...' : ''}
-                              </Text>
-                            )}
+                  {preview.days.map((day) =>
+                    day.locked ? (
+                      <MotionPressable
+                        key={day.dateKey}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Unlock ${dayLabel(day.dateKey)} with Pro`}
+                        tintBorderRadius={12}
+                        pressedTintColor={colors.text}
+                        onPress={onUpgrade}
+                        disabled={busy}
+                        style={styles.lockedDayCard}
+                      >
+                        <View style={styles.lockedDayHeader}>
+                          <LockIcon size={15} strokeWidth={1.4} color={colors.textSecondary} />
+                          <Text style={styles.lockedDayDate}>{dayLabel(day.dateKey)}</Text>
+                          <View style={styles.proBadge}>
+                            <Text style={styles.proBadgeText}>Pro</Text>
                           </View>
                         </View>
-                      ))}
-                    </View>
-                  ))}
+                        <View style={styles.unlockRow}>
+                          <Text style={styles.unlockText}>Unlock Pro</Text>
+                          <ChevronRightIcon
+                            size={14}
+                            strokeWidth={1.6}
+                            color={colors.textPrimary}
+                          />
+                        </View>
+                      </MotionPressable>
+                    ) : (
+                      <View key={day.dateKey} style={styles.dayCard}>
+                        <Text style={styles.dayHeader}>{dayLabel(day.dateKey)}</Text>
+                        {day.meals.map((meal) => (
+                          <View key={meal.id} style={styles.mealRow}>
+                            <View style={styles.mealSlot}>
+                              <Text style={styles.mealSlotLabel}>{formatSlot(meal.mealSlot)}</Text>
+                            </View>
+                            <View style={styles.mealInfo}>
+                              <Text style={styles.mealConcept}>{meal.name || meal.recipeName}</Text>
+                              {meal.ingredients && meal.ingredients.length > 0 && (
+                                <Text style={styles.mealReason}>
+                                  {meal.ingredients.slice(0, 3).join(', ')}
+                                  {meal.ingredients.length > 3 ? '...' : ''}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ),
+                  )}
                 </View>
               </>
             ) : null}
@@ -218,8 +249,9 @@ export function PlanReviewPopup({
                   onPress={handleSend}
                   variant="primary"
                   busy={busy}
-                  disabled={busy || !editText.trim()}
-                  style={styles.sendButton}
+                  disabled={busy}
+                  busyBackgroundColor={colors.borderStrong}
+                  style={[styles.sendButton, styles.sendButtonBlack]}
                 />
               </View>
             </View>
@@ -273,7 +305,7 @@ export function PlanReviewPopup({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -386,6 +418,52 @@ const styles = StyleSheet.create({
     color: colors.mealPlanInk,
     marginBottom: spacing.sm,
   },
+  lockedDayCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  lockedDayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  lockedDayDate: {
+    ...typography.mealPlanSection,
+    color: colors.textSecondary,
+    flex: 1,
+    opacity: 0.7,
+  },
+  proBadge: {
+    backgroundColor: colors.softAlert,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  proBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  unlockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.sm,
+  },
+  unlockText: {
+    ...typography.mealPlanCaption,
+    fontFamily: fonts.semiBold,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
   mealRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -443,6 +521,9 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     minWidth: 88,
+  },
+  sendButtonBlack: {
+    backgroundColor: colors.softAlert,
   },
   buttonRow: {
     flexDirection: 'row',

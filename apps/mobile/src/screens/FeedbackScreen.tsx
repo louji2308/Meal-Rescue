@@ -20,7 +20,8 @@ import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { toApiError } from '../services/api';
 import { submitFeedback } from '../services/feedback.api';
 import { haptics } from '../services/haptics';
-import { colors, spacing, typography } from '../theme';
+import { useRescuesStore } from '../stores/rescues.store';
+import { colors, fonts, spacing, typography } from '../theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -71,7 +72,7 @@ function AnimatedOption({
 export function FeedbackScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const route = useRoute<RouteProp<HomeStackParamList, 'Feedback'>>();
-  const { rescueId } = route.params;
+  const { rescueId, recommendation, journalContext } = route.params;
 
   const [satisfaction, setSatisfaction] = useState<FeedbackRequest['satisfaction'] | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
@@ -79,6 +80,7 @@ export function FeedbackScreen() {
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const [journalNote, setJournalNote] = useState<{ title: string; body: string } | null>(null);
 
   const options: Array<{
     value: FeedbackRequest['satisfaction'];
@@ -96,11 +98,24 @@ export function FeedbackScreen() {
     setError(null);
     setBusy(true);
     try {
-      await submitFeedback(rescueId, {
+      const response = await submitFeedback(rescueId, {
         satisfaction,
         feedbackText: feedbackText.trim() || undefined,
         outcome: { completed: true },
+        ...(journalContext ? { journalContext } : {}),
       });
+
+      const note: { title: string; body: string } | null = response.journalNote
+        ? { title: response.journalNote.title, body: response.journalNote.body }
+        : null;
+      setJournalNote(note);
+
+      // "Better" is the love signal — remember this rescue so the paywall can
+      // greet Profile → Upgrade with copy about the rescue they actually loved.
+      if (satisfaction === 'better') {
+        useRescuesStore.getState().markLoved(rescueId, recommendation);
+      }
+
       haptics.success();
       setSubmitted(true);
       setConfettiTrigger((t) => t + 1);
@@ -113,12 +128,16 @@ export function FeedbackScreen() {
 
   useEffect(() => {
     if (submitted) {
-      const timer = setTimeout(() => {
-        navigation.popToTop();
-      }, 1200);
+      // Give the note a beat to be read before returning home.
+      const timer = setTimeout(
+        () => {
+          navigation.popToTop();
+        },
+        journalNote ? 4000 : 1200,
+      );
       return () => clearTimeout(timer);
     }
-  }, [submitted, navigation]);
+  }, [submitted, navigation, journalNote]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -130,8 +149,20 @@ export function FeedbackScreen() {
           <View style={styles.successContainer}>
             <ConfettiBurst trigger={confettiTrigger} />
             <FadeInView>
-              <Ionicons name="checkmark-circle" size={80} color={colors.primary} />
+              <Ionicons
+                name="checkmark-circle"
+                size={80}
+                color={colors.primary}
+                style={styles.successIcon}
+              />
               <Text style={styles.successText}>Thanks!</Text>
+              {journalNote ? (
+                <View style={styles.noteCard}>
+                  <Text style={styles.noteEyebrow}>Now in your Taste Journal</Text>
+                  <Text style={styles.noteTitle}>{journalNote.title}</Text>
+                  <Text style={styles.noteBody}>{journalNote.body}</Text>
+                </View>
+              ) : null}
             </FadeInView>
           </View>
         ) : (
@@ -276,11 +307,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  successIcon: {
+    alignSelf: 'center',
+  },
   successText: {
     marginTop: spacing.md,
     fontSize: 24,
     fontWeight: '600',
     color: colors.primary,
     textAlign: 'center',
+  },
+  noteCard: {
+    marginTop: spacing.xl,
+    marginHorizontal: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: 300,
+  },
+  noteEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  noteTitle: {
+    fontFamily: fonts.serifDisplay,
+    fontSize: 17,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  noteBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
   },
 });

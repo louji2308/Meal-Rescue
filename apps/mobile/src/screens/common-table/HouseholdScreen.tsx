@@ -7,14 +7,16 @@ import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { AppImage, prefetchImages } from '../../components/AppImage';
 import { Text } from '../../components/AppText';
 import { ErrorBanner } from '../../components/ErrorBanner';
-import { PrimaryButton } from '../../components/PrimaryButton';
+import { LockIcon, PlusIcon } from '../../components/icons';
 import { FadeInView } from '../../components/motion/FadeInView';
 import { Pressable } from '../../components/motion/Pressable';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type { CommonTableStackParamList } from '../../navigation/CommonTableNavigator';
 import { toApiError } from '../../services/api';
 import { loadPeoplePhotos } from '../../services/people-photos';
-import { useCommonTableStore } from '../../stores/common-table.store';
-import { colors, spacing } from '../../theme';
+import { FREE_ADDED_MEMBERS, useCommonTableStore } from '../../stores/common-table.store';
+import { useMonetization } from '../../stores/monetization.store';
+import { colors, fonts, spacing } from '../../theme';
 
 /**
  * Household — the people you cook for, shown as a roster.
@@ -22,9 +24,11 @@ import { colors, spacing } from '../../theme';
  */
 export function HouseholdScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CommonTableStackParamList>>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const members = useCommonTableStore((s) => s.members);
   const loadHousehold = useCommonTableStore((s) => s.loadHousehold);
   const removeMember = useCommonTableStore((s) => s.removeMember);
+  const isPro = useMonetization((s) => s.isPro);
 
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<ReturnType<typeof toApiError> | null>(null);
@@ -66,6 +70,22 @@ export function HouseholdScreen() {
   }
 
   const sorted = [...members].sort((a, b) => Number(b.isOwner) - Number(a.isOwner));
+
+  // Free tier: ONE added person (the owner is you) - everyone after that is
+  // Pro. Editing existing people stays free.
+  const hasOwner = sorted.some((m) => m.isOwner);
+  const addedPeople = hasOwner
+    ? sorted.filter((m) => !m.isOwner).length
+    : Math.max(0, sorted.length - 1);
+  const addLocked = !isPro && addedPeople >= FREE_ADDED_MEMBERS;
+
+  function handleAddPress() {
+    if (addLocked) {
+      rootNavigation.navigate('Paywall', { minimal: true });
+      return;
+    }
+    navigation.navigate('AddPeople');
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -158,12 +178,25 @@ export function HouseholdScreen() {
           </View>
         )}
 
-        <PrimaryButton
-          label="Add someone"
-          onPress={() => navigation.navigate('AddPeople')}
-          style={styles.addButton}
-          busy={busy}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            addLocked ? 'Unlock Pro to add another person' : 'Add someone to the table'
+          }
+          onPress={handleAddPress}
+          disabled={busy}
+          style={[styles.addPill, busy && styles.addPillBusy]}
+          tintBorderRadius={999}
+        >
+          {addLocked ? (
+            <LockIcon size={17} color={colors.background} strokeWidth={1.6} />
+          ) : (
+            <PlusIcon size={17} color={colors.background} strokeWidth={1.6} />
+          )}
+          <Text style={styles.addPillText}>
+            {addLocked ? 'Unlock to Pro to add another one' : 'Add someone'}
+          </Text>
+        </Pressable>
       </FadeInView>
     </ScrollView>
   );
@@ -289,7 +322,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.error,
   },
-  addButton: {
-    marginTop: spacing.sm,
+  addPill: {
+    marginTop: spacing.md,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.softAlert,
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    minHeight: 48,
+    width: '100%',
+  },
+  addPillBusy: {
+    opacity: 0.55,
+  },
+  addPillText: {
+    fontSize: 15,
+    letterSpacing: 0.2,
+    color: colors.background,
+    fontFamily: fonts.semiBold,
   },
 });

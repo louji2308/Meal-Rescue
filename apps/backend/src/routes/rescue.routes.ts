@@ -84,8 +84,8 @@ export async function rescueRoutes(app: FastifyInstance): Promise<void> {
     if (!allowance.allowed) {
       throw new AppError({
         category: ErrorCategory.RATE_LIMIT_EXCEEDED,
-        code: 'DAILY_RESCUE_LIMIT',
-        message: 'Daily free rescue limit reached',
+        code: 'RESCUE_LIMIT',
+        message: 'Free rescue limit reached',
         statusCode: 429,
         recoverable: true,
         suggestedAction: 'Watch an ad for extra rescues or upgrade to Pro',

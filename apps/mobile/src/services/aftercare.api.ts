@@ -32,3 +32,13 @@ export async function getAftercareEligibilitySafe(
     return { ok: false, error: toApiError(err) };
   }
 }
+
+/**
+ * POST /api/v1/rescue/:id/aftercare-notify - fire the aftercare check-in NOW.
+ * Called fire-and-forget right after the user commits "Do this" so the push
+ * arrives in seconds instead of waiting for the cooldown + hourly cron.
+ * Failures are swallowed by the caller: the cron remains the safety net.
+ */
+export async function requestImmediateAftercare(rescueId: string): Promise<void> {
+  await api.post(`/api/v1/rescue/${encodeURIComponent(rescueId)}/aftercare-notify`);
+}

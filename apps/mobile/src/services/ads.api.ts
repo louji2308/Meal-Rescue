@@ -32,8 +32,18 @@ export async function claimProPass(adTransactionId: string): Promise<ProPassClai
  * Sync subscription tier from RevenueCat to the backend.
  * Call after purchase, restore, or on app start to ensure the backend's
  * subscription_tier matches RevenueCat's entitlement state.
+ *
+ * `entitlement` carries the SDK's own verdict (react-native-purchases
+ * getCustomerInfo) so the backend can still record the tier when
+ * RevenueCat's REST API refuses the key (test-store purchases). The
+ * response is authoritative: the app only shows Pro when it says 'pro'.
  */
-export async function syncSubscription(): Promise<{ tier: 'free' | 'pro' }> {
-  const res = await api.post<{ tier: 'free' | 'pro' }>('/api/v1/subscription/sync');
+export async function syncSubscription(
+  entitlement?: { active: boolean; expiresAt?: string | null } | null,
+): Promise<{ tier: 'free' | 'pro'; verifiedBy?: string }> {
+  const res = await api.post<{ tier: 'free' | 'pro'; verifiedBy?: string }>(
+    '/api/v1/subscription/sync',
+    entitlement ? { entitlement } : {},
+  );
   return res.data;
 }

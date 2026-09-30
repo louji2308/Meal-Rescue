@@ -1,5 +1,6 @@
 import type {
   TasteBoundaryGroup,
+  TasteInsightOverrideAction,
   TasteJournal,
   TasteJournalEvidenceDetail,
   TasteJournalInsight,
@@ -7,16 +8,22 @@ import type {
   TasteJournalOverrideResponse,
   TasteJournalSummary,
   TasteSignal,
-  TasteInsightOverrideAction,
+  TasteSignalDimension,
+  TasteSignalPolarity,
 } from '@meal-rescue/shared-types';
 
+import { tasteJournalConfig } from '../../config/taste-journal';
 import type { Db } from '../../database/models';
+import type { FeedbackJournalNote as FeedbackJournalNoteRow } from '../../database/models/feedback-journal-note.model';
 import type { TasteSignalEvidence as TasteSignalEvidenceRow } from '../../database/models/taste-signal-evidence.model';
 import { AppError } from '../../lib/errors';
-import { tasteJournalConfig } from '../../config/taste-journal';
 import { TasteMemoryService } from '../taste-memory.service';
 import { ContextualPatternService } from './contextual-pattern.service';
-import { PreferenceAggregationService, parseStrandId, strandId } from './preference-aggregation.service';
+import {
+  PreferenceAggregationService,
+  parseStrandId,
+  strandId,
+} from './preference-aggregation.service';
 import { TasteInsightService } from './taste-insight.service';
 import { TasteSignalService } from './taste-signal.service';
 import type { AddSignalArgs } from './taste-signal.service';
@@ -66,7 +73,7 @@ export class TasteJournalService {
     const visible = this.applyOverrides(signals, overrides);
     const landscape = this.aggregation.buildLandscape(userId, visible);
 
-    return {
+    const journal: TasteJournal = {
       summary: this.buildSummary(landscape.active),
       progress: landscape.emerging.map((s) => this.insights.renderProgressive(s)),
       patterns: landscape.patterns.map((s) => this.insights.renderPattern(s)),
@@ -83,6 +90,8 @@ export class TasteJournalService {
         this.hiddenKeys(signals, overrides),
       ),
     };
+    await this.applyFeedbackNotes(userId, journal, overrides);
+    return journal;
   }
 
   async getSummary(userId: string): Promise<TasteJournalSummary> {
@@ -105,8 +114,11 @@ export class TasteJournalService {
   }
 
   async getDiscoveries(userId: string): Promise<TasteJournalInsight[]> {
-    const landscape = await this.buildLandscape(userId);
-    return landscape.discoveries.map((s) => this.insights.renderDiscovery(s));
+    const [, , visible] = await this.loadState(userId);
+    const landscape = this.aggregation.buildLandscape(userId, visible);
+    const discoveries = landscape.discoveries.map((s) => this.insights.renderDiscovery(s));
+    const [, overrides] = await this.loadState(userId);
+    return this.applyNotesToArray(userId, discoveries, overrides);
   }
 
   async getStillLearning(userId: string): Promise<TasteJournalInsight[]> {
@@ -165,11 +177,18 @@ export class TasteJournalService {
   ): Promise<TasteJournalOverrideResponse> {
     const { dimension, value } = this.resolveInsightId(insightId);
     const action: TasteInsightOverrideAction =
-      request.action === 'DISMISS' ? 'DISMISSED' : request.action === 'CORRECT' ? 'CORRECTED' : 'FORGOTTEN';
+      request.action === 'DISMISS'
+        ? 'DISMISSED'
+        : request.action === 'CORRECT'
+          ? 'CORRECTED'
+          : 'FORGOTTEN';
 
     if (action === 'CORRECTED') {
       if (request.correctedPolarity !== 'positive' && request.correctedPolarity !== 'negative') {
-        throw AppError.badRequest('INVALID_CORRECTION', 'correctedPolarity must be positive or negative');
+        throw AppError.badRequest(
+          'INVALID_CORRECTION',
+          'correctedPolarity must be positive or negative',
+        );
       }
     }
 
@@ -181,8 +200,7 @@ export class TasteJournalService {
       await existing.update({
         action,
         note: request.note ?? null,
-        correctedPolarity:
-          action === 'CORRECTED' ? (request.correctedPolarity ?? null) : null,
+        correctedPolarity: action === 'CORRECTED' ? (request.correctedPolarity ?? null) : null,
       });
     } else {
       await this.models.TasteInsightOverride.create({
@@ -190,8 +208,7 @@ export class TasteJournalService {
         insightKey: key,
         action,
         note: request.note ?? null,
-        correctedPolarity:
-          action === 'CORRECTED' ? (request.correctedPolarity ?? null) : null,
+        correctedPolarity: action === 'CORRECTED' ? (request.correctedPolarity ?? null) : null,
       });
     }
 
@@ -204,6 +221,10 @@ export class TasteJournalService {
         await this.signals.markDismissed(userId, dimension, value);
       }
     }
+
+    // An editorial note written from feedback never survives its strand -
+    // dismissed, corrected, or forgotten strands must not keep the old copy.
+    await this.models.FeedbackJournalNote.destroy({ where: { userId, strandKey: key } });
 
     return { success: true, insightId: key, action };
   }
@@ -242,7 +263,10 @@ export class TasteJournalService {
    * forgotten) are filtered out, and corrected overrides re-shape the strand's
    * rendered direction/value BEFORE aggregation so it lands in the right bucket.
    */
-  private applyOverrides(signals: TasteSignal[], overrides: Map<string, ModelOverride>): TasteSignal[] {
+  private applyOverrides(
+    signals: TasteSignal[],
+    overrides: Map<string, ModelOverride>,
+  ): TasteSignal[] {
     return signals
       .filter((s) => {
         const override = overrides.get(strandId(s.dimension, s.value));
@@ -270,6 +294,60 @@ export class TasteJournalService {
     return keys;
   }
 
+  // -------------------------------------------------------------------------
+  // Feedback notes (the feedback -> journal loop)
+  // -------------------------------------------------------------------------
+
+  /**
+   * File AI-written feedback notes into the journal: a note REPLACES the
+   * title/body of its strand wherever that strand lives (edit-in-place), or
+   * is injected at the top of RECENTLY DISCOVERED when the strand has not
+   * surfaced as an insight yet. Notes on hidden strands never resurrect.
+   */
+  private async applyFeedbackNotes(
+    userId: string,
+    journal: TasteJournal,
+    overrides: Map<string, ModelOverride>,
+  ): Promise<void> {
+    const notes = await this.loadNotes(userId);
+    for (const note of notes) {
+      const override = overrides.get(note.strandKey);
+      if (override && HIDDEN_OVERRIDES.includes(override.action)) continue;
+      const target = findInsight(journal, note.strandKey);
+      if (target) {
+        applyNote(target, note);
+      } else {
+        journal.discoveries.unshift(toInsight(note));
+      }
+    }
+  }
+
+  private async applyNotesToArray(
+    userId: string,
+    insights: TasteJournalInsight[],
+    overrides: Map<string, ModelOverride>,
+  ): Promise<TasteJournalInsight[]> {
+    const notes = await this.loadNotes(userId);
+    for (const note of notes) {
+      const override = overrides.get(note.strandKey);
+      if (override && HIDDEN_OVERRIDES.includes(override.action)) continue;
+      const target = insights.find((i) => i.id === note.strandKey);
+      if (target) {
+        applyNote(target, note);
+      } else {
+        insights.unshift(toInsight(note));
+      }
+    }
+    return insights;
+  }
+
+  private async loadNotes(userId: string) {
+    return this.models.FeedbackJournalNote.findAll({
+      where: { userId },
+      order: [['createdAt', 'DESC']],
+    });
+  }
+
   private buildSummary(active: TasteSignal[]): TasteJournalSummary {
     const lastActiveAt =
       active.length > 0
@@ -284,7 +362,8 @@ export class TasteJournalService {
     return {
       totalSignals: active.length,
       establishedCount,
-      patternsCount: active.filter((s) => s.status === 'ESTABLISHED' || s.status === 'EXPLICIT').length,
+      patternsCount: active.filter((s) => s.status === 'ESTABLISHED' || s.status === 'EXPLICIT')
+        .length,
       boundariesCount: 0,
       lastActiveAt,
       freshness:
@@ -430,7 +509,10 @@ export class TasteJournalService {
       const data = row.get() as { contextType: string; contextValue: string; affinity: number };
       if (data.contextType !== 'cuisine_family') continue;
       const affinity = Number(data.affinity);
-      if ((affinity >= 0.4 || affinity <= -0.4) && !(await isForgotten('cuisine', data.contextValue))) {
+      if (
+        (affinity >= 0.4 || affinity <= -0.4) &&
+        !(await isForgotten('cuisine', data.contextValue))
+      ) {
         await this.signals.addSignal({
           userId,
           dimension: 'cuisine',
@@ -519,7 +601,53 @@ interface ModelOverride {
   correctedValue?: string;
 }
 
-function toEvidenceResponse(row: TasteSignalEvidenceRow): TasteJournalEvidenceDetail['evidence'][number] {
+/** Search every chapter of the journal for the strand a note attaches to. */
+function findInsight(journal: TasteJournal, strandKey: string): TasteJournalInsight | undefined {
+  const flat = [
+    ...journal.progress,
+    ...journal.patterns,
+    ...journal.dependentPatterns,
+    ...journal.discoveries,
+    ...journal.stillLearning,
+    ...journal.boundaries.flatMap((b) => b.items),
+  ];
+  return flat.find((i) => i.id === strandKey);
+}
+
+/** The note edits the entry in place - evidence and controls stay intact. */
+function applyNote(insight: TasteJournalInsight, note: FeedbackJournalNoteRow): void {
+  insight.title = note.title;
+  insight.body = note.body;
+  insight.feedbackNote = true;
+  const noteAt = note.createdAt.getTime();
+  if (new Date(insight.lastObservedAt).getTime() < noteAt) {
+    insight.lastObservedAt = note.createdAt.toISOString();
+  }
+}
+
+/** Stand-in discovery when the strand exists only as a note (no insight yet). */
+function toInsight(note: FeedbackJournalNoteRow): TasteJournalInsight {
+  const parsed = parseStrandId(note.strandKey);
+  return {
+    id: note.strandKey,
+    kind: 'discovery',
+    title: note.title,
+    body: note.body,
+    dimension: (parsed?.dimension ?? 'ingredient') as TasteSignalDimension,
+    value: parsed?.value,
+    polarity: note.polarity as TasteSignalPolarity,
+    confidence: 0.9,
+    evidenceCount: 1,
+    sourceTypes: ['EXPLICIT_FEEDBACK'],
+    contexts: [],
+    lastObservedAt: note.createdAt.toISOString(),
+    feedbackNote: true,
+  };
+}
+
+function toEvidenceResponse(
+  row: TasteSignalEvidenceRow,
+): TasteJournalEvidenceDetail['evidence'][number] {
   return {
     source: row.source,
     sourceLabel: row.sourceLabel,
@@ -540,22 +668,30 @@ function toEvidenceResponse(row: TasteSignalEvidenceRow): TasteJournalEvidenceDe
   };
 }
 
-function mapEventType(
-  eventType: string,
-):
-  | {
-      polarity: 'positive' | 'negative' | 'neutral';
-      source: 'BEHAVIOR' | 'EXPLICIT_FEEDBACK';
-      sourceLabel: string;
-    }
-  | null {
+function mapEventType(eventType: string): {
+  polarity: 'positive' | 'negative' | 'neutral';
+  source: 'BEHAVIOR' | 'EXPLICIT_FEEDBACK';
+  sourceLabel: string;
+} | null {
   switch (eventType) {
     case 'SATISFACTION_NAILED':
-      return { polarity: 'positive', source: 'EXPLICIT_FEEDBACK', sourceLabel: 'How you rated a rescue' };
+      return {
+        polarity: 'positive',
+        source: 'EXPLICIT_FEEDBACK',
+        sourceLabel: 'How you rated a rescue',
+      };
     case 'SATISFACTION_ALMOST':
-      return { polarity: 'neutral', source: 'EXPLICIT_FEEDBACK', sourceLabel: 'How you rated a rescue' };
+      return {
+        polarity: 'neutral',
+        source: 'EXPLICIT_FEEDBACK',
+        sourceLabel: 'How you rated a rescue',
+      };
     case 'SATISFACTION_NOT_FOR_ME':
-      return { polarity: 'negative', source: 'EXPLICIT_FEEDBACK', sourceLabel: 'How you rated a rescue' };
+      return {
+        polarity: 'negative',
+        source: 'EXPLICIT_FEEDBACK',
+        sourceLabel: 'How you rated a rescue',
+      };
     case 'RESCUE_ACCEPTED':
       return { polarity: 'positive', source: 'BEHAVIOR', sourceLabel: 'A rescue you accepted' };
     case 'RESCUE_REJECTED':

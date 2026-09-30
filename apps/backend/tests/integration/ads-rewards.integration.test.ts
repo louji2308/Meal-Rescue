@@ -41,7 +41,8 @@ maybeDescribe('ads reward routes (integration)', () => {
     const body = res.json();
     expect(body).toMatchObject({
       tier: 'free',
-      rescuesToday: 0,
+      rescuesUsed: 0,
+      freeRescueLimit: 3,
       rescueCredits: 0,
       canWatchRescueFuel: true,
       canWatchProPass: true,

@@ -50,6 +50,7 @@ import {
 } from './src/services/revenuecat.service';
 import { useAuthStore } from './src/stores/auth.store';
 import { InAppNotificationKind, useNotificationsStore } from './src/stores/notifications.store';
+import { useRescuesStore } from './src/stores/rescues.store';
 import { colors } from './src/theme';
 
 // Must run at root level so the auth-session callback is intercepted on cold start
@@ -167,6 +168,9 @@ export default function App() {
     registerPushSubscriptionVerifier();
     void initializeAdsIfConfigured();
     void useNotificationsStore.getState().hydrate();
+    // Rescues (recent + loved) feed the paywall teaser — load before any
+    // paywall can open so the copy doesn't flash from the cold-start pool.
+    void useRescuesStore.getState().hydrate();
   }, [hydrate]);
 
   useEffect(() => {

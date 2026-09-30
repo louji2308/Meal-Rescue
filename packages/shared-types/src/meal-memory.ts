@@ -582,6 +582,12 @@ export interface PlannedMeal {
 export interface PlannedDay {
   dateKey: string;
   meals: PlannedMeal[];
+  /**
+   * Pro-gated day. Locked days are a teaser only: they are rendered greyed
+   * with a lock + Pro badge, are NEVER written on confirm, and tapping them
+   * opens the paywall. Free tier plans day 1 and locks the rest.
+   */
+  locked: boolean;
 }
 
 export interface PlanPreviewResponse {
@@ -591,6 +597,7 @@ export interface PlanPreviewResponse {
   daysUsed: number;
   daysRemaining: number;
   tier: SubscriptionTier;
+  /** True when NOTHING in the preview can be accepted without Pro. */
   requiresPayment: boolean;
   message: string;
 }
@@ -790,4 +797,9 @@ export interface AiPlannerResponse {
    * POST /plan-confirm persistence path works unchanged.
    */
   preview: PlanPreviewResponse | null;
+  /**
+   * Free allowance spent (one accepted plan day, ever). Set instead of a
+   * preview: the client skips the popup and opens the paywall directly.
+   */
+  planLocked?: boolean;
 }

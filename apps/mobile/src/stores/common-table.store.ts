@@ -10,15 +10,22 @@ import type {
 } from '@meal-rescue/shared-types';
 
 import {
-  getHousehold as fetchHousehold,
-  createHousehold,
   addHouseholdMember,
-  updateHouseholdMember,
+  createHousehold,
+  getHousehold as fetchHousehold,
   removeHouseholdMember,
+  updateHouseholdMember,
 } from '../services/common-table.api';
 import { removePeoplePhoto } from '../services/people-photos';
 
 const STORAGE_KEY = 'meal-rescue/common-table/active';
+
+/**
+ * Free tier: how many people you may ADD (the owner — you — never counts).
+ * A purchase (or a pro pass) lifts the limit entirely. Keep in sync with
+ * `FREE_ADDED_MEMBER_LIMIT` in `apps/backend/src/routes/household.routes.ts`.
+ */
+export const FREE_ADDED_MEMBERS = 1;
 
 interface CommonTableState {
   /** Full household (includes owner). */
@@ -80,9 +87,7 @@ export const useCommonTableStore = create<CommonTableState>((set, get) => ({
   toggleSelectedMember: (id) => {
     const current = get().selectedMemberIds;
     set({
-      selectedMemberIds: current.includes(id)
-        ? current.filter((m) => m !== id)
-        : [...current, id],
+      selectedMemberIds: current.includes(id) ? current.filter((m) => m !== id) : [...current, id],
     });
   },
 

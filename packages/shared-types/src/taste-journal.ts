@@ -27,21 +27,12 @@ export type TasteSignalDimension =
 
 /** Where a signal came from. */
 export type TasteSignalSource =
-  | 'ONBOARDING'
-  | 'BEHAVIOR'
-  | 'EXPLICIT_FEEDBACK'
-  | 'SYSTEM_INFERENCE';
+  'ONBOARDING' | 'BEHAVIOR' | 'EXPLICIT_FEEDBACK' | 'SYSTEM_INFERENCE';
 
 export type TasteSignalPolarity = 'positive' | 'negative' | 'mixed' | 'neutral';
 
 export type TasteSignalStatus =
-  | 'UNKNOWN'
-  | 'EMERGING'
-  | 'ESTABLISHED'
-  | 'CONTEXTUAL'
-  | 'CONFLICTED'
-  | 'EXPLICIT'
-  | 'DISMISSED';
+  'UNKNOWN' | 'EMERGING' | 'ESTABLISHED' | 'CONTEXTUAL' | 'CONFLICTED' | 'EXPLICIT' | 'DISMISSED';
 
 /** One observed context bucket for a signal (e.g. cuisine: mexican, 60% of evidence). */
 export interface TasteSignalContext {
@@ -77,12 +68,7 @@ export interface TasteSignal {
 // ---------------------------------------------------------------------------
 
 export type TasteJournalInsightKind =
-  | 'pattern'
-  | 'dependent'
-  | 'discovery'
-  | 'still_learning'
-  | 'boundary'
-  | 'progress';
+  'pattern' | 'dependent' | 'discovery' | 'still_learning' | 'boundary' | 'progress';
 
 export type TasteInsightOverrideAction = 'DISMISSED' | 'CORRECTED' | 'FORGOTTEN';
 
@@ -117,6 +103,12 @@ export interface TasteJournalInsight {
   lastObservedAt: ISO8601;
   /** Present only when the user has acted on this insight. */
   override?: TasteInsightOverride;
+  /**
+   * True when the title/body of this entry were written from the user's
+   * rescue feedback (the feedback -> journal note loop). The meta line reads
+   * "From your feedback" instead of "Learned from ...".
+   */
+  feedbackNote?: boolean;
 }
 
 export type TasteBoundaryGroupKind = 'USUALLY_WORKS' | 'DEPENDS' | 'USUALLY_AVOID';

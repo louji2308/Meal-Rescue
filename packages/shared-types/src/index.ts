@@ -203,6 +203,29 @@ export interface RescueGenerateResponse {
   provenance?: AIProvenance;
 }
 
+/**
+ * The rescue context the app actually displayed to the user. Sent along with
+ * feedback so the journal-note writer works from what the user saw (not only
+ * from the stored rescue row).
+ */
+export interface FeedbackJournalContext {
+  dish: string;
+  ingredients: string[];
+  recommendedMove: string;
+  /** Why the app chose this move (optional extra grounding for the writer). */
+  reasoning?: string;
+}
+
+/** An AI-written editorial note filed into the Taste Journal. */
+export interface FeedbackJournalNote {
+  title: string;
+  body: string;
+  source: 'ai' | 'hardcoded' | 'fallback';
+  /** Strand the note attaches to, e.g. "STRAND:ingredient:spring onion". */
+  strandKey: string;
+  createdAt: ISO8601;
+}
+
 export interface FeedbackRequest {
   satisfaction: Satisfaction;
   feedbackText?: string;
@@ -211,6 +234,8 @@ export interface FeedbackRequest {
     modifications?: string[];
     actualTime?: number;
   };
+  /** What the user saw on screen — feeds the journal-note writer. */
+  journalContext?: FeedbackJournalContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +285,8 @@ export interface FeedbackResponse {
   success: true;
   personalizationUpdated: boolean;
   insights: PersonalizationInsight[];
+  /** Editorial note written from this feedback (when generation succeeded). */
+  journalNote?: FeedbackJournalNote;
 }
 
 export interface PreferenceLearned {
@@ -592,8 +619,10 @@ export interface AuthTokens {
 /** GET /api/v1/ads/eligibility - ad surfaces are never offered to Pro users. */
 export interface AdEligibilityResponse {
   tier: SubscriptionTier;
-  rescuesToday: number | null;
-  dailyLimit: number | null;
+  /** Rescues used over the account's lifetime (free tier never resets). */
+  rescuesUsed: number | null;
+  /** One-time free allowance per account (null for Pro). */
+  freeRescueLimit: number | null;
   rescueCredits: number;
   canWatchRescueFuel: boolean;
   canWatchProPass: boolean;

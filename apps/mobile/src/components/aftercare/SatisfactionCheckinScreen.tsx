@@ -1,18 +1,19 @@
 import { useNavigation } from '@react-navigation/native';
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Pressable } from '../motion/Pressable';
-import { Text } from '../AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { haptics } from '../../services/haptics';
+import { useRescuesStore } from '../../stores/rescues.store';
 import { colors, spacing, typography } from '../../theme';
+import { Text } from '../AppText';
 import {
   type SatisfactionResult,
   useSatisfactionCheckin,
 } from '../checkins/useSatisfactionCheckin';
-import { aftercareColors } from './tokens';
 import { FadeInView } from '../motion/FadeInView';
+import { Pressable } from '../motion/Pressable';
+import { aftercareColors } from './tokens';
 
 /** Route params for SATISFACTION_ROUTE: { rescueId, recommendation }. */
 export interface SatisfactionCheckinParams {
@@ -104,6 +105,14 @@ export function SatisfactionCheckinScreen({
   const busy = status === 'submitting';
   const reasons = picked.current ? (REASONS[picked.current] ?? []) : [];
 
+  // "Exactly" is the love signal — remember this rescue so the paywall can
+  // greet Profile → Upgrade with copy about it.
+  useEffect(() => {
+    if (response && picked.current === 'EXACTLY') {
+      useRescuesStore.getState().markLoved(rescueId, recommendation);
+    }
+  }, [response, rescueId, recommendation]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
@@ -124,105 +133,107 @@ export function SatisfactionCheckinScreen({
         <Text style={styles.context}>For: {recommendation}</Text>
 
         <FadeInView key={submitted ? 'thanks' : 'options'}>
-        {!submitted && (
-          <View style={styles.options}>
-            {OPTIONS.map((option) => {
-              const on = picked.current === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected: on, busy }}
-                  disabled={busy}
-                  onPress={() => choose(option.value)}
-                  style={[styles.option, on && styles.optionOn]}
-                >
-                  <Text style={styles.optionEmoji}>{option.emoji}</Text>
-                  <View style={styles.optionTextWrap}>
-                    <Text style={styles.optionLabel}>{option.label}</Text>
-                    <Text style={styles.optionHint}>{option.hint}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-            {busy && <Text style={styles.note}>Noting that down…</Text>}
-          </View>
-        )}
+          {!submitted && (
+            <View style={styles.options}>
+              {OPTIONS.map((option) => {
+                const on = picked.current === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="button"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{ selected: on, busy }}
+                    disabled={busy}
+                    onPress={() => choose(option.value)}
+                    style={[styles.option, on && styles.optionOn]}
+                  >
+                    <Text style={styles.optionEmoji}>{option.emoji}</Text>
+                    <View style={styles.optionTextWrap}>
+                      <Text style={styles.optionLabel}>{option.label}</Text>
+                      <Text style={styles.optionHint}>{option.hint}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+              {busy && <Text style={styles.note}>Noting that down…</Text>}
+            </View>
+          )}
 
-        {submitted && response && (
-          <View style={styles.thanks}>
-            <Text style={styles.thanksEmoji}>{picked.current === 'EXACTLY' ? '✨' : '🙏'}</Text>
-            <Text style={styles.thanksTitle}>
-              {picked.current === 'EXACTLY' ? 'Love that for you.' : 'Thanks for telling me.'}
-            </Text>
-            <Text style={styles.thanksBody}>
-              {picked.current === 'EXACTLY'
-                ? "I'll keep steering you toward the same kind of move."
-                : 'Next time I\u2019ll lean the other way.'}
-            </Text>
+          {submitted && response && (
+            <View style={styles.thanks}>
+              <Text style={styles.thanksEmoji}>{picked.current === 'EXACTLY' ? '✨' : '🙏'}</Text>
+              <Text style={styles.thanksTitle}>
+                {picked.current === 'EXACTLY' ? 'Love that for you.' : 'Thanks for telling me.'}
+              </Text>
+              <Text style={styles.thanksBody}>
+                {picked.current === 'EXACTLY'
+                  ? "I'll keep steering you toward the same kind of move."
+                  : 'Next time I\u2019ll lean the other way.'}
+              </Text>
 
-            {response.personalizationImpact.length > 0 && (
-              <View style={styles.impact}>
-                <Text style={styles.impactTitle}>What this teaches me</Text>
-                {response.personalizationImpact.map((line) => (
-                  <View key={line} style={styles.impactRow}>
-                    <Text style={styles.impactBullet}>·</Text>
-                    <Text style={styles.impactText}>{line}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {picked.current !== 'EXACTLY' && reasons.length > 0 && (
-              <View style={styles.reasons}>
-                <Text style={styles.reasonsTitle}>What was off? (skippable)</Text>
-                <View style={styles.reasonChips}>
-                  {reasons.map((reason) => {
-                    const on = postedReasons.current.includes(reason);
-                    return (
-                      <Pressable
-                        key={reason}
-                        accessibilityRole="button"
-                        accessibilityLabel={reason}
-                        accessibilityState={{ selected: on }}
-                        onPress={() => picked.current && addReason(picked.current, reason)}
-                        style={[styles.reasonChip, on && styles.reasonChipOn]}
-                      >
-                        <Text style={[styles.reasonText, on && styles.reasonTextOn]}>{reason}</Text>
-                      </Pressable>
-                    );
-                  })}
+              {response.personalizationImpact.length > 0 && (
+                <View style={styles.impact}>
+                  <Text style={styles.impactTitle}>What this teaches me</Text>
+                  {response.personalizationImpact.map((line) => (
+                    <View key={line} style={styles.impactRow}>
+                      <Text style={styles.impactBullet}>·</Text>
+                      <Text style={styles.impactText}>{line}</Text>
+                    </View>
+                  ))}
                 </View>
-              </View>
-            )}
+              )}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close check-in"
-              onPress={close}
-              style={styles.done}
-            >
-              <Text style={styles.doneText}>Back to my meal</Text>
-            </Pressable>
-          </View>
-        )}
+              {picked.current !== 'EXACTLY' && reasons.length > 0 && (
+                <View style={styles.reasons}>
+                  <Text style={styles.reasonsTitle}>What was off? (skippable)</Text>
+                  <View style={styles.reasonChips}>
+                    {reasons.map((reason) => {
+                      const on = postedReasons.current.includes(reason);
+                      return (
+                        <Pressable
+                          key={reason}
+                          accessibilityRole="button"
+                          accessibilityLabel={reason}
+                          accessibilityState={{ selected: on }}
+                          onPress={() => picked.current && addReason(picked.current, reason)}
+                          style={[styles.reasonChip, on && styles.reasonChipOn]}
+                        >
+                          <Text style={[styles.reasonText, on && styles.reasonTextOn]}>
+                            {reason}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
-        {status === 'error' && !response && (
-          <View style={styles.errorWrap}>
-            <Text style={styles.errorText}>
-              Couldn’t save that just now. No big deal — it didn’t go anywhere.
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Try again"
-              onPress={() => picked.current && submit(picked.current, postedReasons.current)}
-              style={styles.retry}
-            >
-              <Text style={styles.retryText}>Try again</Text>
-            </Pressable>
-          </View>
-        )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close check-in"
+                onPress={close}
+                style={styles.done}
+              >
+                <Text style={styles.doneText}>Back to my meal</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {status === 'error' && !response && (
+            <View style={styles.errorWrap}>
+              <Text style={styles.errorText}>
+                Couldn’t save that just now. No big deal — it didn’t go anywhere.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+                onPress={() => picked.current && submit(picked.current, postedReasons.current)}
+                style={styles.retry}
+              >
+                <Text style={styles.retryText}>Try again</Text>
+              </Pressable>
+            </View>
+          )}
         </FadeInView>
       </ScrollView>
     </SafeAreaView>

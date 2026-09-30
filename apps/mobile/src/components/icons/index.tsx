@@ -37,3 +37,5 @@ export { FlaskIcon } from './FlaskIcon';
 export { CompassIcon } from './CompassIcon';
 export { GitCompareIcon } from './GitCompareIcon';
 export { InfoIcon } from './InfoIcon';
+export { LockIcon } from './LockIcon';
+export { PlusIcon } from './PlusIcon';

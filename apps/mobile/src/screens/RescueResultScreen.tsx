@@ -29,6 +29,7 @@ import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { getAdEligibility } from '../services/ads.api';
 import { hasAdMobAppId, showInterstitialAd } from '../services/ads.service';
+import { requestImmediateAftercare } from '../services/aftercare.api';
 import { ApiError } from '../services/api';
 import { commitDecisionSafe } from '../services/decision.api';
 import { useRescuesStore } from '../stores/rescues.store';
@@ -122,7 +123,22 @@ export function RescueResultScreen({
         recommendation: workingLabel,
         foods,
       });
-      navigation.navigate('Feedback', { rescueId, recommendation: workingLabel });
+      if (userDecision !== 'kept_as_is') {
+        // The aftercare check-in lands right after "Do this" instead of
+        // waiting for the 30-min cooldown + hourly cron. Fire-and-forget - the
+        // cron still covers us if this call never makes it.
+        void requestImmediateAftercare(rescueId).catch(() => undefined);
+      }
+      navigation.navigate('Feedback', {
+        rescueId,
+        recommendation: workingLabel,
+        // What the user actually saw - grounds the AI journal-note writer.
+        journalContext: {
+          dish: foods.join(', '),
+          ingredients: [...foods, ...additions],
+          recommendedMove: workingLabel,
+        },
+      });
     } else {
       setCommitError(outcome.error);
     }

@@ -16,6 +16,7 @@ import { useDayPhase } from '../hooks/useDayPhase';
 import type { HomeStackParamList } from '../navigation/AppNavigator';
 import { type AiRescueData, generateAiRescue, negotiateAiRescue } from '../services/ai-rescue.api';
 import { toApiError } from '../services/api';
+import { commitDecisionSafe } from '../services/decision.api';
 import { type KitchenItem, getKitchenDashboard } from '../services/kitchen.api';
 import { useSettingsStore } from '../stores/settings.store';
 import { colors, fonts, spacing } from '../theme';
@@ -102,7 +103,7 @@ export function AiRescueScreen() {
     setError(null);
     try {
       const kitchenItems = await loadKitchenContext();
-      const data = await generateAiRescue({
+      const request = generateAiRescue({
         foods,
         ingredients,
         timeOfDay: phase,
@@ -111,6 +112,7 @@ export function AiRescueScreen() {
         cookingAllowed,
         kitchenItems,
       });
+      const data = await request;
       setResult(data);
       setConversation([{ role: 'ai', content: data.bestMove }]);
     } catch (err) {
@@ -145,11 +147,27 @@ export function AiRescueScreen() {
     }
   }
 
-  function handleAccept() {
-    // Navigate to feedback with the accepted recommendation
+  async function handleAccept() {
+    const rescueId = result?.rescueId ?? '';
+    const recommendedMove = result?.bestMove ?? '';
+
+    // Feedback is rejected while the rescue decision is still pending
+    // (400 RESCUE_NOT_DECIDED) - commit the acceptance BEFORE navigating.
+    if (rescueId) {
+      await commitDecisionSafe(rescueId, 'accepted');
+    }
+
+    // Pass what the user actually saw so the journal-note writer stays
+    // grounded in the displayed move, not only the stored rescue row.
     navigation.navigate('Feedback', {
-      rescueId: result?.rescueId ?? '',
-      recommendation: result?.bestMove ?? '',
+      rescueId,
+      recommendation: recommendedMove,
+      journalContext: {
+        dish: foods.join(', '),
+        ingredients: [...(result?.whatYouAdded ?? []), ...(result?.whatYouKept ?? [])],
+        recommendedMove,
+        ...(result?.reasoning ? { reasoning: result.reasoning } : {}),
+      },
     });
   }
 
@@ -263,7 +281,11 @@ export function AiRescueScreen() {
             </View>
 
             {/* Action Buttons */}
-            <PrimaryButton label="Do this" onPress={handleAccept} style={styles.doThisGap} />
+            <PrimaryButton
+              label="Do this"
+              onPress={() => void handleAccept()}
+              style={styles.doThisGap}
+            />
 
             {/* Pushback Section */}
             <View style={styles.negotiateSection}>

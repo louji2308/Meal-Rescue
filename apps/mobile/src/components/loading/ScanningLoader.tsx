@@ -73,6 +73,7 @@ function MessageCrossFade({ messages, index }: { messages: string[]; index: numb
 export function ScanningLoader() {
   const progress = useSharedValue(0);
   const [messageIndex, setMessageIndex] = useState(0);
+  const activeIndex = Math.min(messageIndex, MESSAGES.length - 1);
 
   useEffect(() => {
     progress.value = 0;
@@ -84,16 +85,21 @@ export function ScanningLoader() {
     return () => cancelAnimation(progress);
   }, [progress]);
 
+  // Advance through the staged messages, resting on the last one.
   useEffect(() => {
-    const id = setTimeout(() => setMessageIndex(1), MESSAGE_SWITCH_MS);
-    return () => clearTimeout(id);
+    setMessageIndex(0);
+    if (MESSAGES.length <= 1) return;
+    const id = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1 < MESSAGES.length ? prev + 1 : prev));
+    }, MESSAGE_SWITCH_MS);
+    return () => clearInterval(id);
   }, []);
 
   return (
     <View
       style={styles.wrap}
       accessibilityLiveRegion="polite"
-      accessibilityLabel={MESSAGES[messageIndex]}
+      accessibilityLabel={MESSAGES[activeIndex]}
     >
       <View
         style={styles.circle}
@@ -104,7 +110,7 @@ export function ScanningLoader() {
           <CircleDot key={i} progress={progress} index={i} />
         ))}
       </View>
-      <MessageCrossFade messages={MESSAGES} index={messageIndex} />
+      <MessageCrossFade messages={MESSAGES} index={activeIndex} />
     </View>
   );
 }
