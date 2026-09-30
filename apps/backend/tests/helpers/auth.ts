@@ -15,7 +15,9 @@ import { signAccessToken } from '../../src/lib/jwt';
  */
 export async function registerTestUser(
   _app: FastifyInstance,
+  options: { tier?: 'free' | 'pro' } = {},
 ): Promise<{ token: string; userId: string; email: string }> {
+  const tier = options.tier ?? 'free';
   const email = `test-${randomUUID()}@mealrescue.test`;
   const passwordHash = await bcrypt.hash('Sup3rSecret!', 12);
 
@@ -23,7 +25,7 @@ export async function registerTestUser(
     id: randomUUID(),
     email: email.toLowerCase(),
     passwordHash,
-    subscriptionTier: 'free',
+    subscriptionTier: tier,
     timezone: null,
     locale: 'en-US',
   });
@@ -31,7 +33,7 @@ export async function registerTestUser(
   const token = signAccessToken({
     sub: user.id,
     email: user.email,
-    subscriptionTier: 'free',
+    subscriptionTier: tier,
   });
 
   return { token, userId: user.id, email };

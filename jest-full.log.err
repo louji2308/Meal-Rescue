@@ -1,0 +1,483 @@
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/meal-memory/ai-planner.integration.test.ts (9.503 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/integration/ads-rewards.integration.test.ts (5.669 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/security-cross-user.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/meal-memory/meal-intelligence.integration.test.ts (5.453 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/data-integrity-edgecases.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/v2/v2-journeys.integration.test.ts (7.054 s)
+  ● Console
+
+    console.log
+      {"level":"info","msg":"[dry-run] would send aftercare check-in for rescue","rescueId":"00171c3a-c00a-4932-ac4a-a2f1a3cc4c76","userId":"ad3a6a2d-b14e-4a56-92de-0311309a328d"}
+
+      at AftercareService.eligibility (src/services/v2/aftercare.service.ts:94:15)
+
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/v2/decision.integration.test.ts (5.594 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/integration/auth.integration.test.ts (5.868 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/integration/pipeline.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/user-routes.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/integration/notifications.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/pipeline-memory.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/meal-completion.routes.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/compass.integration.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/common-table-routes.integration.test.ts
+PASS tests/integration/allowance.integration.test.ts
+PASS tests/integration/addition-event.integration.test.ts (5.119 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+FAIL tests/integration/household-member-limit.integration.test.ts (5.562 s)
+  ● household member limit (integration) › allows one added member, blocks the second for free, and unlocks with Pro
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 30 |[39m     })[33m;[39m
+     [90m 31 |[39m
+    [31m[1m>[22m[39m[90m 32 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m            [31m[1m^[22m[39m
+     [90m 33 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 34 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 35 |[39m     app [33m=[39m [36mawait[39m buildApp()[33m;[39m[0m
+
+      at tests/integration/household-member-limit.integration.test.ts:32:12
+      at Object.<anonymous> (tests/integration/household-member-limit.integration.test.ts:19:1)
+
+
+  ● Test suite failed to run
+
+    TypeError: Cannot read properties of undefined (reading 'close')
+
+    [0m [90m 48 |[39m
+     [90m 49 |[39m   afterAll([36masync[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 50 |[39m     [36mawait[39m app[33m.[39mclose()[33m;[39m
+     [90m    |[39m               [31m[1m^[22m[39m
+     [90m 51 |[39m     [36mawait[39m closeDatabase()[33m;[39m
+     [90m 52 |[39m   })[33m;[39m
+     [90m 53 |[39m[0m
+
+      at Object.<anonymous> (tests/integration/household-member-limit.integration.test.ts:50:15)
+
+
+ReferenceError: You are trying to `import` a file after the Jest environment has been torn down. From tests/integration/household-member-limit.integration.test.ts.
+
+      at fastifySwaggerUi (../../node_modules/@fastify/swagger-ui/index.js:18:26)
+FAIL tests/integration/spoiler-alert.integration.test.ts (5.422 s)
+  ● spoiler alert scheduler (integration) › notifies the user whose expiring item went stale
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+  ● spoiler alert scheduler (integration) › ignores items that were used recently
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+  ● spoiler alert scheduler (integration) › is a no-op when nothing expires inside the window
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+  ● spoiler alert scheduler (integration) › sends at most one spoiler per user per day
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+PASS tests/ranking-pipeline.integration.test.ts
+PASS tests/pantry-leftovers.integration.test.ts (5.079 s)
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/security-surface.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/error-contract.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/auth-middleware.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/health.test.ts
+(node:16008) [FSTDEP023] FastifyDeprecation: disableRequestLogging option is deprecated. Use the logController option with disableRequestLogging or isLogDisabled override instead. The disableRequestLogging top-level option will be removed in `fastify@6`.
+PASS tests/paywall-teaser.routes.test.ts
+  ● Console
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"GROQ_API_KEY not configured"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (src/routes/paywall.routes.ts:116:20)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser DB lookup failed — proceeding with client context / cold start","reason":"Cannot read properties of undefined (reading 'constructor')"}
+
+    [0m [90m 72 |[39m   } [36mcatch[39m (err) {
+     [90m 73 |[39m     [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 74 |[39m     console[33m.[39mwarn(
+     [90m    |[39m             [31m[1m^[22m[39m
+     [90m 75 |[39m       [33mJSON[39m[33m.[39mstringify({
+     [90m 76 |[39m         level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 77 |[39m         msg[33m:[39m [32m'Paywall teaser DB lookup failed — proceeding with client context / cold start'[39m[33m,[39m[0m
+
+      at lastMoveFromDatabase (src/routes/paywall.routes.ts:74:13)
+      at Object.<anonymous> (src/routes/paywall.routes.ts:114:64)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"GROQ_API_KEY not configured"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (src/routes/paywall.routes.ts:116:20)
+
+PASS tests/meal-memory/scheduler.test.ts
+PASS tests/aftercare-notification.service.test.ts
+PASS tests/meal-memory/planning-scope.test.ts
+PASS tests/pantry-guardrails.service.test.ts
+PASS tests/meal-memory/ai-planner-unavailable.test.ts
+PASS tests/taste-journal/taste-journal.test.ts
+PASS tests/meal-memory/reuse-week.test.ts
+PASS tests/meal-memory/rule-deactivation.test.ts
+PASS tests/meal-memory/move-remove-guards.test.ts
+PASS tests/meal-memory/meal-intelligence.test.ts
+PASS tests/meal-memory/planning-engine.test.ts
+PASS tests/meal-memory/coverage-scope.test.ts
+PASS tests/v2/satisfaction-and-aftercare.service.test.ts
+  ● Console
+
+    console.log
+      {"level":"info","msg":"[dry-run] would send aftercare check-in for rescue","rescueId":"4078ff02-64fa-47a2-93fd-c21c8c3e2e0b","userId":"24b58f83-a6d6-47e3-8515-024d4b2a508f"}
+
+      at AftercareService.eligibility (src/services/v2/aftercare.service.ts:94:15)
+
+PASS tests/meal-completion.service.test.ts
+PASS tests/taste-memory-service-culture.test.ts
+PASS tests/onboarding-preferences.service.test.ts
+PASS tests/taste-memory.service.test.ts
+PASS tests/preference-learning-override.test.ts
+PASS tests/taste-memory.model.test.ts
+PASS tests/v2/decision-engine.test.ts
+PASS tests/pantry-model.test.ts
+PASS tests/ranking-engine.test.ts
+PASS tests/ai-safety-constraint.test.ts
+PASS tests/meal-memory/intent-classifier.test.ts
+PASS tests/pair-catalog.test.ts
+PASS tests/webhook.test.ts
+PASS tests/paywall-teaser.service.test.ts
+  ● Console
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"GROQ_API_KEY not configured"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:19:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"network down"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:36:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"network down"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:52:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"network down"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:63:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser provider failed — served deterministic copy","reason":"network down"}
+
+    [0m [90m 617 |[39m       [90m// A broken/missing provider must never break the paywall.[39m
+     [90m 618 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 619 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 620 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 621 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 622 |[39m           msg[33m:[39m [32m'Paywall teaser provider failed — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:619:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:79:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser model output failed validation — served deterministic copy","model":"openai/gpt-oss-120b"}
+
+    [0m [90m 607 |[39m       }
+     [90m 608 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 609 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 610 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 611 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 612 |[39m           msg[33m:[39m [32m'Paywall teaser model output failed validation — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:609:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:116:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser model output failed validation — served deterministic copy","model":"openai/gpt-oss-120b"}
+
+    [0m [90m 607 |[39m       }
+     [90m 608 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 609 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 610 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 611 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 612 |[39m           msg[33m:[39m [32m'Paywall teaser model output failed validation — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:609:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:129:22)
+
+    console.warn
+      {"level":"warn","msg":"Paywall teaser model output failed validation — served deterministic copy","model":"openai/gpt-oss-120b"}
+
+    [0m [90m 607 |[39m       }
+     [90m 608 |[39m       [90m// eslint-disable-next-line no-console[39m
+    [31m[1m>[22m[39m[90m 609 |[39m       console[33m.[39mwarn(
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 610 |[39m         [33mJSON[39m[33m.[39mstringify({
+     [90m 611 |[39m           level[33m:[39m [32m'warn'[39m[33m,[39m
+     [90m 612 |[39m           msg[33m:[39m [32m'Paywall teaser model output failed validation — served deterministic copy'[39m[33m,[39m[0m
+
+      at PaywallTeaserService.generate (src/services/paywall-teaser.service.ts:609:15)
+      at Object.<anonymous> (tests/paywall-teaser.service.test.ts:142:22)
+
+PASS tests/candidates-validation.test.ts
+PASS tests/common-table-convergence.test.ts
+PASS tests/meal-memory/ai-refine-validation.test.ts
+PASS tests/ranking-scoring.test.ts
+PASS tests/heuristic-llm-client.test.ts
+PASS tests/cold-start-signals.test.ts
+PASS tests/candidate-generator-culture.test.ts
+PASS tests/ranking-payload.test.ts
+PASS tests/kitchen-intelligence.test.ts
+PASS tests/common-table-ai.test.ts
+PASS tests/v2/intent-and-reality.test.ts
+PASS tests/meal-completion-types.test.ts
+PASS tests/culinary-families.test.ts
+PASS tests/v2/craving-and-strategies.test.ts
+PASS tests/constraint-engine.test.ts
+PASS tests/meal-memory/date-utils.test.ts
+PASS tests/shared-types.test.ts
+
+Summary of all failing tests
+FAIL tests/integration/household-member-limit.integration.test.ts (5.562 s)
+  ● household member limit (integration) › allows one added member, blocks the second for free, and unlocks with Pro
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 30 |[39m     })[33m;[39m
+     [90m 31 |[39m
+    [31m[1m>[22m[39m[90m 32 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m            [31m[1m^[22m[39m
+     [90m 33 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 34 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 35 |[39m     app [33m=[39m [36mawait[39m buildApp()[33m;[39m[0m
+
+      at tests/integration/household-member-limit.integration.test.ts:32:12
+      at Object.<anonymous> (tests/integration/household-member-limit.integration.test.ts:19:1)
+
+
+  ● Test suite failed to run
+
+    TypeError: Cannot read properties of undefined (reading 'close')
+
+    [0m [90m 48 |[39m
+     [90m 49 |[39m   afterAll([36masync[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 50 |[39m     [36mawait[39m app[33m.[39mclose()[33m;[39m
+     [90m    |[39m               [31m[1m^[22m[39m
+     [90m 51 |[39m     [36mawait[39m closeDatabase()[33m;[39m
+     [90m 52 |[39m   })[33m;[39m
+     [90m 53 |[39m[0m
+
+      at Object.<anonymous> (tests/integration/household-member-limit.integration.test.ts:50:15)
+
+FAIL tests/integration/spoiler-alert.integration.test.ts (5.422 s)
+  ● spoiler alert scheduler (integration) › notifies the user whose expiring item went stale
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+  ● spoiler alert scheduler (integration) › ignores items that were used recently
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+  ● spoiler alert scheduler (integration) › is a no-op when nothing expires inside the window
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+  ● spoiler alert scheduler (integration) › sends at most one spoiler per user per day
+
+    thrown: "Exceeded timeout of 5000 ms for a hook.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+    [0m [90m 17 |[39m
+     [90m 18 |[39m maybeDescribe([32m'spoiler alert scheduler (integration)'[39m[33m,[39m () [33m=>[39m {
+    [31m[1m>[22m[39m[90m 19 |[39m   beforeAll([36masync[39m () [33m=>[39m {
+     [90m    |[39m   [31m[1m^[22m[39m
+     [90m 20 |[39m     [36mawait[39m initializeDatabase()[33m;[39m
+     [90m 21 |[39m     [36mawait[39m sequelize[33m.[39msync({ force[33m:[39m [36mtrue[39m })[33m;[39m
+     [90m 22 |[39m   })[33m;[39m[0m
+
+      at tests/integration/spoiler-alert.integration.test.ts:19:3
+      at Object.<anonymous> (tests/integration/spoiler-alert.integration.test.ts:18:1)
+
+
+Test Suites: 2 failed, 2 skipped, 68 passed, 70 of 72 total
+Tests:       5 failed, 8 skipped, 564 passed, 577 total
+Snapshots:   0 total
+Time:        121.503 s, estimated 153 s
+Ran all test suites.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.

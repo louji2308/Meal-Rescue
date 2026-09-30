@@ -74,7 +74,10 @@ describeDb('data-integrity edge cases (integration)', () => {
     await initializeDatabase();
     await sequelize.sync({ force: true });
     app = await buildApp();
-    const registration = await registerTestUser(app);
+    // Pro tier: these tests create 2+ household members (double-create ids,
+    // ghost-member pins), which the free tier's 1-added-member limit rejects.
+    // The free-tier gate itself is covered by household-member-limit.integration.
+    const registration = await registerTestUser(app, { tier: 'pro' });
     token = registration.token;
     userId = registration.userId;
 

@@ -20,7 +20,10 @@ describeDb('common table routes (integration)', () => {
     await initializeDatabase();
     await sequelize.sync({ force: true });
     app = await buildApp();
-    const registration = await registerTestUser(app);
+    // Pro tier: this suite adds several household members (Alex, Sam, one-off),
+    // which the free tier's 1-added-member limit rejects. The free-tier gate
+    // itself is covered by household-member-limit.integration.
+    const registration = await registerTestUser(app, { tier: 'pro' });
     token = registration.token;
   });
 
@@ -228,9 +231,9 @@ describeDb('common table routes (integration)', () => {
       },
     });
     expect(converged.statusCode).toBe(200);
-    expect(
-      (converged.json() as { memberIds: string[] }).memberIds,
-    ).toEqual(expect.arrayContaining([ownerMemberId, samId]));
+    expect((converged.json() as { memberIds: string[] }).memberIds).toEqual(
+      expect.arrayContaining([ownerMemberId, samId]),
+    );
 
     const removed = await app.inject({
       method: 'DELETE',
