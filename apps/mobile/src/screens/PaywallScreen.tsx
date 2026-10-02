@@ -37,7 +37,7 @@ type PlanId = 'monthly' | 'yearly' | 'lifetime';
 const STATIC_PRICING = [
   { id: 'monthly', title: 'Monthly', price: '$4.99' },
   { id: 'annual', title: 'Yearly', price: '$39.99' },
-  { id: 'lifetime', title: 'Lifetime', price: '$79.99' },
+  { id: 'lifetime', title: 'Lifetime', price: '$79.98' },
 ];
 
 const PLAN_LABELS: Record<PlanId, string> = {

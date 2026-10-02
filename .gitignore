@@ -136,9 +136,8 @@ pgdata/
 docs/legal/
 
 # ---------------------------------------------------------------------------
-# Superpowers plans & specs (local agent work, not shipped)
+# Local-only agent docs (not shipped)
 # ---------------------------------------------------------------------------
-docs/superpowers/
 docs/demo-script.md
 docs/pro-page-cat-concepts.md
 
