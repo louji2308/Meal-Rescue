@@ -54,7 +54,7 @@ Meal Rescue takes a meal the user already has (photo, text, or voice), applies t
 | `apps/mobile` | Expo / React Native client — 4 tabs, root modals, 9 Zustand stores |
 | `apps/backend` | Fastify API — 23 route modules, domain services, deterministic engines, 36 Sequelize models, 72 test files |
 | `packages/shared-types` | Pure-TypeScript contract shared by both sides (plus `taste-v2`, `common-table`, `meal-memory`, `taste-journal` modules) |
-| `docs/` (incl. `docs/PAYWALL.md`), `SECURITY.md`, `ARCHITECTURE.md` | Product, monetization, and security documentation |
+| `MONETIZATION.md`, `SECURITY.md`, `ARCHITECTURE.md`, `docs/` (superpowers plans & design specs) | Product, monetization, and security documentation |
 | `docker-compose.yml`, `railway.toml`, `.github/workflows/` | Local stack, deployment, CI |
 
 ### A single rescue, end to end
@@ -351,7 +351,7 @@ Schema management is Sequelize `sync({ alter: true })` — a development strateg
 
 ## 7. Platform integrations
 
-This chapter covers the two third-party platforms the product depends on at runtime. Pricing strategy and unit economics live in [docs/PAYWALL.md](./docs/PAYWALL.md); secrets, auth hardening, and privacy live in [SECURITY.md](./SECURITY.md).
+This chapter covers the two third-party platforms the product depends on at runtime. Pricing strategy and unit economics live in [MONETIZATION.md](./MONETIZATION.md); secrets, auth hardening, and privacy live in [SECURITY.md](./SECURITY.md).
 
 ### RevenueCat
 
@@ -472,7 +472,7 @@ Stated as decisions with reasons, so the picture is honest rather than aspiratio
 2. **The AI planner does not silently degrade.** Everywhere else a provider failure ships a deterministic result; for conversational planning, surfacing the error was judged better than a confidently wrong plan (`ai-planner.service.ts`).
 3. **Swagger documents only schema-declared routes.** Most handlers validate with Zod in code rather than Fastify JSON schemas, so `/docs` shows 7 of 98 endpoints — the module map in §4 is the index, and `packages/shared-types` is the full contract.
 4. **Two packages are placeholders.** `packages/ai-pipeline` and `packages/ui-components` are unwired scaffolding; the real pipeline lives in `apps/backend/src/services/ai/` and the real UI in `apps/mobile/src/components/`.
-5. **Cross-cutting depth lives elsewhere by design:** monetization economics in [docs/PAYWALL.md](./docs/PAYWALL.md), security and privacy detail in [SECURITY.md](./SECURITY.md).
+5. **Cross-cutting depth lives elsewhere by design:** monetization economics in [MONETIZATION.md](./MONETIZATION.md), security and privacy detail in [SECURITY.md](./SECURITY.md).
 
 ---
 

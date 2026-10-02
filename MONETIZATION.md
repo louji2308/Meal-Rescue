@@ -1,6 +1,6 @@
 # Paywall & Monetization Deep Dive
 
-> Companion to the [Monetization & RevenueCat](../README.md#monetization--revenuecat) section of the README. This document explains **the curiosity hook that opens the screen, what is sold, where the paywall appears, how RevenueCat and the backend divide responsibility, and how to test it.**
+> Companion to the [Monetization & RevenueCat](README.md#monetization--revenuecat) section of the README. This document explains **the curiosity hook that opens the screen, what is sold, where the paywall appears, how RevenueCat and the backend divide responsibility, and how to test it.**
 
 **Contents:** [1 Summary](#1-summary) · [2 The curiosity hook](#2-the-curiosity-hook) · [3 The offer](#3-the-offer) · [4 Paywall design](#4-paywall-design) · [5 Where the paywall appears](#5-where-the-paywall-appears) · [6 Architecture and trust model](#6-architecture-and-trust-model) · [7 RevenueCat integration reference](#7-revenuecat-integration-reference) · [8 Environments and testing](#8-environments-and-testing) · [9 Unit economics](#9-unit-economics) · [10 Risks and mitigations](#10-risks-and-mitigations) · [11 Experiments to run next](#11-experiments-to-run-next) · [12 File map](#12-file-map)
 
@@ -37,7 +37,7 @@ Before a single plan or price is shown, the Pro screen greets the user with a me
 
 That gap, between what is remembered and what is only promised, is the engine: curiosity makes the next step feel *inevitable* rather than *sold*. The user is not asked whether they want Pro; they are shown the edge of something they already want and left to lean into it.
 
-The copy is **deterministic-first by design** — rendered instantly from local pools, so the paywall never opens blank and never waits on a spinner — with an AI variant of the same two-beat structure (subject-scoped, cached for three hours, signature-bound so stale copy never outlives its subject) ready behind `PAYWALL_AI_TEASER_ENABLED`. Wiring: [`usePaywallTeaser.ts`](../apps/mobile/src/hooks/usePaywallTeaser.ts) and [`paywall.api.ts`](../apps/mobile/src/services/paywall.api.ts), which calls `POST /api/v1/paywall/teaser` ([`paywall.routes.ts`](../apps/backend/src/routes/paywall.routes.ts)).
+The copy is **deterministic-first by design** — rendered instantly from local pools, so the paywall never opens blank and never waits on a spinner — with an AI variant of the same two-beat structure (subject-scoped, cached for three hours, signature-bound so stale copy never outlives its subject) ready behind `PAYWALL_AI_TEASER_ENABLED`. Wiring: [`usePaywallTeaser.ts`](apps/mobile/src/hooks/usePaywallTeaser.ts) and [`paywall.api.ts`](apps/mobile/src/services/paywall.api.ts), which calls `POST /api/v1/paywall/teaser` ([`paywall.routes.ts`](apps/backend/src/routes/paywall.routes.ts)).
 
 ---
 
@@ -88,7 +88,7 @@ These are **one-time totals per account** and never refresh:
 - **A no-card alternative.** The free 1-hour Pro Pass lets someone feel Pro before paying.
 - **Rejected confirms do not hijack the screen.** A plan-limit rejection shows an inline banner with an upgrade hint and leaves the decision to the user.
 
-- **Custom-built screen, not RevenueCat's Paywalls UI.** Packages are fetched through the SDK (`getOfferings()` → `offerings.current`, [`revenuecat.service.ts:146-158`](../apps/mobile/src/services/revenuecat.service.ts)) and rendered by this app's own [`PaywallScreen`](../apps/mobile/src/screens/PaywallScreen.tsx). Copy, layout, and badges are ours; only prices and availability come from RevenueCat.
+- **Custom-built screen, not RevenueCat's Paywalls UI.** Packages are fetched through the SDK (`getOfferings()` → `offerings.current`, [`revenuecat.service.ts:146-158`](apps/mobile/src/services/revenuecat.service.ts)) and rendered by this app's own [`PaywallScreen`](apps/mobile/src/screens/PaywallScreen.tsx). Copy, layout, and badges are ours; only prices and availability come from RevenueCat.
 - **No plan is pre-selected.** There is no default or remembered choice — the user taps to select, so nobody buys by accident. The only signal is a **"Best value" badge and highlighted card on the yearly plan** (`recommended = plan === 'yearly'`, `PaywallScreen.tsx:349`), which is a recommendation rather than a pre-selection.
 - **Restore purchases is present** (button and `handleRestore`, `PaywallScreen.tsx:212,423`) — required for subscription apps and reachable from the same screen.
 - **A rejection never traps the user.** A failed limit shows an inline banner with an upgrade hint and leaves the screen intact — no forced modal.
@@ -148,7 +148,7 @@ sequenceDiagram
 
 **Webhook reference.** RevenueCat's [event types](https://www.revenuecat.com/docs/integrations/webhooks/event-types-and-fields) include `INITIAL_PURCHASE`, `RENEWAL`, `CANCELLATION`, `UNCANCELLATION`, `BILLING_ISSUE`, `PRODUCT_CHANGE`, `EXPIRATION`, and `NON_RENEWING_PURCHASE` (typically how one-time purchases such as a lifetime plan arrive). RevenueCat's guidance is to revoke access on `EXPIRATION`, not on `CANCELLATION`, because a cancelled subscription stays active until it expires.
 
-**Events processed.** Two hardcoded sets in [`webhook.routes.ts:20-21`](../apps/backend/src/routes/webhook.routes.ts):
+**Events processed.** Two hardcoded sets in [`webhook.routes.ts:20-21`](apps/backend/src/routes/webhook.routes.ts):
 
 | Set | Types | Effect |
 |---|---|---|
@@ -166,7 +166,7 @@ sequenceDiagram
 
 **Authentication:** shared bearer secret compared with a timing-safe equality check; the route is public (it cannot carry a user JWT) and is gated by that secret alone.
 
-**Pro Pass is backend-owned, not a RevenueCat entitlement.** The 60-minute ad-earned pass is a `proPassUntil` timestamp column on the user row ([`rescue-allowance.service.ts:31,126`](../apps/backend/src/services/rescue-allowance.service.ts)); `effectiveTier()` returns `'pro'` while it is in the future. It is never represented as a RevenueCat promotional entitlement — there is no offer-code or promotional-entitlement logic anywhere in the codebase.
+**Pro Pass is backend-owned, not a RevenueCat entitlement.** The 60-minute ad-earned pass is a `proPassUntil` timestamp column on the user row ([`rescue-allowance.service.ts:31,126`](apps/backend/src/services/rescue-allowance.service.ts)); `effectiveTier()` returns `'pro'` while it is in the future. It is never represented as a RevenueCat promotional entitlement — there is no offer-code or promotional-entitlement logic anywhere in the codebase.
 
 ---
 
@@ -183,19 +183,19 @@ sequenceDiagram
 
 | Identifier | Value | Where |
 |---|---|---|
-| **Entitlement id** | `mealrescue_pro` | [`subscription.routes.ts:9`](../apps/backend/src/routes/subscription.routes.ts); read back as `rcData.subscriber.entitlements['mealrescue_pro']` |
-| **Offering id** | *not hardcoded* — resolved at runtime as `offerings.current` | [`revenuecat.service.ts:159`](../apps/mobile/src/services/revenuecat.service.ts); the id is defined in the RevenueCat dashboard, so it is never written in source |
-| **Package identifiers** | *not hardcoded* — read from `pkg.identifier` at runtime | [`PaywallScreen.tsx:337`](../apps/mobile/src/screens/PaywallScreen.tsx) |
-| **Store product ids** | `pro_monthly` is the only product id literal in the repository (a webhook test fixture) | [`tests/integration/webhook.integration.test.ts:45`](../apps/backend/tests/integration/webhook.integration.test.ts) |
-| **SDK** | `react-native-purchases` `^10.7.2` | [`apps/mobile/package.json`](../apps/mobile/package.json) |
+| **Entitlement id** | `mealrescue_pro` | [`subscription.routes.ts:9`](apps/backend/src/routes/subscription.routes.ts); read back as `rcData.subscriber.entitlements['mealrescue_pro']` |
+| **Offering id** | *not hardcoded* — resolved at runtime as `offerings.current` | [`revenuecat.service.ts:159`](apps/mobile/src/services/revenuecat.service.ts); the id is defined in the RevenueCat dashboard, so it is never written in source |
+| **Package identifiers** | *not hardcoded* — read from `pkg.identifier` at runtime | [`PaywallScreen.tsx:337`](apps/mobile/src/screens/PaywallScreen.tsx) |
+| **Store product ids** | `pro_monthly` is the only product id literal in the repository (a webhook test fixture) | [`tests/integration/webhook.integration.test.ts:45`](apps/backend/tests/integration/webhook.integration.test.ts) |
+| **SDK** | `react-native-purchases` `^10.7.2` | [`apps/mobile/package.json`](apps/mobile/package.json) |
 
-**Why no product ids in the app:** plan cards are classified by RevenueCat's own `packageType` first (`LIFETIME` / `ANNUAL` / `MONTHLY`), then by scanning identifiers, then by ISO-8601 subscription period ([`PaywallScreen.tsx:65-86`](../apps/mobile/src/screens/PaywallScreen.tsx)). Store product titles are shared marketing strings ("Pro") across every tier and cannot tell the cards apart — the comment at `PaywallScreen.tsx:60-63` records that reasoning.
+**Why no product ids in the app:** plan cards are classified by RevenueCat's own `packageType` first (`LIFETIME` / `ANNUAL` / `MONTHLY`), then by scanning identifiers, then by ISO-8601 subscription period ([`PaywallScreen.tsx:65-86`](apps/mobile/src/screens/PaywallScreen.tsx)). Store product titles are shared marketing strings ("Pro") across every tier and cannot tell the cards apart — the comment at `PaywallScreen.tsx:60-63` records that reasoning.
 
-**App user ids are linked to backend user ids.** `Purchases.logIn(userId)` is called with the backend user id ([`revenuecat.service.ts:92`](../apps/mobile/src/services/revenuecat.service.ts), `logOut` at `:101`), so purchases and entitlements follow the account across devices rather than being tied to a per-install anonymous id. The webhook's `app_user_id` is therefore the same id as `users.id`.
+**App user ids are linked to backend user ids.** `Purchases.logIn(userId)` is called with the backend user id ([`revenuecat.service.ts:92`](apps/mobile/src/services/revenuecat.service.ts), `logOut` at `:101`), so purchases and entitlements follow the account across devices rather than being tied to a per-install anonymous id. The webhook's `app_user_id` is therefore the same id as `users.id`.
 
 Configuration for products, entitlements, and offerings lives in the RevenueCat dashboard, not in this repository.
 
-**Dashboard screenshots are not included, deliberately.** A RevenueCat dashboard capture exposes the project id, API keys, and customer identifiers, and there is no `docs/assets/` directory in this repository to hold them. What is verifiable from the repository alone: the entitlement id (`mealrescue_pro`), the webhook handler and its integration tests, and the client-side classification logic linked above. The one visual artifact shipped is the in-app paywall itself, [`assets/Paywall.png`](../assets/Paywall.png), which shows all three plans, the yearly "Best value" badge, and the Restore purchases control. A reviewer with a RevenueCat account can reproduce the full path via the Test Store walkthrough in §8.
+**Dashboard screenshots are not included, deliberately.** A RevenueCat dashboard capture exposes the project id, API keys, and customer identifiers, and no such capture is committed to this repository. What is verifiable from the repository alone: the entitlement id (`mealrescue_pro`), the webhook handler and its integration tests, and the client-side classification logic linked above. The one visual artifact shipped is the in-app paywall itself, [`assets/Paywall.png`](assets/Paywall.png), which shows all three plans, the yearly "Best value" badge, and the Restore purchases control. A reviewer with a RevenueCat account can reproduce the full path via the Test Store walkthrough in §8.
 
 ---
 

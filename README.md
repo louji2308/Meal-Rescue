@@ -11,7 +11,7 @@
     <a href="https://github.com/louji2308/Meal-Rescue/actions/workflows/ci.yml"><img src="https://github.com/louji2308/Meal-Rescue/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
     <a href="https://www.shipaton.com/categories/next-gen-award"><img src="https://img.shields.io/badge/Shipaton%202026-Next%20Gen%20Award-orange.svg" alt="Shipaton 2026 Next Gen Award" /></a>
-    <a href="./docs/PAYWALL.md"><img src="https://img.shields.io/badge/monetization-RevenueCat-red.svg" alt="Monetization powered by RevenueCat" /></a>
+    <a href="./MONETIZATION.md"><img src="https://img.shields.io/badge/monetization-RevenueCat-red.svg" alt="Monetization powered by RevenueCat" /></a>
   </p>
 
   <sub>Expo · React Native · Fastify · PostgreSQL · Redis · TypeScript · RevenueCat</sub>
@@ -56,11 +56,11 @@ Meal Rescue is built for the **Shipaton 2026 Next Gen Award**, which is judged f
 |---|---|
 | Is the idea clear, useful, and original? Does it solve a real problem? | [The idea](#the-idea-in-30-seconds) · [How Meal Rescue differs](#how-meal-rescue-differs) · [How it works](#how-it-works) |
 | Is there meaningful progress toward a working app, with the core functionality clear from the video and code? | [Project status](#project-status) · [Run it](#run-it) · [Verification](#verification) · `apps/backend/tests/` |
-| Does it use RevenueCat thoughtfully? | [Monetization and RevenueCat](#monetization--revenuecat) · [**docs/PAYWALL.md**](./docs/PAYWALL.md) |
+| Does it use RevenueCat thoughtfully? | [Monetization and RevenueCat](#monetization--revenuecat) · [**MONETIZATION.md**](./MONETIZATION.md) |
 | Are the technical choices, product thinking, and care visible? | [Architecture](#architecture) · [Engineering decisions](#engineering-decisions) · [Safety, privacy, and responsible AI](#safety-privacy-and-responsible-ai) |
 | Is it open source? | MIT — see [LICENSE](./LICENSE) |
 
-Two companion documents are worth reading next: **[SECURITY.md](./SECURITY.md)** (threat model, the controls actually in place, and the test evidence behind each) and **[docs/PAYWALL.md](./docs/PAYWALL.md)** (pricing, entitlements, webhooks, unit economics).
+Two companion documents are worth reading next: **[SECURITY.md](./SECURITY.md)** (threat model, the controls actually in place, and the test evidence behind each) and **[MONETIZATION.md](./MONETIZATION.md)** (pricing, entitlements, webhooks, unit economics).
 
 **Submitted revision:** [`1fda0b7`](https://github.com/louji2308/Meal-Rescue/commit/1fda0b710b68607d7f858c4393255b6b85b437cf) — committed 30 Sep 2026 20:57 UTC, minutes before the Devpost deadline. Documentation corrections made afterwards are documented in later commits; the submitted app code is unchanged from that revision.
 
@@ -195,7 +195,7 @@ The cache key is scoped by the image plus contextual hints (such as cuisine); th
 
 ## Monetization & RevenueCat
 
-> **RevenueCat is the purchase and entitlement layer.** The backend decides what each tier may do. The full design, trust model, testing paths, and unit-economics framework live in **[docs/PAYWALL.md](./docs/PAYWALL.md)**.
+> **RevenueCat is the purchase and entitlement layer.** The backend decides what each tier may do. The full design, trust model, testing paths, and unit-economics framework live in **[MONETIZATION.md](./MONETIZATION.md)**.
 
 <p align="center">
   <img src="assets/Paywall.png" alt="Meal Rescue Pro paywall showing Monthly, Yearly, and Lifetime plans" width="300" />
@@ -203,7 +203,7 @@ The cache key is scoped by the image plus contextual hints (such as cuisine); th
 
 ### The curiosity hook
 
-**The paywall does not open with prices — it opens with a memory.** Before any plan is shown, the screen greets you with the exact meal you marked *loved* — *"You loved what the curd did with pomegranate and roasted peanuts!"* — and then withholds the payoff: *"The next combination might leave you craving another bite."* The dish is remembered; the better thing is promised but never shown, and the tap that closes that loop lands on the paywall. Copy is deterministic-first (instant render, no spinner), with an AI variant behind `PAYWALL_AI_TEASER_ENABLED`. Full breakdown: [docs/PAYWALL.md → The curiosity hook](./docs/PAYWALL.md#2-the-curiosity-hook).
+**The paywall does not open with prices — it opens with a memory.** Before any plan is shown, the screen greets you with the exact meal you marked *loved* — *"You loved what the curd did with pomegranate and roasted peanuts!"* — and then withholds the payoff: *"The next combination might leave you craving another bite."* The dish is remembered; the better thing is promised but never shown, and the tap that closes that loop lands on the paywall. Copy is deterministic-first (instant render, no spinner), with an AI variant behind `PAYWALL_AI_TEASER_ENABLED`. Full breakdown: [MONETIZATION.md → The curiosity hook](./MONETIZATION.md#2-the-curiosity-hook).
 
 ### The offer
 
@@ -260,7 +260,7 @@ RevenueCat's **Test Store** (API keys prefixed `test_`) runs the full purchase f
 - In Expo Go the SDK runs in **Preview API Mode** (mocked native calls). Real purchase flows need a **development build** (`expo run:android` / `expo run:ios`).
 - A Test Store key must never ship in a release build.
 
-Step-by-step instructions, including what to check in the RevenueCat dashboard, are in [docs/PAYWALL.md → Testing](./docs/PAYWALL.md#8-environments-and-testing).
+Step-by-step instructions, including what to check in the RevenueCat dashboard, are in [MONETIZATION.md → Testing](./MONETIZATION.md#8-environments-and-testing).
 
 The checked-in config deliberately ships **no** working key: [`apps/mobile/.env.example`](./apps/mobile/.env.example) leaves `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` and `EXPO_PUBLIC_REVENUECAT_IOS_KEY` empty, and the real Test Store key lives only in `apps/mobile/.env`, which is gitignored ([`.gitignore:34`](./apps/mobile/.gitignore)). A reviewer cannot pick up a live purchase path from the repository alone — the Test Store flow activates only when `EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE=1` is set locally ([`revenuecat.service.ts:33`](./apps/mobile/src/services/revenuecat.service.ts)).
 
@@ -387,7 +387,7 @@ flowchart TB
 │   ├── ai-pipeline/             # Standalone AI pipeline package
 │   └── ui-components/           # Shared UI components
 ├── assets/                      # Product / mascot / cuisine assets
-├── docs/                        # PAYWALL.md + superpowers plans & design specs
+├── docs/                        # superpowers plans & design specs
 ├── .github/workflows/           # CI
 ├── docker-compose.yml           # PostgreSQL + Redis + backend
 ├── railway.toml                 # Railway deployment configuration
