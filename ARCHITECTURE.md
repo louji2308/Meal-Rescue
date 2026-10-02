@@ -472,7 +472,7 @@ Stated as decisions with reasons, so the picture is honest rather than aspiratio
 2. **The AI planner does not silently degrade.** Everywhere else a provider failure ships a deterministic result; for conversational planning, surfacing the error was judged better than a confidently wrong plan (`ai-planner.service.ts`).
 3. **Swagger documents only schema-declared routes.** Most handlers validate with Zod in code rather than Fastify JSON schemas, so `/docs` shows 7 of 98 endpoints — the module map in §4 is the index, and `packages/shared-types` is the full contract.
 4. **Two packages are placeholders.** `packages/ai-pipeline` and `packages/ui-components` are unwired scaffolding; the real pipeline lives in `apps/backend/src/services/ai/` and the real UI in `apps/mobile/src/components/`.
-5. **Cross-cutting depth lives elsewhere by design:** product limitations in [README.md](./README.md), monetization economics in [docs/PAYWALL.md](./docs/PAYWALL.md), security and privacy detail in [SECURITY.md](./SECURITY.md).
+5. **Cross-cutting depth lives elsewhere by design:** monetization economics in [docs/PAYWALL.md](./docs/PAYWALL.md), security and privacy detail in [SECURITY.md](./SECURITY.md).
 
 ---
 

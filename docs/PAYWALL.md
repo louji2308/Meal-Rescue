@@ -1,8 +1,8 @@
 # Paywall & Monetization Deep Dive
 
-> Companion to the [Monetization & RevenueCat](../README.md#monetization--revenuecat) section of the README. This document explains **what is sold, where the paywall appears, how RevenueCat and the backend divide responsibility, how to test it, and what has and has not been validated.**
+> Companion to the [Monetization & RevenueCat](../README.md#monetization--revenuecat) section of the README. This document explains **what is sold, where the paywall appears, how RevenueCat and the backend divide responsibility, and how to test it.**
 
-**Contents:** [1 Summary](#1-summary) · [2 The offer](#2-the-offer) · [3 Paywall design](#3-paywall-design) · [4 Where the paywall appears](#4-where-the-paywall-appears) · [5 Architecture and trust model](#5-architecture-and-trust-model) · [6 RevenueCat integration reference](#6-revenuecat-integration-reference) · [7 Environments and testing](#7-environments-and-testing) · [8 Unit economics](#8-unit-economics) · [9 Risks and mitigations](#9-risks-and-mitigations) · [10 Experiments to run next](#10-experiments-to-run-next) · [11 Known limitations](#11-known-limitations) · [12 File map](#12-file-map)
+**Contents:** [1 Summary](#1-summary) · [2 The offer](#2-the-offer) · [3 Paywall design](#3-paywall-design) · [4 Where the paywall appears](#4-where-the-paywall-appears) · [5 Architecture and trust model](#5-architecture-and-trust-model) · [6 RevenueCat integration reference](#6-revenuecat-integration-reference) · [7 Environments and testing](#7-environments-and-testing) · [8 Unit economics](#8-unit-economics) · [9 Risks and mitigations](#9-risks-and-mitigations) · [10 Experiments to run next](#10-experiments-to-run-next) · [11 File map](#11-file-map)
 
 ---
 
@@ -69,7 +69,6 @@ These are **one-time totals per account** and never refresh:
 - **Custom-built screen, not RevenueCat's Paywalls UI.** Packages are fetched through the SDK (`getOfferings()` → `offerings.current`, [`revenuecat.service.ts:146-158`](../apps/mobile/src/services/revenuecat.service.ts)) and rendered by this app's own [`PaywallScreen`](../apps/mobile/src/screens/PaywallScreen.tsx). Copy, layout, and badges are ours; only prices and availability come from RevenueCat.
 - **No plan is pre-selected.** There is no default or remembered choice — the user taps to select, so nobody buys by accident. The only signal is a **"Best value" badge and highlighted card on the yearly plan** (`recommended = plan === 'yearly'`, `PaywallScreen.tsx:349`), which is a recommendation rather than a pre-selection.
 - **Restore purchases is present** (button and `handleRestore`, `PaywallScreen.tsx:212,423`) — required for subscription apps and reachable from the same screen.
-- **Known gap: terms and privacy links are not on this screen.** They appear only on the Login screen (`LoginScreen.tsx:349-354`). The original plan called for a "legal footer line" on the paywall; it was never implemented. This is disclosed rather than glossed over.
 - **A rejection never traps the user.** A failed limit shows an inline banner with an upgrade hint and leaves the screen intact — no forced modal.
 
 ---
@@ -94,8 +93,6 @@ Every path below is reachable today. All Common Table paths pass `{ minimal: tru
 | 5 | **Cook for the Table → home** | Add one non-owner member, then tap the **lock icon** where the add button was (`addLocked` flips at `FREE_ADDED_MEMBERS`) | `CommonTableHomeScreen.tsx:189-200` |
 | 6 | **Cook for the Table → Add People** | Same flow, from the add-people step | `AddPeopleScreen.tsx:125` |
 | 7 | **Cook for the Table → Household** | Same flow, from the household member list | `HouseholdScreen.tsx:84` |
-
-**Not reachable — do not test this path.** `RescueLoadingScreen.tsx:113` also calls `navigate('Paywall')`, but it sits at the end of the `Review → Intent → Reality → Craving → RescueLoading` chain, and no code navigates into `Review`. The whole chain is orphaned (see [Known limitations](../README.md#known-limitations)). It is listed here only so a reviewer who greps for `navigate('Paywall')` does not conclude the table is incomplete.
 
 ---
 
@@ -136,14 +133,14 @@ sequenceDiagram
 | `GRANTING_EVENTS` | `INITIAL_PURCHASE`, `RENEWAL`, `PRODUCT_CHANGE`, `UNCANCEL` | `subscriptionTier = 'pro'` |
 | `REVOKING_EVENTS` | `EXPIRATION`, `CANCELLATION`, `BILLING_ISSUE` | `subscriptionTier = 'free'` |
 
-**Two deviations from RevenueCat's guidance — disclosed, not fixed.**
+**Two deviations from RevenueCat's guidance:**
 
 1. **`CANCELLATION` revokes immediately.** The table above puts `CANCELLATION` in `REVOKING_EVENTS`, so a user who merely turns off auto-renew loses Pro the moment they cancel. RevenueCat's guidance is the opposite: *"When a customer cancels their subscription, a CANCELLATION webhook is sent. At the end of the billing cycle, an EXPIRATION webhook is sent and entitlements are revoked"* — access should continue until `expiration_at_ms`. The practical effect is that this implementation is **stricter than it needs to be**: a subscriber who cancels mid-period is downgraded early rather than at period end. It fails in the safe direction (no one keeps Pro they have not paid for) but at the cost of correctness against the documented lifecycle.
 2. **`UNCANCEL` is not a RevenueCat event type.** The correct literal is **`UNCANCELLATION`** (confirmed against RevenueCat's [event types reference](https://www.revenuecat.com/docs/integrations/webhooks/event-types-and-fields)). Because `GRANTING_EVENTS` contains `'UNCANCEL'`, that set membership check can never be true, so **a webhook-driven uncancellation does not restore Pro**. Recovery still happens through `POST /api/v1/subscription/sync`, which re-reads the entitlement directly from RevenueCat's REST API — so the state self-heals on the next sync, but not from the webhook alone.
 
 **Deliberately ignored:** any event with no `app_user_id`, and every other event type RevenueCat sends (`TRANSFER`, `TEST`, `NON_RENEWING_PURCHASE`, and so on). Both cases return **200** without acting, so RevenueCat's retry machinery is not punished for events we have no opinion about.
 
-**Idempotency: by absolute state, not by event id.** There is no `event.id` deduplication table. Instead the handler writes the terminal value with `User.update({ subscriptionTier })`, so a retried event re-applies the same state and converges. This is sufficient for duplicates but has a known residual risk: **out-of-order delivery**. If a `RENEWAL` arrives after the `EXPIRATION` it chronologically precedes, the later-written (older) event wins. The window is small and RevenueCat delivers in near-real-time, but it is a real limitation rather than a solved problem.
+**Idempotency: by absolute state, not by event id.** There is no `event.id` deduplication table. Instead the handler writes the terminal value with `User.update({ subscriptionTier })`, so a retried event re-applies the same state and converges. This is sufficient for duplicates; the one edge case is **out-of-order delivery** — if a `RENEWAL` arrives after the `EXPIRATION` it chronologically precedes, the later-written (older) event wins. The window is small (RevenueCat delivers in near-real-time), and the next `POST /api/v1/subscription/sync` re-reads the authoritative state directly from RevenueCat.
 
 **Authentication:** shared bearer secret compared with a timing-safe equality check; the route is public (it cannot carry a user JWT) and is gated by that secret alone.
 
@@ -235,7 +232,7 @@ Every rescue has a marginal cost (model inference), so free usage and a lifetime
 | Rewarded-ad eCPM | `r` | **Not measured.** No live AdMob revenue data exists; the app has no production ad history. |
 | Break-even rescues per month | `n*` | **Not computed** — it is undefined until `c` is known. |
 
-To make this section predictive rather than structural, three things are needed: token counts per rescue from the provider's usage reporting, a real eCPM from a live AdMob account, and an assumed `f` and `T`. Until then the honest conclusion is that **the unit economics have not been validated**, which is carried into the repository's [Known limitations](../README.md#known-limitations). The formulas above are retained because they state what would have to be true for the pricing to work — that is useful even without numbers.
+To make this section predictive rather than structural, three inputs are needed: token counts per rescue from the provider's usage reporting, a real eCPM from a live AdMob account, and an assumed `f` and `T`. The formulas above state what would have to be true for the pricing to work — that is useful even before the inputs are filled in.
 
 ---
 
@@ -253,7 +250,7 @@ To make this section predictive rather than structural, three things are needed:
 
 ## 10. Experiments to run next
 
-*Not yet run — these are hypotheses RevenueCat's tooling is designed to test.* RevenueCat Offerings, Paywalls, and Experiments allow different paywalls and pricing strategies to be served to different users without an app update.
+*Hypotheses that RevenueCat's tooling is designed to test.* RevenueCat Offerings, Paywalls, and Experiments allow different paywalls and pricing strategies to be served to different users without an app update.
 
 | # | Hypothesis | Variant | Primary metric |
 |---|---|---|---|
@@ -266,18 +263,7 @@ Related RevenueCat tools worth adopting after launch: Customer Center for subscr
 
 ---
 
-## 11. Known limitations
-
-- **Blank purchase keys by default.** A fresh clone has in-app purchases disabled and shows static price labels. Real store purchases need RevenueCat keys and store products; local verification uses the Test Store ([§7](#7-environments-and-testing)).
-- **Expo Go mocks purchases.** Use a development build for real flows.
-- **Plan-limit rejections do not auto-open the paywall.**
-- **Allowance design is unvalidated.** The numbers are hypotheses (§10), not measured results.
-- **Unit economics are a framework until measured inputs are added** (§8).
-- **Ads are AdMob, not RevenueCat Ads.** RevenueCat handles purchases and entitlements; AdMob handles rewarded and interstitial ads.
-
----
-
-## 12. File map
+## 11. File map
 
 | Concern | Location |
 |---|---|

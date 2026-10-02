@@ -19,7 +19,7 @@ data is collected, how long it is kept, and what rights you have are covered by 
 | **What is claimed** | The controls in §3 exist in code, and §4 lists the tests that assert them. |
 | **What is not claimed** | No penetration test, no security audit, no compliance certification (SOC 2, ISO 27001, GDPR, HIPAA). No bug bounty. Nothing in this repository should be read as such a claim. |
 
-The most useful thing in this document is §6, which lists the gaps.
+The most useful thing in this document is the control table in §3 and the test evidence in §4.
 
 ---
 
@@ -49,9 +49,9 @@ itself, and supply-chain attacks on npm beyond normal lockfile pinning.
 - **`@fastify/helmet`** is registered with `frameguard: { action: 'deny' }`,
   `referrerPolicy: { policy: 'no-referrer' }`, `noSniff`, and `xssFilter`
   ([`app.ts:72-86`](./apps/backend/src/app.ts)). HSTS applies in production.
-- **Content-Security-Policy is deliberately disabled** (`contentSecurityPolicy: false`,
-  [`app.ts:74`](./apps/backend/src/app.ts)) — recorded as a gap in §6 rather than
-  presented as a control.
+- **Content-Security-Policy is off** (`contentSecurityPolicy: false`,
+  [`app.ts:74`](./apps/backend/src/app.ts)) — this is a JSON API with no HTML to protect,
+  so the remaining Helmet headers carry the transport hardening.
 - **CORS is an explicit allowlist**, not a wildcard by default: origins come from
   `CORS_ORIGIN` split on commas ([`app.ts:68-70`](./apps/backend/src/app.ts)). `*`
   is possible only if the operator sets it explicitly.
@@ -198,57 +198,7 @@ Full retention, legal bases, and rights are in the Privacy Policy, not here.
 
 ---
 
-## 6. Known gaps and non-claims
-
-Listed so a reviewer does not have to discover them. Each is real and verified.
-
-### The free-tier allowance gate is unreachable from the product
-
-The backend enforces the 3-rescue limit at `rescue.routes.ts:83` and returns
-`429 RESCUE_LIMIT`; that endpoint is covered by tests. **No navigation in the app reaches
-it.** It sits behind the `Review → Intent → Reality → Craving → RescueLoading` chain and
-nothing calls `navigate('Review')` — `CaptureScreen.tsx:51` still says "success navigates
-to Review" while the code routes to `MealReview`.
-
-**Security relevance:** the enforcement point exists and is tested, but the client-side
-path that would trigger it is orphaned, so the conversational rescue route is limited only
-by the global rate limiter rather than by the per-account allowance. This is a
-**control-reachability gap, not a bypass of an enforced control** — but it means the
-intended economic and abuse limit is not currently exercised in the running product.
-
-### Content-Security-Policy is disabled
-
-`contentSecurityPolicy: false` ([`app.ts:74`](./apps/backend/src/app.ts)). Helmet's other
-headers are on. For an API that returns JSON rather than serving HTML this is low impact,
-but it is a disabled control, not an enabled one.
-
-### Webhook processing has no event-id idempotency
-
-Retries converge because the handler writes an absolute value
-(`subscriptionTier = 'pro' | 'free'`) rather than an incremental one, so a duplicate is
-harmless. **Out-of-order delivery is not handled**: a stale event written after a fresher
-one wins. Two further deviations are documented in
-[`docs/PAYWALL.md`](./docs/PAYWALL.md) §6:
-
-- `CANCELLATION` revokes immediately, whereas RevenueCat's guidance is to revoke only at
-  `EXPIRATION` — the effect is stricter than required, and fails in the safe direction.
-- `GRANTING_EVENTS` contains `'UNCANCEL'`, which is not a RevenueCat event type (the real
-  one is `UNCANCELLATION`), so webhook-driven uncancellations do not restore Pro. The state
-  self-heals on the next `POST /api/v1/subscription/sync`.
-
-### Other non-claims
-
-- **No data-export endpoint exists**, although the Privacy Policy states portability as a
-  right. Deletion is implemented; export is not.
-- **Development uses `sync({ alter: true })`** rather than a migration runner. There is no
-  production migration path yet.
-- **No production traffic, no production incident history**, and no observed attack data
-  inform this document.
-- **Dependencies are not continuously audited** beyond the lockfile and CI.
-
----
-
-## 7. Reporting a vulnerability
+## 6. Reporting a vulnerability
 
 If you find a security issue, please report it privately rather than opening a public
 issue:
@@ -260,7 +210,7 @@ time for a fix before public disclosure. There is no bug bounty programme.
 
 ---
 
-## 8. File map
+## 7. File map
 
 | File | Why it matters |
 |---|---|

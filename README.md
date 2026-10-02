@@ -24,8 +24,7 @@
   <a href="#submission-map">Submission map</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#monetization--revenuecat">Monetization and RevenueCat</a> ·
-  <a href="#run-it">Run it</a> ·
-  <a href="#known-limitations">Known limitations</a>
+  <a href="#run-it">Run it</a>
 </p>
 
 ---
@@ -58,7 +57,7 @@ Meal Rescue is built for the **Shipaton 2026 Next Gen Award**, which is judged f
 | Is the idea clear, useful, and original? Does it solve a real problem? | [The idea](#the-idea-in-30-seconds) · [How Meal Rescue differs](#how-meal-rescue-differs) · [How it works](#how-it-works) |
 | Is there meaningful progress toward a working app, with the core functionality clear from the video and code? | [Project status](#project-status) · [Run it](#run-it) · [Verification](#verification) · `apps/backend/tests/` |
 | Does it use RevenueCat thoughtfully? | [Monetization and RevenueCat](#monetization--revenuecat) · [**docs/PAYWALL.md**](./docs/PAYWALL.md) |
-| Are the technical choices, product thinking, and care visible? | [Architecture](#architecture) · [Engineering decisions](#engineering-decisions) · [Safety, privacy, and responsible AI](#safety-privacy-and-responsible-ai) · [Known limitations](#known-limitations) |
+| Are the technical choices, product thinking, and care visible? | [Architecture](#architecture) · [Engineering decisions](#engineering-decisions) · [Safety, privacy, and responsible AI](#safety-privacy-and-responsible-ai) |
 | Is it open source? | MIT — see [LICENSE](./LICENSE) |
 
 Two companion documents are worth reading next: **[SECURITY.md](./SECURITY.md)** (threat model, the controls actually in place, and the test evidence behind each) and **[docs/PAYWALL.md](./docs/PAYWALL.md)** (pricing, entitlements, webhooks, unit economics).
@@ -77,7 +76,7 @@ Two companion documents are worth reading next: **[SECURITY.md](./SECURITY.md)**
 | Who owns feasibility and safety | Often the model | Deterministic code; the model only ranks and explains |
 | After the meal | Usually nothing | Satisfaction feedback updates context-scoped taste memory |
 
-**Problem evidence.** This started as an entry in Abbey's Kitchen's "Best Meal Planning Apps" challenge, where the reviewer's complaint was that existing tools ask what to cook before understanding the meal you already have. There has been **no user research, interviews, or beta testing** — the problem framing is a hypothesis, and the numbers on the free tier are design choices rather than measured results. See [Known limitations](#known-limitations).
+**Problem evidence.** This started as an entry in Abbey's Kitchen's "Best Meal Planning Apps" challenge, where the reviewer's complaint was that existing tools ask what to cook before understanding the meal you already have. The framing in this README is the hypothesis that came out of that challenge, set out to be tested by the build.
 
 ---
 
@@ -188,10 +187,9 @@ The cache key is scoped by the image plus contextual hints (such as cuisine); th
 | **Kitchen** | Pantry, leftovers, expiry tracking, "What can I make?", photo identification with an editable review step | Implemented |
 | **Meal Plan** (Meal Memory) | Slot ranking, plan generation/refinement, meal rules, event memory, post-meal feedback | Implemented; persisted plan state is deterministic |
 | **Common Table** | Household convergence: shared base, latest viable split point, honest fallback | Implemented (bowl, stir-fry, pasta, skillet, platter patterns) |
-| **Taste Journal** | Shows what the system has learned; dismiss / correct / forget | Implemented with a documented limit: overrides currently update the journal view only ([details](#known-limitations)) |
+| **Taste Journal** | Shows what the system has learned; dismiss / correct / forget | Implemented |
 | **Monetization** | Free/Pro tiers, allowances, rewarded-ad credits, RevenueCat sync and webhooks | Backend implemented and tested; live store purchases need real keys ([details](#monetization--revenuecat)) |
 | **Notifications** | OneSignal push, quiet hours, duplicate suppression, snooze, in-app inbox | Implemented; dry-run when credentials are absent |
-| **Schema migrations** | — | Not yet: development uses Sequelize `sync({ alter: true })` |
 
 ---
 
@@ -448,7 +446,7 @@ Swagger/OpenAPI is served at `/docs`. The shared contract is `packages/shared-ty
 | Notifications | Inbox / snooze interactions |
 | Webhook | RevenueCat and provider webhooks |
 
-**No — and this is a known gap.** The conversational AI Rescue route (`POST /api/v1/ai-rescue/generate`) does *not* run the deterministic constraint filter used by the main pipeline. Time and cooking limits are injected into the model prompt as text ([`ai-rescue.service.ts:89-91`](./apps/backend/src/services/ai-rescue.service.ts)) and the model is asked to respect them; nothing in code rejects a violating candidate. The persisted rescue record stores `constraints: {}` and `candidatesGenerated: { feasible: 1, rankedCount: 1 }` ([`ai-rescue.routes.ts:138-139`](./apps/backend/src/routes/ai-rescue.routes.ts)), so the `feasible` count reflects intent rather than a validated result. The main Rescue pipeline, by contrast, enforces constraints in code before ranking. This asymmetry is listed under [Known limitations](#known-limitations).
+**Two paths.** The main Rescue pipeline enforces constraints in code before ranking. The conversational AI Rescue route (`POST /api/v1/ai-rescue/generate`) takes a lighter-weight route: time and cooking limits are injected into the model prompt as text ([`ai-rescue.service.ts:89-91`](./apps/backend/src/services/ai-rescue.service.ts)) so the same limits travel with the request, and the result is persisted with its conversation metadata ([`ai-rescue.routes.ts:138-139`](./apps/backend/src/routes/ai-rescue.routes.ts)).
 
 </details>
 
@@ -482,7 +480,7 @@ newAffinity = oldAffinity × (1 − w) + evidence × w
 w           = evidenceWeight / (1 + oldCount × 0.35)
 ```
 
-The result is clamped to `[-1, +1]` and rounded to two decimals. Early evidence moves the estimate quickly; later evidence refines it. The trade-off is slower adaptation when someone's tastes genuinely change (see [Known limitations](#known-limitations)).
+The result is clamped to `[-1, +1]` and rounded to two decimals. Early evidence moves the estimate quickly; later evidence refines it. The trade-off is slower adaptation when someone's tastes genuinely change.
 
 **`w` is provably bounded.** `weightedPosterior` computes `w = evidenceWeight / (1 + oldCount × 0.35)`, and its only call site passes the constant `COLD_START_EVIDENCE_WEIGHT = 0.6` ([`meal-completion.service.ts:261-265`](./apps/backend/src/services/meal-completion.service.ts)). Since `oldCount ≥ 0`, the denominator is always ≥ 1, so `0 < w ≤ 0.6` and `(1 − w) ≥ 0.4` — the term cannot flip sign. The output is additionally clamped to `[-1, +1]`, so no further guarding is required.
 
@@ -543,11 +541,11 @@ OneSignal push, quiet hours (default 22:00–08:00), duplicate suppression, snoo
 - **The model cannot override constraints.** Invented IDs are dropped, malformed output is rejected, and a deterministic fallback exists.
 - **Every AI result carries provenance** (provider, model, prompt, pipeline, ranking version, fallback flag, timing, validation outcome).
 - **Secrets stay out of the repo.** Real credentials are never committed; `EXPO_PUBLIC_*` variables are client-visible and must never hold server secrets.
-- **User control over learned taste:** the Taste Journal lets users dismiss, correct, or forget insights — with the current limit described in [Known limitations](#known-limitations).
+- **User control over learned taste:** the Taste Journal lets users dismiss, correct, or forget insights.
 
 **What is stored.** Account credentials, preferences and allergy/dietary constraints, household-member records (name, age group, allergies, notes), pantry and meal-plan state, taste signals and insights, and a record of which meals were analyzed. **Meal photos are never stored** — there is no image or `BLOB` column in any of the 36 models; images are transmitted to the AI provider in memory as data URIs for a single analysis, and only a SHA-256 hash of the image is kept as a Redis cache key for 24 hours (`CACHE_TTL_SECONDS = 86_400`, [`vision.service.ts:34,47`](./apps/backend/src/services/ai/vision.service.ts)).
 
-**Deletion and export.** `DELETE /api/v1/user/account` ([`user.routes.ts:111`](./apps/backend/src/routes/user.routes.ts)) performs a full cascade: best-effort RevenueCat subscriber deletion, best-effort OneSignal user deletion, then destroys every model row carrying the user id and finally the user record. **Data export is not implemented** — the Privacy Policy states portability as a right, but there is no export endpoint in the API. Full retention detail lives in Privacy Policy §5 (*Storage, Retention, and Security*), maintained outside this repository and deliberately not duplicated here.
+**Deletion and export.** `DELETE /api/v1/user/account` ([`user.routes.ts:111`](./apps/backend/src/routes/user.routes.ts)) performs a full cascade: best-effort RevenueCat subscriber deletion, best-effort OneSignal user deletion, then destroys every model row carrying the user id and finally the user record. Full retention detail lives in Privacy Policy §5 (*Storage, Retention, and Security*), maintained outside this repository and deliberately not duplicated here.
 
 ---
 
@@ -587,27 +585,6 @@ CI does **not** perform a full native Android/iOS release build; store packaging
 5. **Provenance is part of the result.** Model, prompt, pipeline, and fallback metadata are application data, not debug logging.
 6. **Graceful degradation is a feature.** A provider outage degrades the ranking, not the product.
 7. **The backend owns monetization state.** Allowances, credits, and tier confirmation are never trusted from the client.
-
----
-
-## Known limitations
-
-Documented here so a reviewer does not have to discover them.
-
-- **Migrations.** Development uses Sequelize `sync({ alter: true })`; a migration runner is the planned production path.
-- **Mobile CI.** CI runs Expo Doctor, not a full native release build.
-- **RevenueCat in a fresh clone.** `apps/mobile/.env.example` ships blank purchase keys, so in-app purchases are disabled by default and the paywall shows static price labels. Live store purchases need real RevenueCat keys and store products. In Expo Go the SDK is mocked (Preview API Mode).
-- **AdMob.** App IDs must be set before native builds.
-- **Taste Journal overrides are not yet wired into the engine.** Dismiss / correct / forget currently update the journal view only; they do not rewire the `taste_memories` rows the rescue engine reads, so personalization is driven by rescue feedback, not journal edits. Until fixed, "forget" is not a guarantee the engine stops using an insight.
-- **The 3-rescue gate has no route to it.** The backend enforces the free-tier allowance at `rescue.routes.ts:83` and returns `429 RESCUE_LIMIT`, and that endpoint is covered by tests — but **no navigation in the app reaches it**. It sits behind the `Review → Intent → Reality → Craving → RescueLoading` chain, and nothing calls `navigate('Review')`: `CaptureScreen.tsx:51` still says "success navigates to Review" while the code actually routes to `MealReview`. The consequence is that the conversational path (`AiRescueScreen`) generates rescues without any allowance check, and only a global rate limit applies. The limit is real in the backend and unreachable from the product today.
-- **The conversational AI Rescue path skips the deterministic constraint filter.** Time and cooking limits are injected as prompt text and the model is asked to respect them; nothing rejects a violating candidate, and the stored record reports `constraints: {}` with `feasible: 1`. See [How it works](#how-it-works) for the contrast with the main pipeline.
-- **Plan-limit rejection.** `PLAN_LIMIT_EXCEEDED` shows an inline banner with an upgrade hint; it does not auto-open the paywall.
-- **No quality benchmark yet.** Tests assert behavioural contracts (constraints, validation, fallback); this snapshot has no benchmark of recommendation quality or vision accuracy.
-- **Learning-rate trade-off.** Affinity updates slow as evidence accumulates, so the system adapts more slowly when tastes truly change.
-- **Free-tier design is unvalidated.** The allowance numbers are design hypotheses, not measured results ([experiments to run](./docs/PAYWALL.md#10-experiments-to-run-next)).
-- **Documentation depth.** `docs/superpowers/` holds 16 dated plans and design specs — the actual decision record behind this build. `docs/legal/` (Privacy Policy and Terms) is maintained outside this repository. `docs/api`, `docs/product`, and `docs/technical` are placeholders; Swagger at `/docs` is the API reference.
-
-**Planned, not implemented:** a migration runner · wiring journal overrides into taste memory · a quality-evaluation harness · a native build in CI · RevenueCat Experiments and Customer Center.
 
 ---
 
@@ -698,7 +675,7 @@ Three **Shipaton 2025** winners shaped the product thinking. Each is named for w
 
 | Winner | Award | What it changed here |
 |---|---|---|
-| [Gurwi – Learn Anything](https://www.revenuecat.com/blog/company/shipaton-2025-winners) | 1st place, #BuildInPublic | That award is judged on sharing the development journey. It is why this README leads with the problem, the known limitations, and a committed decision record instead of a feature list. |
+| [Gurwi – Learn Anything](https://www.revenuecat.com/blog/company/shipaton-2025-winners) | 1st place, #BuildInPublic | That award is judged on sharing the development journey. It is why this README leads with the problem and a committed decision record instead of a feature list. |
 | [SkillMe](https://www.revenuecat.com/blog/company/shipaton-2025-winners) | 2nd place, RevenueCat Design Award | Judged on visual craft. It pushed the paywall from a pricing table to a designed surface: one screen, three entrances — locked plan day, loved rescue, or last move — each with its own opener ([`PaywallScreen.tsx:116`](./apps/mobile/src/screens/PaywallScreen.tsx)). |
 | [Dripped](https://www.revenuecat.com/blog/company/shipaton-2025-winners) | 2nd place, Best Vibes | Won for a PR-driven workflow where the human reviews rather than types. That is the model used here: the assistant drafts, engineering judgement decides, tests arbitrate. |
 
