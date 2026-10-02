@@ -120,7 +120,7 @@ meal-memory plan events, and rescues.
   gated by a shared bearer secret compared with a timing-safe equality check
   (`timingSafeEqualStr`, [`webhook.routes.ts`](./apps/backend/src/routes/webhook.routes.ts)).
   Processing behaviour, including two documented deviations from RevenueCat's guidance, is
-  detailed in [`docs/PAYWALL.md`](./docs/PAYWALL.md) §5.
+  detailed in [`docs/PAYWALL.md`](./docs/PAYWALL.md) §6.
 - **AI providers** receive only what a request requires — images are transmitted in memory
   as data URIs for a single analysis. Model output is parsed and validated before use; it
   is never an authorization or persistence path.

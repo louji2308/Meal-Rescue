@@ -189,7 +189,7 @@ The cache key is scoped by the image plus contextual hints (such as cuisine); th
 | **Common Table** | Household convergence: shared base, latest viable split point, honest fallback | Implemented (bowl, stir-fry, pasta, skillet, platter patterns) |
 | **Taste Journal** | Shows what the system has learned; dismiss / correct / forget | Implemented |
 | **Monetization** | Free/Pro tiers, allowances, rewarded-ad credits, RevenueCat sync and webhooks | Backend implemented and tested; live store purchases need real keys ([details](#monetization--revenuecat)) |
-| **Notifications** | OneSignal push, quiet hours, duplicate suppression, snooze, in-app inbox | Implemented; dry-run when credentials are absent |
+| **Notifications** | OneSignal push, quiet hours, duplicate suppression, snooze, in-app inbox, **AI aftercare check-in 30 min after a completed meal** | Implemented; dry-run when credentials are absent |
 
 ---
 
@@ -200,6 +200,10 @@ The cache key is scoped by the image plus contextual hints (such as cuisine); th
 <p align="center">
   <img src="assets/Paywall.png" alt="Meal Rescue Pro paywall showing Monthly, Yearly, and Lifetime plans" width="300" />
 </p>
+
+### The curiosity hook
+
+**The paywall does not open with prices — it opens with a memory.** Before any plan is shown, the screen greets you with the exact meal you marked *loved* — *"You loved what the curd did with pomegranate and roasted peanuts!"* — and then withholds the payoff: *"The next combination might leave you craving another bite."* The dish is remembered; the better thing is promised but never shown, and the tap that closes that loop lands on the paywall. Copy is deterministic-first (instant render, no spinner), with an AI variant behind `PAYWALL_AI_TEASER_ENABLED`. Full breakdown: [docs/PAYWALL.md → The curiosity hook](./docs/PAYWALL.md#2-the-curiosity-hook).
 
 ### The offer
 
@@ -256,7 +260,7 @@ RevenueCat's **Test Store** (API keys prefixed `test_`) runs the full purchase f
 - In Expo Go the SDK runs in **Preview API Mode** (mocked native calls). Real purchase flows need a **development build** (`expo run:android` / `expo run:ios`).
 - A Test Store key must never ship in a release build.
 
-Step-by-step instructions, including what to check in the RevenueCat dashboard, are in [docs/PAYWALL.md → Testing](./docs/PAYWALL.md#7-environments-and-testing).
+Step-by-step instructions, including what to check in the RevenueCat dashboard, are in [docs/PAYWALL.md → Testing](./docs/PAYWALL.md#8-environments-and-testing).
 
 The checked-in config deliberately ships **no** working key: [`apps/mobile/.env.example`](./apps/mobile/.env.example) leaves `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` and `EXPO_PUBLIC_REVENUECAT_IOS_KEY` empty, and the real Test Store key lives only in `apps/mobile/.env`, which is gitignored ([`.gitignore:34`](./apps/mobile/.gitignore)). A reviewer cannot pick up a live purchase path from the repository alone — the Test Store flow activates only when `EXPO_PUBLIC_REVENUECAT_ALLOW_TEST_STORE=1` is set locally ([`revenuecat.service.ts:33`](./apps/mobile/src/services/revenuecat.service.ts)).
 
@@ -528,6 +532,8 @@ The split point is derived from the cooking graph, not hard-coded per meal. When
 <summary><b>Notifications</b></summary>
 
 OneSignal push, quiet hours (default 22:00–08:00), duplicate suppression, snooze for expiry alerts, an in-app inbox, scheduler support, and dry-run behaviour when provider credentials are absent. The expiry alert looks ahead 48 hours and avoids nudging about the same inventory state repeatedly.
+
+**The 30-minute aftercare check-in.** Mark a meal completed and, 30 minutes later, an **AI-written push** arrives using your **last rescue as context** — a title like *"About those lentils…"* and a one-line question about how it actually went (*"was the `<change>` worth it?"*), answered straight from the lock screen with three buttons: **Loved it!** · **It worked.** · **Not really.** One check-in per rescue at most, behind quiet hours and the feedback opt-out ([`aftercare-notification.service.ts`](./apps/backend/src/services/v2/aftercare-notification.service.ts)).
 
 </details>
 

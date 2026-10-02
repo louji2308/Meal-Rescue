@@ -1,8 +1,8 @@
 # Paywall & Monetization Deep Dive
 
-> Companion to the [Monetization & RevenueCat](../README.md#monetization--revenuecat) section of the README. This document explains **what is sold, where the paywall appears, how RevenueCat and the backend divide responsibility, and how to test it.**
+> Companion to the [Monetization & RevenueCat](../README.md#monetization--revenuecat) section of the README. This document explains **the curiosity hook that opens the screen, what is sold, where the paywall appears, how RevenueCat and the backend divide responsibility, and how to test it.**
 
-**Contents:** [1 Summary](#1-summary) · [2 The offer](#2-the-offer) · [3 Paywall design](#3-paywall-design) · [4 Where the paywall appears](#4-where-the-paywall-appears) · [5 Architecture and trust model](#5-architecture-and-trust-model) · [6 RevenueCat integration reference](#6-revenuecat-integration-reference) · [7 Environments and testing](#7-environments-and-testing) · [8 Unit economics](#8-unit-economics) · [9 Risks and mitigations](#9-risks-and-mitigations) · [10 Experiments to run next](#10-experiments-to-run-next) · [11 File map](#11-file-map)
+**Contents:** [1 Summary](#1-summary) · [2 The curiosity hook](#2-the-curiosity-hook) · [3 The offer](#3-the-offer) · [4 Paywall design](#4-paywall-design) · [5 Where the paywall appears](#5-where-the-paywall-appears) · [6 Architecture and trust model](#6-architecture-and-trust-model) · [7 RevenueCat integration reference](#7-revenuecat-integration-reference) · [8 Environments and testing](#8-environments-and-testing) · [9 Unit economics](#9-unit-economics) · [10 Risks and mitigations](#10-risks-and-mitigations) · [11 Experiments to run next](#11-experiments-to-run-next) · [12 File map](#12-file-map)
 
 ---
 
@@ -21,7 +21,27 @@
 
 ---
 
-## 2. The offer
+## 2. The curiosity hook
+
+A paywall that opens with a price list sells. This one opens with a memory.
+
+Before a single plan or price is shown, the Pro screen greets the user with a meal of their own — the rescue they marked *loved*. Two beats, and the second one deliberately never delivers:
+
+| Beat | Copy (in the app today) |
+|---|---|
+| **Remember** — the opener | *"You loved what the curd did with pomegranate and roasted peanuts!"* |
+| **Withhold** — the hook | *"The next combination might leave you craving another bite."* |
+
+1. **Remember.** The opener mirrors a pleasure the user already had — the exact dish they rated *loved*, written back to them. Nothing generic ever appears here: the copy is derived from their own rescue record, so it could not have been shown to anyone else.
+2. **Withhold.** The hook asserts that something better is waiting and refuses to show it. The promised thing is named, never revealed — so the only way to close the loop is to tap through, and tapping through lands on the paywall.
+
+That gap, between what is remembered and what is only promised, is the engine: curiosity makes the next step feel *inevitable* rather than *sold*. The user is not asked whether they want Pro; they are shown the edge of something they already want and left to lean into it.
+
+The copy is **deterministic-first by design** — rendered instantly from local pools, so the paywall never opens blank and never waits on a spinner — with an AI variant of the same two-beat structure (subject-scoped, cached for three hours, signature-bound so stale copy never outlives its subject) ready behind `PAYWALL_AI_TEASER_ENABLED`. Wiring: [`usePaywallTeaser.ts`](../apps/mobile/src/hooks/usePaywallTeaser.ts) and [`paywall.api.ts`](../apps/mobile/src/services/paywall.api.ts), which calls `POST /api/v1/paywall/teaser` ([`paywall.routes.ts`](../apps/backend/src/routes/paywall.routes.ts)).
+
+---
+
+## 3. The offer
 
 ### Plans
 
@@ -43,6 +63,8 @@ These are **one-time totals per account** and never refresh:
 | Meal Plan | 1 plan day for the entire time (day 1 of the first plan) | Day 2 of any plan requires Pro |
 | Cook for the Table | 1 added household member | Each additional member requires Pro (`MEMBER_LIMIT_EXCEEDED`, HTTP 403) |
 
+**One plan day. One seat at the table. Three rescues.** The free tier is singular on purpose — a single day of Meal Plan, a single added member, three AI rescues for the life of the account: enough to prove the loop end-to-end, never enough to live inside it. Exactly one thing renews, and it costs attention rather than money — the two daily rewarded ads.
+
 ### Ad-earned allowance (the only renewable source)
 
 | Rule | Value |
@@ -56,7 +78,7 @@ These are **one-time totals per account** and never refresh:
 
 ---
 
-## 3. Paywall design
+## 4. Paywall design
 
 <p align="center">
   <img src="../assets/Paywall.png" alt="Meal Rescue Pro paywall showing Monthly, Yearly, and Lifetime plans" width="320" />
@@ -73,7 +95,7 @@ These are **one-time totals per account** and never refresh:
 
 ---
 
-## 4. Where the paywall appears
+## 5. Where the paywall appears
 
 | Trigger | What happens |
 |---|---|
@@ -96,7 +118,7 @@ Every path below is reachable today. All Common Table paths pass `{ minimal: tru
 
 ---
 
-## 5. Architecture and trust model
+## 6. Architecture and trust model
 
 ```mermaid
 sequenceDiagram
@@ -148,7 +170,7 @@ sequenceDiagram
 
 ---
 
-## 6. RevenueCat integration reference
+## 7. RevenueCat integration reference
 
 | RevenueCat concept | Role in Meal Rescue |
 |---|---|
@@ -157,7 +179,7 @@ sequenceDiagram
 | Offering / packages | The three plans presented on the paywall |
 | Customer info | Read by the client after a purchase; confirmed by the backend through the sync endpoint |
 | Webhooks | Server-to-server lifecycle updates |
-| Test Store | Local purchase testing without store accounts (see [§7](#7-environments-and-testing)) |
+| Test Store | Local purchase testing without store accounts (see [§8](#8-environments-and-testing)) |
 
 | Identifier | Value | Where |
 |---|---|---|
@@ -173,11 +195,11 @@ sequenceDiagram
 
 Configuration for products, entitlements, and offerings lives in the RevenueCat dashboard, not in this repository.
 
-**Dashboard screenshots are not included, deliberately.** A RevenueCat dashboard capture exposes the project id, API keys, and customer identifiers, and there is no `docs/assets/` directory in this repository to hold them. What is verifiable from the repository alone: the entitlement id (`mealrescue_pro`), the webhook handler and its integration tests, and the client-side classification logic linked above. The one visual artifact shipped is the in-app paywall itself, [`assets/Paywall.png`](../assets/Paywall.png), which shows all three plans, the yearly "Best value" badge, and the Restore purchases control. A reviewer with a RevenueCat account can reproduce the full path via the Test Store walkthrough in §7.
+**Dashboard screenshots are not included, deliberately.** A RevenueCat dashboard capture exposes the project id, API keys, and customer identifiers, and there is no `docs/assets/` directory in this repository to hold them. What is verifiable from the repository alone: the entitlement id (`mealrescue_pro`), the webhook handler and its integration tests, and the client-side classification logic linked above. The one visual artifact shipped is the in-app paywall itself, [`assets/Paywall.png`](../assets/Paywall.png), which shows all three plans, the yearly "Best value" badge, and the Restore purchases control. A reviewer with a RevenueCat account can reproduce the full path via the Test Store walkthrough in §8.
 
 ---
 
-## 7. Environments and testing
+## 8. Environments and testing
 
 | Tier | What it is | Needs developer accounts? | Use it for |
 |---|---|---|---|
@@ -203,7 +225,7 @@ Automated coverage: the backend test suite includes monetization, ad-idempotency
 
 ---
 
-## 8. Unit economics
+## 9. Unit economics
 
 Every rescue has a marginal cost (model inference), so free usage and a lifetime plan both create exposure. This is the framework used to reason about it.
 
@@ -236,19 +258,19 @@ To make this section predictive rather than structural, three inputs are needed:
 
 ---
 
-## 9. Risks and mitigations
+## 10. Risks and mitigations
 
 | Risk | Why it matters | Mitigation in this repo | Next step |
 |---|---|---|---|
-| Lifetime plan vs. variable AI cost | A heavy lifetime user costs more over time than a fixed price covers | Global API rate limiting; deterministic fallback path avoids model cost when the provider is unavailable | Model heavy-use scenarios (§8); consider a fair-use cap or price review |
+| Lifetime plan vs. variable AI cost | A heavy lifetime user costs more over time than a fixed price covers | Global API rate limiting; deterministic fallback path avoids model cost when the provider is unavailable | Model heavy-use scenarios (§9); consider a fair-use cap or price review |
 | Client tampering | A modified app could claim Pro | Allowances, credits, and tier confirmation are backend-owned | — |
 | Reward abuse | Replayed ad callbacks could mint credits | Idempotent reward transactions; daily ad cap | — |
 | Test Store key reaching production | Release builds crash | RevenueCat enforces this at runtime; key selection by build configuration | Add a CI check that release configs contain no `test_` key |
-| Free tier too tight to show value | 3 lifetime rescues may be used before the learning loop pays off | Ad credits and the Pro Pass extend usage | Test a more generous or periodic allowance (§10) |
+| Free tier too tight to show value | 3 lifetime rescues may be used before the learning loop pays off | Ad credits and the Pro Pass extend usage | Test a more generous or periodic allowance (§11) |
 
 ---
 
-## 10. Experiments to run next
+## 11. Experiments to run next
 
 *Hypotheses that RevenueCat's tooling is designed to test.* RevenueCat Offerings, Paywalls, and Experiments allow different paywalls and pricing strategies to be served to different users without an app update.
 
@@ -263,7 +285,7 @@ Related RevenueCat tools worth adopting after launch: Customer Center for subscr
 
 ---
 
-## 11. File map
+## 12. File map
 
 | Concern | Location |
 |---|---|
