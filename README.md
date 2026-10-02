@@ -383,7 +383,7 @@ flowchart TB
 │   ├── ai-pipeline/             # Standalone AI pipeline package
 │   └── ui-components/           # Shared UI components
 ├── assets/                      # Product / mascot / cuisine assets
-├── docs/                        # Legal, product & design specs, PAYWALL.md
+├── docs/                        # PAYWALL.md + superpowers plans & design specs
 ├── .github/workflows/           # CI
 ├── docker-compose.yml           # PostgreSQL + Redis + backend
 ├── railway.toml                 # Railway deployment configuration
